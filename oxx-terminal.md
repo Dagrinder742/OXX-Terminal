@@ -26,9 +26,10 @@ Here is how you can break down the UI mapping and architecture to achieve that t
 
 ```
 =======================================================================================================================
-                                                      OKX-Terminal
+                                                   OKX-Terminal-US ENDPOINTS
+                                                         us.okx.com
 =======================================================================================================================
-* **Header Bar:** Displays ticker metadata (`BTC-USD`, last price, 24h change, high/low) pulled directly from OKX public endpoints (`/api/v5/market/ticker`).
+* **Header Bar:** Displays ticker metadata (`BTC-USD`, last price, 24h change, high/low) pulled directly from OKX public endpoints (`/api/v5/market/ticker`).(must use us.okx.com endpoints)
 * **Left Sidebar (Execution Panel):** Uses interactive form widgets (`Input`, `Button`, `RadioSet`) to handle order parameters (Limit vs. Market, price inputs, percentage sliders for amount allocation).
 * **Center Panel (Chart/OHLCV):** Uses an ASCII/Unicode plotting engine like `asciichartpy` or `plotext` to render live candlestick or line feeds updated via WebSocket `candle1m` streams.
 * **Lower Grid (Order Book & Last Trades):** Built using custom tables that update asynchronously via OKX's public order book and trade stream WebSockets (`books`, `trades`).
