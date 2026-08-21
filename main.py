@@ -20,7 +20,7 @@ class OKXTerminalApp(App):
         background: #111111;
         color: #ffffff;
     }
-    
+
     #header-bar {
         height: 3;
         border: solid #00ffcc;
@@ -63,7 +63,7 @@ class OKXTerminalApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        
+
         # Dynamic top ticker strip bound to reactive properties
         yield Static(id="header-bar")
 

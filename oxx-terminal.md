@@ -120,13 +120,18 @@ Create your base Python files to separate concerns right from the start:
 
 
 * **`renderer.py`**: Houses your TUI layout logic using Textual/Rich.
+build an interactive login/setup screen modal inside your Textual app **(renderer.py)**
+How It Operates
+​First Run Detection: When you boot up **renderer.py**, it queries your operating system's native credential vault via keyring.
+​Interactive Modal: If no keys are found, it throws a sleek masked password modal over the workspace so your secrets are never exposed on your screen or logs.
+​Encrypted Persistence: Once entered, keys are handed directly to the OS vault (Windows Credential Manager on your machine) and wiped from local runtime variables immediately.
 
 
 * **`strategy_engine.py`**: Where your local grid or DCA execution logic will live.
 
 
 
-### Step 2: Build `api_client.py` (The Data Pipeline)
+### Step 2: Build `api_client.py` (The Data Pipeline) * **COMPLETED**
 
 Since your terminal dashboard lives and dies by real-time data, start by writing the connection wrapper for OKX public data:
 
@@ -138,5 +143,17 @@ Since your terminal dashboard lives and dies by real-time data, start by writing
 
 * Test printing live `BTC-USD` ticker updates to your terminal console before trying to render a full grid layout.
 
-Once you have raw ticker JSON streaming cleanly into your console from `api_client.py`, you'll have the exact data engine needed to start plugging widgets into Textual.
+Once you have raw ticker JSON streaming cleanly into your console from **`api_client.py`**, you'll have the exact data engine needed to start plugging widgets into Textual.
 =======================================================================================================================
+To handle private endpoints (like account balances, order routing, or algorithmic bot deployment) securely using industry standards, OKX requires an HMAC-SHA256 cryptographic signature paired with exact ISO 8601 UTC millisecond timestamps.
+​Let's add an * **auth.py**  module to handle this securely so you can sign requests seamlessly whenever you're ready to transition from reading public ticker feeds to executing authenticated requests.
+=======================================================================================================================
+Relying on plain **.env** files or flat text storage for production-grade API credentials in a tool meant for professional showcase or distribution is a major security vulnerability. Plain environment variables can be leaked via process inspection, child-process inheritance, or accidental log dumps.
+​For an industry-grade TUI interacting with a financial exchange like OKX, secrets must leverage operating-system-level secure enclaves / credential managers (like Windows Credential Manager, macOS Keychain, or Linux Secret Service via keyring), combined with memory-only runtime handling.
+​Here is how you implement production-grade key security for your app:
+​1. Secure Credential Manager Integration**(secure_store.py)**
+​This module uses Python's keyring library to securely store and retrieve your API keys directly from the native OS encrypted credential store, meaning keys are never stored unencrypted on disk.
+2. Runtime Security Practices
+​When embedding this into your TUI initialization workflow:
+​Prompt on First Run: If load_credentials() returns None, the TUI launches an encrypted modal form prompting the user for their API credentials once, writes them directly to the OS keyring, and clears the input strings from memory immediately.
+​Transient Memory: In your runtime memory structure, wrap keys in standard byte arrays or clear variables immediately after generating your HMAC signature headers so they aren't lingering in Python's garbage collection references longer than necessary.

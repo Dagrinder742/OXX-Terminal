@@ -20,19 +20,19 @@ class OKXPublicClient:
             try:
                 logger.info(f"Connecting to OKX WebSocket at {self.uri}...")
                 async with websockets.connect(self.uri) as websocket:
-                    
+
                     # Subscription payload for the ticker channel
                     subscribe_msg = {
                         "op": "subscribe",
                         "args": [{"channel": "tickers", "instId": self.instrument_id}]
                     }
-                    
+
                     await websocket.send(json.dumps(subscribe_msg))
                     logger.info(f"Subscribed to ticker feed for {self.instrument_id}")
 
                     async for message in websocket:
                         data = json.loads(message)
-                        
+
                         # Filter and process data payloads
                         if "data" in data:
                             for ticker in data["data"]:
@@ -40,7 +40,7 @@ class OKXPublicClient:
                                 high_24h = ticker.get("high24h")
                                 low_24h = ticker.get("high24h")
                                 volume_24h = ticker.get("vol24h")
-                                
+
                                 logger.info(
                                     f"[{self.instrument_id}] Price: {last_price} | "
                                     f"High: {high_24h} | Low: {low_24h} | Vol: {volume_24h}"
