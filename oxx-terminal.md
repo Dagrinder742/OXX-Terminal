@@ -7,6 +7,8 @@ Here is how you can break down the UI mapping and architecture to achieve that t
 ### 1. Panel-to-Widget Layout Mapping
 
 ```text
+* **THIS TABLE IS AN EXAMPLE ONLY NOT TO BE HARDCODED:**
+ 
 +-------------------------------------------------------------------------+
 | OKX TUI > BTC-USD [74,748.7 (+2.37%)]              [24h High: 75,026.6] |
 +-------------------------------+-----------------------------------------+
@@ -23,7 +25,9 @@ Here is how you can break down the UI mapping and architecture to achieve that t
 +-------------------------------+--------------------+--------------------+
 
 ```
-
+=======================================================================================================================
+                                                      OKX-Terminal
+=======================================================================================================================
 * **Header Bar:** Displays ticker metadata (`BTC-USD`, last price, 24h change, high/low) pulled directly from OKX public endpoints (`/api/v5/market/ticker`).
 * **Left Sidebar (Execution Panel):** Uses interactive form widgets (`Input`, `Button`, `RadioSet`) to handle order parameters (Limit vs. Market, price inputs, percentage sliders for amount allocation).
 * **Center Panel (Chart/OHLCV):** Uses an ASCII/Unicode plotting engine like `asciichartpy` or `plotext` to render live candlestick or line feeds updated via WebSocket `candle1m` streams.
@@ -46,7 +50,7 @@ structuring this application state using Python's `asyncio` combined with Textua
 Building your own terminal-based CLI tool is a fantastic project—especially when you want exact control over layout, data streams, and automated grid or DCA logic without relying on bulky browser instances.
 
 While OKX does provide official developer tooling like their SDKs, an MCP server, and `okx-trade-cli` (part of their Agent Trade Kit), third-party or off-the-shelf CLIs rarely match the exact workflow you want for custom chart tracking and strategy execution.
-
+=======================================================================================================================
 If you're building a Python-centric terminal interface, here are a few core architectural patterns that make for a solid design:
 
 ### 1. Choosing the Right Terminal UI (TUI) Stack
@@ -72,7 +76,7 @@ If you want to keep it clean and extensible, separating your concerns into disti
 * **`strategy_engine.py`:** Houses your local execution logic—whether that's monitoring grid thresholds, calculating dynamic maker fee adjustments, or triggering safety stops
 
 build this using Python with an interactive TUI library like Textual for full-screen widgets.
-
+=======================================================================================================================
 Building a custom CLI tool for OKX that bridges your local terminal setup with their API—especially with an eye toward an incubator, developer community, or partner/broker-level initiative like the **OKX Developer Collective**—is a stellar direction for a project.
 
 OKX provides robust OpenAPI infrastructure, making it entirely feasible to build a command-line dashboard or TUI (Text User Interface) that replicates the core monitoring and execution power of their web application right inside your terminal.
@@ -98,3 +102,39 @@ To make a custom CLI stand out—whether for a developer program or internal por
 [OKX Developer Community](https://www.google.com/search?q=https://www.youtube.com/watch%3Fv%3D3M6x7n2W4Zc)
 
 This video provides an overview of the OKX developer ecosystem and API integration standards.
+=======================================================================================================================
+Looking at your blueprint, the absolute best place to start is building the foundational data and API layer before touching the visual UI widgets. Specifically, setting up your core modules will give you the data pipelines you need to feed the interface.
+
+Here is the exact step-by-step game plan to kick off the coding phase in your new repository:
+
+### Step 1: Initialize the Modular File Structure
+
+Create your base Python files to separate concerns right from the start:
+
+* **`main.py`**: The entry point that will coordinate your application state.
+
+
+* **`api_client.py`**: Handles REST requests and the WebSocket connection manager for public/private feeds.
+
+
+* **`renderer.py`**: Houses your TUI layout logic using Textual/Rich.
+
+
+* **`strategy_engine.py`**: Where your local grid or DCA execution logic will live.
+
+
+
+### Step 2: Build `api_client.py` (The Data Pipeline)
+
+Since your terminal dashboard lives and dies by real-time data, start by writing the connection wrapper for OKX public data:
+
+* Set up an asynchronous client using `asyncio` and `websockets`.
+
+
+* Connect to OKX's public WebSocket endpoint to stream ticker data (`/ws/v5/public`).
+
+
+* Test printing live `BTC-USD` ticker updates to your terminal console before trying to render a full grid layout.
+
+Once you have raw ticker JSON streaming cleanly into your console from `api_client.py`, you'll have the exact data engine needed to start plugging widgets into Textual.
+=======================================================================================================================
