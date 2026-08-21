@@ -157,3 +157,11 @@ Relying on plain **.env** files or flat text storage for production-grade API cr
 ​When embedding this into your TUI initialization workflow:
 ​Prompt on First Run: If load_credentials() returns None, the TUI launches an encrypted modal form prompting the user for their API credentials once, writes them directly to the OS keyring, and clears the input strings from memory immediately.
 ​Transient Memory: In your runtime memory structure, wrap keys in standard byte arrays or clear variables immediately after generating your HMAC signature headers so they aren't lingering in Python's garbage collection references longer than necessary.
+* **secure_vault.py**
+To achieve fully encrypted, cross-device keyring security (without throwing unrenderable terminal prompts or blocking the TUI event loop), we can use the keyrings.cryptfile backend programmatically.
+​By supplying a deterministic encryption key or handling the master credential setup cleanly through your TUI's input modal on first boot, the cryptfile backend locks your API keys using Argon2 key derivation and AES-128 GCM encryption into an encrypted configuration file (cryptfile_pass.cfg) on disk.
+Why this hits your security standard:
+​Zero Plain Text: Data on disk is strictly encrypted via CryptFileKeyring (AES-128 GCM / Argon2 hashing).
+​Cross-Device Compatibility: Works identically on Linux, Termux, macOS, and Windows without needing OS-specific keychain daemons that fail in terminal-only environments.
+​Protected Permissions (0o600): The local master key file locks down file permissions so only your user process can read it.
+=======================================================================================================================

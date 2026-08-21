@@ -1,10 +1,8 @@
-import keyring
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static, Input, Button, Label
 from textual.screen import ModalScreen
-
-SERVICE_NAME = "OKX_Terminal_Suite"
+from secure_vault import EncryptedVault
 
 class AuthModal(ModalScreen):
     """A modal screen that prompts the user for secure API credentials on first launch."""
@@ -14,9 +12,9 @@ class AuthModal(ModalScreen):
         align: center middle;
     }
     #dialog {
-        padding: 2 4;
+        padding: 1 3;
         width: 60;
-        height: 22;
+        height: 24;
         background: #1e1e1e;
         border: solid #00ffcc;
     }
@@ -32,7 +30,7 @@ class AuthModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Static("[bold cyan]🔐 OKX Secure Credential Setup[/bold cyan]")
-            yield Static("Enter your API credentials. They will be stored securely in your OS vault.")
+            yield Static("Enter your API credentials. Press Enter to submit.")
 
             yield Label("API Key:")
             yield Input(placeholder="Enter API Key...", id="api_key_input", classes="input-box")
@@ -45,20 +43,24 @@ class AuthModal(ModalScreen):
 
             yield Button("Save & Launch Terminal", variant="success", id="save_btn")
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._submit_credentials()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save_btn":
-            api_key = self.query_one("#api_key_input", Input).value.strip()
-            secret_key = self.query_one("#secret_key_input", Input).value.strip()
-            passphrase = self.query_one("#passphrase_input", Input).value.strip()
+            self._submit_credentials()
 
-            if api_key and secret_key and passphrase:
-                # Save securely into OS native credential manager
-                keyring.set_password(SERVICE_NAME, "api_key", api_key)
-                keyring.set_password(SERVICE_NAME, "secret_key", secret_key)
-                keyring.set_password(SERVICE_NAME, "passphrase", passphrase)
-                self.dismiss(True)
-            else:
-                self.query_one(Static).update("[bold red]All fields are required![/bold red]")
+    def _submit_credentials(self) -> None:
+        api_key = self.query_one("#api_key_input", Input).value.strip()
+        secret_key = self.query_one("#secret_key_input", Input).value.strip()
+        passphrase = self.query_one("#passphrase_input", Input).value.strip()
+
+        if api_key and secret_key and passphrase:
+            # Save using our cross-platform encrypted vault
+            EncryptedVault.save_credentials(api_key, secret_key, passphrase)
+            self.dismiss(True)
+        else:
+            self.query_one(Static).update("[bold red]All fields are required! Please fill out all inputs.[/bold red]")
 
 class OKXTerminalUI(App):
     """A full-screen TUI terminal layout for OKX trading telemetry with secure auth."""
@@ -103,17 +105,16 @@ class OKXTerminalUI(App):
     """
 
     def on_mount(self) -> None:
-        """Check if credentials exist in the system vault on startup."""
-        api_key = keyring.get_password(SERVICE_NAME, "api_key")
-        if not api_key:
-            # Push the auth modal if credentials are missing
+        """Check if credentials exist in the encrypted vault on startup."""
+        creds = EncryptedVault.load_credentials()
+        if not creds.get("api_key"):
             self.push_screen(AuthModal(), self.handle_auth_result)
         else:
-            self.notify("Secure credentials loaded from OS Vault.", title="Auth Success")
+            self.notify("Secure credentials loaded from encrypted vault.", title="Auth Success")
 
     def handle_auth_result(self, success: bool) -> None:
         if success:
-            self.notify("Credentials saved securely!", title="Vault Updated")
+            self.notify("Credentials saved to encrypted vault!", title="Vault Updated")
 
     def compose(self) -> ComposeResult:
         yield Header()
