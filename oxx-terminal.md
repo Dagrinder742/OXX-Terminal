@@ -28,6 +28,7 @@ Here is how you can break down the UI mapping and architecture to achieve that t
 =======================================================================================================================
                                                    OKX-Terminal-US ENDPOINTS
                                                          us.okx.com
+                                              wss://ws.okx.com:8443/ws/v5/public
 =======================================================================================================================
 * **Header Bar:** Displays ticker metadata (`BTC-USD`, last price, 24h change, high/low) pulled directly from OKX public endpoints (`/api/v5/market/ticker`).(must use us.okx.com endpoints)
 * **Left Sidebar (Execution Panel):** Uses interactive form widgets (`Input`, `Button`, `RadioSet`) to handle order parameters (Limit vs. Market, price inputs, percentage sliders for amount allocation).
