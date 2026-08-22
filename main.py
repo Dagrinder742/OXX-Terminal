@@ -126,6 +126,11 @@ class OKXTerminalApp(App):
         width: 100%;
         margin-top: 1;
     }
+
+    .log-container {
+        height: 12;
+        margin-top: 1;
+    }
     """
 
     current_price = reactive("Connecting...")
@@ -142,8 +147,11 @@ class OKXTerminalApp(App):
         # Main workspace grid split into columns
         with Horizontal(classes="row"):
 
-            # Left Sidebar: Order Execution / Inputs
+            # Left Sidebar: Portfolio Balance & Order Entry Panel
             with Vertical(classes="panel", id="left-sidebar"):
+                yield Static("[bold cyan]Portfolio Balance[/bold cyan]")
+                yield Static("Loading Balances...", id="portfolio-balance")
+
                 yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
                 yield Static("Price:")
                 yield Input(placeholder="77,891.50", id="price-input")
@@ -152,7 +160,7 @@ class OKXTerminalApp(App):
                 yield Button("BUY (LONG)", variant="success")
                 yield Button("SELL (SHORT)", variant="error")
 
-            # Right Main Workspace: Split into Order Book and Last Trades panels
+            # Right Main Workspace: Market Depth, Trades, and Execution Log
             with Vertical(classes="panel", id="right-main"):
                 yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
 
@@ -170,6 +178,11 @@ class OKXTerminalApp(App):
                         yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                         yield Static("Waiting for trade stream...", id="last-trades-content")
 
+                # Bottom Sub-Panel: Order Status / Activity Log
+                with Vertical(classes="sub-panel log-container", id="log-panel"):
+                    yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
+                    yield Static("System initialized. Waiting for actions...", id="execution-log-content")
+
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -185,10 +198,101 @@ class OKXTerminalApp(App):
             self.notify("Credentials saved to encrypted vault!", title="Vault Updated")
             self._start_terminal_services()
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id
+        # If triggered from AuthModal save button, ignore here as it's handled in AuthModal
+        if button_id == "save_btn":
+            return
+
+        price_val = self.query_one("#price-input", Input).value.strip()
+        amount_val = self.query_one("#amount-input", Input).value.strip()
+
+        if not amount_val:
+            self.notify("Please enter an order amount!", severity="error", title="Order Error")
+            return
+
+        # Default to limit order if price is provided, else market
+        ord_type = "limit" if price_val else "market"
+
+        if event.button.label.text.startswith("BUY"):
+            side = "buy"
+        else:
+            side = "sell"
+
+        # Run order execution asynchronously so it doesn't freeze the TUI loop
+        self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val))
+
+    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str) -> None:
+        from okx_private import OKXPrivateClient
+
+        self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
+        self.log_action(f"[yellow]Submitting {side.upper()} {ord_type} order (sz: {size})...[/yellow]")
+
+        # Run the blocking requests call in an executor thread
+        result = await asyncio.to_thread(
+            OKXPrivateClient.place_order,
+            inst_id="BTC-USD",
+            side=side,
+            order_type=ord_type,
+            sz=size,
+            px=price if ord_type == "limit" else None
+        )
+
+        code = result.get("code")
+        if code == "0":
+            data = result.get("data", [{}])[0]
+            ord_id = data.get("ordId", "Unknown")
+            self.notify(f"Order placed successfully! ID: {ord_id}", severity="information", title="Success")
+            self.log_action(f"[green]SUCCESS: Order ID {ord_id} placed.[/green]")
+            logging.info(f"Order success: {result}")
+        else:
+            msg = result.get("msg", "Unknown error")
+            self.notify(f"Order failed [{code}]: {msg}", severity="error", title="API Error")
+            self.log_action(f"[red]FAILED [{code}]: {msg}[/red]")
+            logging.error(f"Order failed: {result}")
+
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
+        self.set_interval(5.0, self.update_portfolio_balance)  # Poll balances every 5s
         self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
+
+    async def update_portfolio_balance(self) -> None:
+        from okx_private import OKXPrivateClient
+        result = await asyncio.to_thread(OKXPrivateClient.get_account_balance)
+
+        if result.get("code") == "0":
+            details = result.get("data", [{}])[0].get("details", [])
+            bal_lines = []
+            for asset in details:
+                ccy = asset.get("ccy")
+                avail = float(asset.get("availBal", 0))
+                if avail > 0:
+                    bal_lines.append(f"[bold white]{ccy}:[/bold white] {avail:,.4f}")
+
+            balance_text = "\n".join(bal_lines) if bal_lines else "No active balances"
+            try:
+                self.query_one("#portfolio-balance", Static).update(balance_text)
+            except Exception:
+                pass
+        else:
+            msg = result.get("msg", "Auth check failed")
+            try:
+                self.query_one("#portfolio-balance", Static).update(f"[dim red]{msg[:30]}...[/dim red]")
+            except Exception:
+                pass
+
+    def log_action(self, message: str) -> None:
+        """Appends status messages to the Execution Log window."""
+        try:
+            log_widget = self.query_one("#execution-log-content", Static)
+            current_text = log_widget.renderable
+            new_text = f"{message}\n{current_text}"
+            lines = new_text.strip().split("\n")[:5]
+            log_widget.update("\n".join(lines))
+        except Exception:
+            logging.info(message)
+
 
     async def handle_ws_data(self, channel: str, data: list) -> None:
         """Parses multi-channel telemetry from api_client.py and updates target TUI widgets."""
