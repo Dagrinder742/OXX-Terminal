@@ -72,10 +72,12 @@ class OKXTerminalApp(App):
 
     def __init__(self):
         super().__init__()
+        self.instrument_id = "BTC-USD"
         self.cached_asks = []
         self.cached_bids = []
         self.cached_trades = []
-
+        self.bg_worker = None
+        self.client = None
 
     CSS = """
     Screen {
@@ -100,6 +102,7 @@ class OKXTerminalApp(App):
 
     #left-sidebar {
         width: 30%;
+        margin-bottom: 1;
     }
 
     #right-main {
@@ -147,8 +150,11 @@ class OKXTerminalApp(App):
         # Main workspace grid split into columns
         with Horizontal(classes="row"):
 
-            # Left Sidebar: Portfolio Balance & Order Entry Panel
+            # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
             with Vertical(classes="panel", id="left-sidebar"):
+                yield Static("[bold cyan]Instrument Search[/bold cyan]")
+                yield Input(placeholder="BTC-USD", id="instrument-search-input")
+
                 yield Static("[bold cyan]Portfolio Balance[/bold cyan]")
                 yield Static("Loading Balances...", id="portfolio-balance")
 
@@ -184,6 +190,20 @@ class OKXTerminalApp(App):
                     yield Static("System initialized. Waiting for actions...", id="execution-log-content")
 
         yield Footer()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handles submission from the instrument search input."""
+        if event.input.id == "instrument-search-input":
+            new_inst = event.value.strip().upper().replace("/", "-")
+            if not new_inst:
+                return
+
+            # Ensure it has a separator format
+            if "-" not in new_inst:
+                new_inst = f"{new_inst}-USDT"
+
+            event.input.value = ""
+            self.action_switch_instrument(new_inst)
 
     async def on_mount(self) -> None:
         creds = EncryptedVault.load_credentials()
@@ -221,6 +241,35 @@ class OKXTerminalApp(App):
 
         # Run order execution asynchronously so it doesn't freeze the TUI loop
         self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val))
+
+    def action_switch_instrument(self, new_inst: str) -> None:
+        """Switches the active trading pair dynamically without restarting the app."""
+        if self.instrument_id == new_inst:
+            return
+
+        old_inst = self.instrument_id
+        self.instrument_id = new_inst
+        self.notify(f"Switching instrument from {old_inst} to {new_inst}...", title="Market Switch")
+        self.log_action(f"[yellow]Switching feed to {new_inst}...[/yellow]")
+
+        # Clear old caches to prevent stale rendering
+        self.cached_asks = []
+        self.cached_bids = []
+        self.cached_trades = []
+        self.current_price = "Connecting..."
+        self.high_24h = "---"
+        self.low_24h = "---"
+        self.volume_24h = "---"
+
+        # Cancel existing background WebSocket task if running
+        if self.bg_worker and not self.bg_worker.done():
+            self.bg_worker.cancel()
+
+        # Restart terminal services with the new instrument ID
+        self.client = OKXPublicClient(instrument_id=new_inst, callback=self.handle_ws_data)
+        self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
+
+        self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
 
     async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str) -> None:
         from okx_private import OKXPrivateClient
@@ -293,7 +342,6 @@ class OKXTerminalApp(App):
             log_widget.update("\n".join(lines))
         except Exception:
             logging.info(message)
-
 
     async def handle_ws_data(self, channel: str, data: list) -> None:
         """Parses multi-channel telemetry from api_client.py and updates target TUI widgets."""
