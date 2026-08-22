@@ -273,14 +273,15 @@ class OKXTerminalApp(App):
             balance_text = "\n".join(bal_lines) if bal_lines else "No active balances"
             try:
                 self.query_one("#portfolio-balance", Static).update(balance_text)
-            except Exception:
-                pass
+            except Exception as e:
+                # Widget might not be mounted yet during startup/shutdown
+                logging.debug(f"Could not update portfolio balance widget: {e}")
         else:
             msg = result.get("msg", "Auth check failed")
             try:
                 self.query_one("#portfolio-balance", Static).update(f"[dim red]{msg[:30]}...[/dim red]")
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f"Could not update portfolio error widget: {e}")
 
     def log_action(self, message: str) -> None:
         """Appends status messages to the Execution Log window."""

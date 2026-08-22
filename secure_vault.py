@@ -1,5 +1,5 @@
 import os
-import keyring
+import logging
 from keyrings.cryptfile.cryptfile import CryptFileKeyring
 
 SERVICE_NAME = "OKX_Terminal_Suite"
@@ -15,18 +15,20 @@ class EncryptedVault:
         os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
         if os.path.exists(key_path):
-            with open(key_path, "r") as f:
+            with open(key_path, "r", encoding="utf-8") as f:
                 kr.keyring_key = f.read().strip()
         else:
             # Generate a secure internal master key on first initialization
             master_key = os.urandom(32).hex()
-            with open(key_path, "w") as f:
+            with open(key_path, "w", encoding="utf-8") as f:
                 f.write(master_key)
-            try:
-                os.chmod(key_path, 0o600)  # Lock file permissions to user-only read/write
-            except Exception:
-                pass
             kr.keyring_key = master_key
+
+        # Always ensure permissions are locked down securely
+        try:
+            os.chmod(key_path, 0o600)
+        except Exception as e:
+            logging.warning(f"Could not secure file permissions on {key_path}: {e}")
 
         return kr
 

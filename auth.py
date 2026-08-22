@@ -1,7 +1,6 @@
 import base64
 import datetime
 import hmac
-import time
 
 class OKXAuth:
     """Handles official OKX v5 REST API authentication and header signing."""

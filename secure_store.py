@@ -1,4 +1,5 @@
 import keyring
+import logging
 
 SERVICE_NAME = "OKX_Terminal_Suite"
 
@@ -28,6 +29,5 @@ class SecureCredentialStore:
             keyring.delete_password(SERVICE_NAME, "secret_key")
             keyring.delete_password(SERVICE_NAME, "passphrase")
             print("[SECURE] Credentials wiped from system vault.")
-        except Exception:
-            pass
-
+        except Exception as e:  # keyring can throw various exceptions if a key isn't found
+            logging.warning(f"Could not clear credentials from OS vault: {e}")
