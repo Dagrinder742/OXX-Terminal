@@ -1,16 +1,12 @@
 import asyncio
-import json
 import logging
-import websockets
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Static, Input, Button
+from textual.widgets import Footer, Header, Static, Input, Button, Label
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from secure_vault import EncryptedVault
-
-# OKX Public WebSocket Endpoint
-OKX_WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
+from api_client import OKXPublicClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -72,7 +68,14 @@ class AuthModal(ModalScreen):
             self.query_one(Static).update("[bold red]All fields are required! Please fill out all inputs.[/bold red]")
 
 class OKXTerminalApp(App):
-    """A fully asynchronous, real-time OKX TUI trading terminal with encrypted vault security."""
+    """A fully asynchronous, real-time OKX TUI trading terminal with live market depth grids."""
+
+    def __init__(self):
+        super().__init__()
+        self.cached_asks = []
+        self.cached_bids = []
+        self.cached_trades = []
+
 
     CSS = """
     Screen {
@@ -85,7 +88,6 @@ class OKXTerminalApp(App):
         border: solid #00ffcc;
         padding: 0 1;
         background: #1a1a1a;
-        text-style: bold;
     }
 
     .panel {
@@ -97,11 +99,23 @@ class OKXTerminalApp(App):
     }
 
     #left-sidebar {
-        width: 35%;
+        width: 30%;
     }
 
     #right-main {
-        width: 65%;
+        width: 70%;
+    }
+
+    .sub-grid {
+        height: 1fr;
+    }
+
+    .sub-panel {
+        border: solid #222222;
+        height: 1fr;
+        padding: 1;
+        margin: 0 1;
+        background: #141414;
     }
 
     .row {
@@ -121,26 +135,44 @@ class OKXTerminalApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(id="header-bar")
 
+        # Top ticker strip
+        yield Static(" OKX TUI > BTC-USD | Loading Ticker Feed...", id="header-bar")
+
+        # Main workspace grid split into columns
         with Horizontal(classes="row"):
+
+            # Left Sidebar: Order Execution / Inputs
             with Vertical(classes="panel", id="left-sidebar"):
                 yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
                 yield Static("Price:")
-                yield Input(placeholder="0.00", id="price-input")
+                yield Input(placeholder="77,891.50", id="price-input")
                 yield Static("Amount:")
                 yield Input(placeholder="0.001", id="amount-input")
                 yield Button("BUY (LONG)", variant="success")
                 yield Button("SELL (SHORT)", variant="error")
 
+            # Right Main Workspace: Split into Order Book and Last Trades panels
             with Vertical(classes="panel", id="right-main"):
-                yield Static("[bold green]Live Candlestick / Order Book Feed[/bold green]")
-                yield Static("WebSocket Stream Active: Streaming live data ticks...", id="feed-status")
+                yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
+
+                with Horizontal(classes="sub-grid"):
+                    # Order Book Panel (Bids & Asks)
+                    with Vertical(classes="sub-panel", id="order-book-panel"):
+                        yield Static("[bold cyan]Order Book[/bold cyan]")
+                        yield Static("Asks (Sells)\n---------------------\nWaiting for depth...", id="order-book-asks")
+                        yield Static("[bold green]Spread / Mid-Price[/bold green]", id="order-book-mid")
+                        yield Static("Bids (Buys)\n---------------------\nWaiting for depth...", id="order-book-bids")
+
+                    # Last Trades Panel
+                    with Vertical(classes="sub-panel", id="last-trades-panel"):
+                        yield Static("[bold yellow]Last Trades[/bold yellow]")
+                        yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
+                        yield Static("Waiting for trade stream...", id="last-trades-content")
 
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Checks encrypted vault on startup; pushes auth modal if missing, else boots feeds."""
         creds = EncryptedVault.load_credentials()
         if not creds.get("api_key"):
             self.push_screen(AuthModal(), self.handle_auth_result)
@@ -154,9 +186,112 @@ class OKXTerminalApp(App):
             self._start_terminal_services()
 
     def _start_terminal_services(self) -> None:
-        """Kicks off the ticker update interval and asynchronous background WebSocket loop."""
         self.set_interval(0.1, self.update_header_display)
-        self.bg_worker = asyncio.create_task(self.connect_okx_stream())
+        self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
+        self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
+
+    async def handle_ws_data(self, channel: str, data: list) -> None:
+        """Parses multi-channel telemetry from api_client.py and updates target TUI widgets."""
+        if channel == "tickers":
+            for ticker in data:
+                self.current_price = ticker.get("last", "0.0")
+                self.high_24h = ticker.get("high24h", "0.0")
+                self.low_24h = ticker.get("low24h", "0.0")
+                self.volume_24h = ticker.get("vol24h", "0.0")
+
+        elif channel == "books":
+            for book in data:
+                action = book.get("action", "update")
+                raw_asks = book.get("asks", [])
+                raw_bids = book.get("bids", [])
+
+                if action == "snapshot":
+                    self.cached_asks = raw_asks[:5]
+                    self.cached_bids = raw_bids[:5]
+                else:
+                    # Merge delta updates into existing cached levels by price
+                    for ask in raw_asks:
+                        price, size, _, _ = ask[:4]
+                        if float(size) == 0.0:
+                            self.cached_asks = [a for a in self.cached_asks if a[0] != price]
+                        else:
+                            # Update or append
+                            updated = False
+                            for i, a in enumerate(self.cached_asks):
+                                if a[0] == price:
+                                    self.cached_asks[i] = ask
+                                    updated = True
+                            if not updated:
+                                self.cached_asks.append(ask)
+
+                    for bid in raw_bids:
+                        price, size, _, _ = bid[:4]
+                        if float(size) == 0.0:
+                            self.cached_bids = [b for b in self.cached_bids if b[0] != price]
+                        else:
+                            updated = False
+                            for i, b in enumerate(self.cached_bids):
+                                if b[0] == price:
+                                    self.cached_bids[i] = bid
+                                    updated = True
+                            if not updated:
+                                self.cached_bids.append(bid)
+
+                # Keep top 5 sorted cleanly
+                self.cached_asks = sorted(self.cached_asks, key=lambda x: float(x[0]))[:5]
+                self.cached_bids = sorted(self.cached_bids, key=lambda x: float(x[0]), reverse=True)[:5]
+
+                asks = self.cached_asks
+                bids = self.cached_bids
+
+                asks_formatted = []
+                for ask in reversed(asks):
+                    price = float(ask[0])
+                    amt = float(ask[1])
+                    asks_formatted.append(f"[red]{price:,.1f}  {amt:.4f}[/red]")
+
+                bids_formatted = []
+                for bid in bids:
+                    price = float(bid[0])
+                    amt = float(bid[1])
+                    bids_formatted.append(f"[green]{price:,.1f}  {amt:.4f}[/green]")
+
+                asks_text = "Asks (Sells) [Price / Amt]\n" + ("\n".join(asks_formatted) if asks_formatted else "Waiting...")
+                bids_text = "Bids (Buys) [Price / Amt]\n" + ("\n".join(bids_formatted) if bids_formatted else "Waiting...")
+
+                try:
+                    self.query_one("#order-book-asks", Static).update(asks_text)
+                    self.query_one("#order-book-bids", Static).update(bids_text)
+                    if asks and bids:
+                        spread = float(asks[0][0]) - float(bids[0][0])
+                        self.query_one("#order-book-mid", Static).update(f"[bold white]Spread: {spread:.2f}[/bold white]")
+                except Exception as e:
+                    logging.error(f"Error updating order book widgets: {e}")
+
+        elif channel == "trades":
+            for trade in data:
+                price = float(trade.get("px", 0))
+                size = float(trade.get("sz", 0))
+                side = trade.get("side", "buy")
+                # Format time string if available, or just keep it clean
+                timestamp = trade.get("ts", "")
+
+                # Append to the front of our rolling list
+                self.cached_trades.insert(0, {"price": price, "size": size, "side": side})
+
+            # Keep only the last 10 trades
+            self.cached_trades = self.cached_trades[:10]
+
+            trade_lines = []
+            for t in self.cached_trades:
+                color = "green" if t["side"] == "buy" else "red"
+                trade_lines.append(f"[{color}]{t['price']:,.1f} | {t['size']:.4f}[/{color}]")
+
+            trades_text = "Price (USD)  Amount\n" + ("\n".join(trade_lines) if trade_lines else "No Trades")
+            try:
+                self.query_one("#last-trades-content", Static).update(trades_text)
+            except Exception as e:
+                logging.error(f"Error updating trades widgets: {e}")
 
     def update_header_display(self) -> None:
         header_widget = self.query_one("#header-bar", Static)
@@ -165,34 +300,6 @@ class OKXTerminalApp(App):
             f"[dim]│[/dim] High: {self.high_24h} [dim]│[/dim] Low: {self.low_24h} [dim]│[/dim] Vol: {self.volume_24h}"
         )
 
-    async def connect_okx_stream(self) -> None:
-        instrument = "BTC-USD"
-        while True:
-            try:
-                async with websockets.connect(OKX_WS_PUBLIC) as websocket:
-                    subscribe_msg = {
-                        "op": "subscribe",
-                        "args": [{"channel": "tickers", "instId": instrument}]
-                    }
-                    await websocket.send(json.dumps(subscribe_msg))
-
-                    async for message in websocket:
-                        data = json.loads(message)
-                        if "data" in data:
-                            for ticker in data["data"]:
-                                self.current_price = ticker.get("last", "0.0")
-                                self.high_24h = ticker.get("high24h", "0.0")
-                                self.low_24h = ticker.get("low24h", "0.0")
-                                self.volume_24h = ticker.get("vol24h", "0.0")
-
-            except websockets.exceptions.ConnectionClosed:
-                self.current_price = "Reconnecting..."
-                await asyncio.sleep(5)
-            except Exception:
-                self.current_price = "Connection Error"
-                await asyncio.sleep(5)
-
 if __name__ == "__main__":
     app = OKXTerminalApp()
     app.run()
-

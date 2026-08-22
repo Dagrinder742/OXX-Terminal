@@ -56,14 +56,13 @@ class AuthModal(ModalScreen):
         passphrase = self.query_one("#passphrase_input", Input).value.strip()
 
         if api_key and secret_key and passphrase:
-            # Save using our cross-platform encrypted vault
             EncryptedVault.save_credentials(api_key, secret_key, passphrase)
             self.dismiss(True)
         else:
             self.query_one(Static).update("[bold red]All fields are required! Please fill out all inputs.[/bold red]")
 
 class OKXTerminalUI(App):
-    """A full-screen TUI terminal layout for OKX trading telemetry with secure auth."""
+    """A full-screen TUI terminal layout for OKX trading telemetry with secure auth and depth grids."""
 
     CSS = """
     Screen {
@@ -87,11 +86,23 @@ class OKXTerminalUI(App):
     }
 
     #left-sidebar {
-        width: 35%;
+        width: 30%;
     }
 
     #right-main {
-        width: 65%;
+        width: 70%;
+    }
+
+    .sub-grid {
+        height: 1fr;
+    }
+
+    .sub-panel {
+        border: solid #222222;
+        height: 1fr;
+        padding: 1;
+        margin: 0 1;
+        background: #141414;
     }
 
     .row {
@@ -105,7 +116,6 @@ class OKXTerminalUI(App):
     """
 
     def on_mount(self) -> None:
-        """Check if credentials exist in the encrypted vault on startup."""
         creds = EncryptedVault.load_credentials()
         if not creds.get("api_key"):
             self.push_screen(AuthModal(), self.handle_auth_result)
@@ -135,10 +145,23 @@ class OKXTerminalUI(App):
                 yield Button("BUY (LONG)", variant="success")
                 yield Button("SELL (SHORT)", variant="error")
 
-            # Right Main Workspace: Charts & Order Book grids
+            # Right Main Workspace: Split into Order Book and Last Trades panels
             with Vertical(classes="panel", id="right-main"):
-                yield Static("[bold green]Live Candlestick / Order Book Feed[/bold green]")
-                yield Static("Awaiting live stream data stream synchronization...")
+                yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
+
+                with Horizontal(classes="sub-grid"):
+                    # Order Book Panel (Bids & Asks)
+                    with Vertical(classes="sub-panel", id="order-book-panel"):
+                        yield Static("[bold cyan]Order Book[/bold cyan]")
+                        yield Static("Asks (Sells)\n---------------------\nWaiting for depth...", id="order-book-asks")
+                        yield Static("[bold green]Spread / Mid-Price[/bold green]", id="order-book-mid")
+                        yield Static("Bids (Buys)\n---------------------\nWaiting for depth...", id="order-book-bids")
+
+                    # Last Trades Panel
+                    with Vertical(classes="sub-panel", id="last-trades-panel"):
+                        yield Static("[bold yellow]Last Trades[/bold yellow]")
+                        yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
+                        yield Static("Waiting for trade stream...", id="last-trades-content")
 
         yield Footer()
 

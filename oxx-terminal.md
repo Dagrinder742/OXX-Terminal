@@ -8,7 +8,7 @@ Here is how you can break down the UI mapping and architecture to achieve that t
 
 ```text
 * **THIS TABLE IS AN EXAMPLE ONLY NOT TO BE HARDCODED:**
- 
+* **WE WILL USE USD PAIRS** 
 +-------------------------------------------------------------------------+
 | OKX TUI > BTC-USD [74,748.7 (+2.37%)]              [24h High: 75,026.6] |
 +-------------------------------+-----------------------------------------+
@@ -165,3 +165,9 @@ Why this hits your security standard:
 ​Cross-Device Compatibility: Works identically on Linux, Termux, macOS, and Windows without needing OS-specific keychain daemons that fail in terminal-only environments.
 ​Protected Permissions (0o600): The local master key file locks down file permissions so only your user process can read it.
 =======================================================================================================================
+​To implement this cleanly:
+**​api_client.py**: Will manage the multi-channel WebSocket subscription loops and push the incoming books (order book depth) and trades data back to the UI app.
+**​renderer.py**: Will hold the UI layout split for the Order Book and Last Trades panels.
+**​main.py**: Will remain the lightweight orchestration entry point that brings them together.
+=======================================================================================================================
+add a coin/instrument selector if you want to swap tickers on the fly
