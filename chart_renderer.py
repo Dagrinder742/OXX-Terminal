@@ -53,25 +53,29 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart with strict attribute checking for Termux/Linux compatibility."""
+        """Renders an ASCII candlestick chart compatible with Plotext v5 and v6 (Termux/Windows)."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            plt.clf()
-            
-            # Use try-except for every potential version-variant call
+            # Use full names instead of shortcuts for v6 compatibility
             try:
-                plt.plotsize(width, height)
+                plt.clear_figure()
+            except AttributeError:
+                plt.clf()
+            
+            # Version-agnostic size setting
+            try:
+                plt.plot_size(width, height)
             except AttributeError:
                 try:
-                    plt.plot_size(width, height)
+                    plt.plotsize(width, height)
                 except AttributeError:
-                    pass # Fallback to default sizing
-            
+                    pass
+
             try:
                 plt.theme("dark")
-            except AttributeError:
+            except Exception:
                 pass
 
             times = candle_data["time"]
@@ -88,26 +92,23 @@ class OKXChartEngine:
             try:
                 plt.candlestick(x_indexes, prices)
             except AttributeError:
-                # Fallback to simple line plot if candlestick is missing in older plotext
                 plt.plot(x_indexes, candle_data["close"], label="Price")
             
             if x_indexes:
                 try:
                     step = max(1, len(x_indexes) // 5)
-                    plt.xticks(x_indexes[::step], times[::step])
+                    plt.xticks(x_indexes[::step], [times[i] for i in range(0, len(times), step)])
                 except Exception:
                     pass
 
             plt.title(f"{inst_id} [{bar}]")
             
-            # The most important check: build() is required for string output in TUI
+            # Return the plot as a string
             try:
                 return plt.build()
             except AttributeError:
-                return "Error: plotext.build() missing. Run 'pip install plotext --upgrade' in Termux."
+                return "Error: plotext.build() missing. (Plotext v5+ required)"
 
         except Exception as e:
-            # Report the exact missing attribute if possible
-            error_msg = str(e)
-            logging.error(f"Chart Render Error: {error_msg}")
-            return f"Render Error: {error_msg}. (Try upgrading plotext)"
+            logging.error(f"Chart Render Error: {str(e)}")
+            return f"Render Error: {str(e)}"
