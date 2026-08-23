@@ -53,30 +53,26 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart compatible with Plotext v5 and v6 (Termux/Windows)."""
+        """Renders an ASCII candlestick chart with defensive attribute management for Plotext v6."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            # Use full names instead of shortcuts for v6 compatibility
-            try:
+            # Most resilient way to clear in Plotext (works across versions)
+            if hasattr(plt, "clear_figure"):
                 plt.clear_figure()
-            except AttributeError:
+            elif hasattr(plt, "clf"):
                 plt.clf()
             
-            # Version-agnostic size setting
-            try:
+            # Robust size management
+            if hasattr(plt, "plot_size"):
                 plt.plot_size(width, height)
-            except AttributeError:
-                try:
-                    plt.plotsize(width, height)
-                except AttributeError:
-                    pass
+            elif hasattr(plt, "plotsize"):
+                plt.plotsize(width, height)
 
-            try:
+            # Theme management
+            if hasattr(plt, "theme"):
                 plt.theme("dark")
-            except Exception:
-                pass
 
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
@@ -88,10 +84,10 @@ class OKXChartEngine:
                 "Close": candle_data["close"]
             }
 
-            # Check for candlestick support
-            try:
+            # Plot candles or line fallback
+            if hasattr(plt, "candlestick"):
                 plt.candlestick(x_indexes, prices)
-            except AttributeError:
+            else:
                 plt.plot(x_indexes, candle_data["close"], label="Price")
             
             if x_indexes:
@@ -103,12 +99,13 @@ class OKXChartEngine:
 
             plt.title(f"{inst_id} [{bar}]")
             
-            # Return the plot as a string
-            try:
+            # Use build() or return error string
+            if hasattr(plt, "build"):
                 return plt.build()
-            except AttributeError:
-                return "Error: plotext.build() missing. (Plotext v5+ required)"
+            
+            return "Error: plotext.build() required for TUI rendering."
 
         except Exception as e:
-            logging.error(f"Chart Render Error: {str(e)}")
-            return f"Render Error: {str(e)}"
+            error_text = str(e)
+            logging.error(f"Defensive Chart Render Error: {error_text}")
+            return f"Chart Sync Error: {error_text}"
