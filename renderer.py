@@ -130,7 +130,7 @@ class OKXTerminalUI(App):
         yield Header()
 
         # Top ticker strip
-        yield Static(" OKX TUI > BTC-USD | Loading Ticker Feed...", id="header-bar")
+        yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USD')} | Loading Ticker Feed...", id="header-bar")
 
         # Main workspace grid split into columns
         with Horizontal(classes="row"):

@@ -145,7 +145,7 @@ class OKXTerminalApp(App):
         yield Header()
 
         # Top ticker strip
-        yield Static(" OKX TUI > BTC-USD | Loading Ticker Feed...", id="header-bar")
+        yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USD')} | Loading Ticker Feed...", id="header-bar")
 
         # Main workspace grid split into columns
         with Horizontal(classes="row"):
@@ -198,9 +198,13 @@ class OKXTerminalApp(App):
             if not new_inst:
                 return
 
-            # Ensure it has a separator format
+            # Normalize spaces to hyphens (e.g., "SOL USD" -> "SOL-USD")
+            if " " in new_inst:
+                new_inst = new_inst.replace(" ", "-")
+
+            # Default to -USD if no quote asset or hyphen is provided
             if "-" not in new_inst:
-                new_inst = f"{new_inst}-USDT"
+                new_inst = f"{new_inst}-USD"
 
             event.input.value = ""
             self.action_switch_instrument(new_inst)
@@ -249,6 +253,7 @@ class OKXTerminalApp(App):
 
         old_inst = self.instrument_id
         self.instrument_id = new_inst
+        self.query_one("#header-bar", Static).update(f" OXX TUI > {self.instrument_id} | Loading Ticker Feed...")
         self.notify(f"Switching instrument from {old_inst} to {new_inst}...", title="Market Switch")
         self.log_action(f"[yellow]Switching feed to {new_inst}...[/yellow]")
 
@@ -256,10 +261,14 @@ class OKXTerminalApp(App):
         self.cached_asks = []
         self.cached_bids = []
         self.cached_trades = []
+
+        # Instantly clear the UI widget text so it doesn't linger
+        try:
+            self.query_one("#last-trades-content", Static).update("Waiting for trade stream...")
+        except Exception as e:
+            logging.warning(f"Could not clear trades widget on switch: {e}")
+
         self.current_price = "Connecting..."
-        self.high_24h = "---"
-        self.low_24h = "---"
-        self.volume_24h = "---"
 
         # Cancel existing background WebSocket task if running
         if self.bg_worker and not self.bg_worker.done():
@@ -449,7 +458,7 @@ class OKXTerminalApp(App):
     def update_header_display(self) -> None:
         header_widget = self.query_one("#header-bar", Static)
         header_widget.update(
-            f" OKX TUI > BTC-USD [dim]│[/dim] Price: [bold green]{self.current_price}[/bold green] "
+            f" OXX TUI > {self.instrument_id} [dim]│[/dim] Price: [bold green]{self.current_price}[/bold green] "
             f"[dim]│[/dim] High: {self.high_24h} [dim]│[/dim] Low: {self.low_24h} [dim]│[/dim] Vol: {self.volume_24h}"
         )
 
