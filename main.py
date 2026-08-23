@@ -27,8 +27,8 @@ class AuthModal(ModalScreen):
         padding: 1 3;
         width: 60;
         height: 24;
-        background: #1e1e1e;
-        border: solid #00ffcc;
+        background: #000000;
+        border: solid #ffcc00;
     }
     .input-box {
         margin-bottom: 1;
@@ -90,10 +90,10 @@ class OKXTerminalApp(App):
 
     CSS = """
     Screen {
-        background: #111111;
+        background: #000000;
         color: #ffffff;
         overflow-y: auto;
-        border: solid #00ffcc;
+        border: solid #ffcc00;
         scrollbar-size: 0 0;
     }
 
@@ -105,24 +105,38 @@ class OKXTerminalApp(App):
 
     #header-bar {
         height: 3;
-        border: solid #00ffcc;
+        border: solid #ffcc00;
         padding: 0 1;
-        background: #1a1a1a;
+        background: #000000;
     }
 
     .panel {
-        border: solid #333333;
+        border: solid #ffcc00;
         height: auto;
         min-height: 20;
         padding: 1;
         margin: 1;
-        background: #181818;
+        background: #000000;
         border: solid;
     }
 
-    #left-sidebar {
+    #left-column {
         width: 30%;
+        height: auto;
+    }
+
+    #left-sidebar {
         border: solid;
+        margin-bottom: 1;
+    }
+
+    #bot-panel {
+        border: solid #ffcc00;
+        height: auto;
+        min-height: 15;
+        padding: 1;
+        margin: 1;
+        background: #000000;
     }
 
     #right-main {
@@ -136,12 +150,12 @@ class OKXTerminalApp(App):
     }
 
     .sub-panel {
-        border: solid #222222;
+        border: solid #ffcc00;
         height: auto;
         min-height: 15;
         padding: 1;
         margin: 0 1;
-        background: #141414;
+        background: #000000;
     }
 
     .row {
@@ -151,25 +165,48 @@ class OKXTerminalApp(App):
     Button {
         width: 100%;
         margin-top: 1;
-        background: #222222;
-        color: #00ffcc;
-        border: solid #00ffcc;
+        background: #111111;
+        color: #ffcc00;
+        border: solid #ffcc00;
     }
 
     Button:hover {
-        background: #333333;
+        background: #ffcc00;
+        color: #000000;
         border: solid;
     }
 
+    /* Star Blue for BUY */
+    Button.buy-btn {
+        background: #000000;
+        color: #3399ff;
+        border: solid #3399ff;
+    }
+    Button.buy-btn:hover {
+        background: #3399ff;
+        color: #000000;
+    }
+
+    /* Star Red for SELL/STOP */
+    Button.sell-btn {
+        background: #000000;
+        color: #ff3333;
+        border: solid #ff3333;
+    }
+    Button.sell-btn:hover {
+        background: #ff3333;
+        color: #000000;
+    }
+
     Input {
-        background: #141414;
-        border: solid #444444;
+        background: #000000;
+        border: solid #333333;
         color: #ffffff;
         border: solid;
     }
 
     Input:focus {
-        border: solid #00ffcc;
+        border: solid #ffcc00;
     }
 
     .log-container {
@@ -187,8 +224,8 @@ class OKXTerminalApp(App):
     #chart-container {
         height: 30;
         padding: 1;
-        background: #141414;
-        border: solid #222222;
+        background: #000000;
+        border: solid #ffcc00;
         margin-top: 1;
     }
 
@@ -198,7 +235,7 @@ class OKXTerminalApp(App):
         text-wrap: nowrap;
         text-overflow: clip;
         overflow: hidden;
-        border: solid cyan;
+        border: solid #ffcc00;
         margin-top: 1;
     }
 
@@ -212,28 +249,28 @@ class OKXTerminalApp(App):
         width: 1fr;
         height: 3;
         margin: 0 1;
-        background: #1e1e1e;
-        color: #00ffcc;
-        border: solid #333333;
+        background: #000000;
+        color: #ffcc00;
+        border: solid #ffcc00;
     }
 
     .tf-btn:hover {
-        background: #00ffcc;
+        background: #ffcc00;
         color: #000000;
         border: solid;
     }
 
     /* Fix for notification "eye sores" */
     Toast {
-        border: solid #00ffcc;
-        background: #1e1e1e;
+        border: solid #ffcc00;
+        background: #000000;
         color: #ffffff;
     }
 
     /* Fix for scrollbar "eye sores" */
     ScrollBar {
-        background: #111111;
-        color: #00ffcc;
+        background: #000000;
+        color: #ffcc00;
     }
     
     #page-viewport {
@@ -259,32 +296,54 @@ class OKXTerminalApp(App):
             # Main workspace grid split into columns
             with Horizontal(classes="row"):
 
-                # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
-                with Vertical(classes="panel", id="left-sidebar"):
-                    yield Static("[bold cyan]Instrument Search[/bold cyan]")
-                    yield Input(placeholder="BTC-USD", id="instrument-search-input")
+                # Left Column: Manual Order Entry & Bot Control
+                with Vertical(id="left-column"):
+                    # Sidebar: Portfolio Balance & Order Entry Panel
+                    with Vertical(classes="panel", id="left-sidebar"):
+                        yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
+                        yield Input(placeholder="BTC-USD", id="instrument-search-input")
 
-                    yield Static("[bold cyan]Portfolio Balance[/bold cyan]")
-                    yield Static("Loading Balances...", id="portfolio-balance")
+                        yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
+                        yield Static("Loading Balances...", id="portfolio-balance")
 
-                    yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
-                    yield Static("Price:")
-                    yield Input(placeholder="$0.00", id="price-input")
-                    yield Static("Amount:")
-                    yield Input(placeholder="0.001", id="amount-input")
+                        yield Static("[bold #ffcc00]Order Entry Panel[/bold #ffcc00]")
+                        yield Static("Price:")
+                        yield Input(placeholder="$0.00", id="price-input")
+                        yield Static("Amount:")
+                        yield Input(placeholder="0.001", id="amount-input")
 
-                    # New Advanced TP/SL Inputs
-                    yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
-                    yield Input(placeholder="Take-Profit Price...", id="tp-input")
-                    yield Input(placeholder="Stop-Loss Price...", id="sl-input")
+                        # New Advanced TP/SL Inputs
+                        yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
+                        yield Input(placeholder="Take-Profit Price...", id="tp-input")
+                        yield Input(placeholder="Stop-Loss Price...", id="sl-input")
 
-                    yield Button("BUY (LONG)", variant="success")
-                    yield Button("SELL (SHORT)", variant="error")
+                        yield Button("BUY (LONG)", variant="success", classes="buy-btn")
+                        yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
 
-                # Right Main Workspace: Market Depth, Trades, Open Orders/Positions, and Execution Log
+                    # Bot Control Panel
+                    with Vertical(classes="panel", id="bot-panel"):
+                        yield Static("[bold #ffcc00]Grid Bot Control Panel[/bold #ffcc00]")
+                        yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
+                        yield Static("Active Bots: 0 | Strategy PnL: $0.00", id="bot-metrics")
+                        yield Button("START GRID BOT", variant="success", id="start-bot-btn", classes="buy-btn")
+                        yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
+
+                # Right Main Workspace: Candlestick Chart, Market Depth, Trades, and Activity
                 with Vertical(classes="panel", id="right-main"):
-                    yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
+                    
+                    # 1. Candlestick Chart Sub-Panel (NOW AT TOP)
+                    with Vertical(classes="sub-panel", id="chart-container"):
+                        yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
+                        with Horizontal(classes="timeframe-bar"):
+                            yield Button("1m", id="tf-1m", classes="tf-btn")
+                            yield Button("5m", id="tf-5m", classes="tf-btn")
+                            yield Button("15m", id="tf-15m", classes="tf-btn")
+                            yield Button("1H", id="tf-1h", classes="tf-btn")
+                            yield Button("1D", id="tf-1d", classes="tf-btn")
+                        yield Static("Loading Chart Data...", id="ascii-chart-view")
 
+                    # 2. Market Depth & Last Trades
+                    yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
                     with Horizontal(classes="sub-grid"):
                         # Order Book Panel (Bids & Asks)
                         with Vertical(classes="sub-panel", id="order-book-panel"):
@@ -299,26 +358,15 @@ class OKXTerminalApp(App):
                             yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                             yield Static("Waiting for trade stream...", id="last-trades-content")
 
-                    # Open Orders & Positions Sub-Panel
+                    # 3. Open Orders & Positions Sub-Panel
                     with Vertical(classes="sub-panel positions-container", id="positions-panel"):
                         yield Static("[bold blue]Open Orders & Positions Tracking[/bold blue]")
                         yield Static("Scanning for open orders and positions...", id="positions-content")
 
-                    # Bottom Sub-Panel: Order Status / Activity Log
+                    # 4. Bottom Sub-Panel: Order Status / Activity Log
                     with Vertical(classes="sub-panel log-container", id="log-panel"):
                         yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
                         yield Static("System initialized. Waiting for actions...", id="execution-log-content")
-
-                    # Candlestick Chart Sub-Panel with Mouse-Clickable Timeframes
-                    with Vertical(classes="sub-panel", id="chart-container"):
-                        yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
-                        with Horizontal(classes="timeframe-bar"):
-                            yield Button("1m", id="tf-1m", classes="tf-btn")
-                            yield Button("5m", id="tf-5m", classes="tf-btn")
-                            yield Button("15m", id="tf-15m", classes="tf-btn")
-                            yield Button("1H", id="tf-1h", classes="tf-btn")
-                            yield Button("1D", id="tf-1d", classes="tf-btn")
-                        yield Static("Loading Chart Data...", id="ascii-chart-view")
 
         yield Footer()
 

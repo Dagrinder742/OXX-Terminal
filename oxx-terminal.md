@@ -47,6 +47,8 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py` and `renderer.py.
 * [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
 * [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
+* [x] **Grid Bot Control Integration**: Integrated a dedicated sidebar panel for automated strategy oversight with live PnL and status hooks.
+* [x] **Steelers "Star" UI Theme**: Rebranded the entire TUI with a Deep Black and Steelers Gold palette, accented by Star Blue (Buy) and Star Red (Sell/Stop) highlights.
 * [x] **Open Orders & Positions Tracking**: Integrated periodic background polling for resting limit/stop orders and active trading positions with live color-coded PnL readouts.
 * [x] **Browser-Style Page Scrolling**: Implemented a vertical scrollable viewport (`VerticalScroll`) allowing panels to expand naturally beyond the terminal window height.
 * [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
@@ -57,10 +59,13 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 
 ## 5. Feature Roadmap & Brainstorming
 ### High-Priority Enhancements
+* [ ] **Technical Overlays**: Add EMA (Moving Average) lines to the ASCII charts and a compact RSI oscillator pane.
+* [ ] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
+* [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
 * [ ] **Order History/Fills**: Add a view to track executed orders for the active session.
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.
-* [ ] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
+* [x] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
 * [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
 * [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
