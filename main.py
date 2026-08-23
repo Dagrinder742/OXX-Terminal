@@ -769,9 +769,8 @@ class OKXTerminalApp(App):
                     if asks and bids:
                         spread = float(asks[0][0]) - float(bids[0][0])
                         self.query_one("#order-book-mid", Static).update(f"[bold white]Spread: {spread:.2f}[/bold white]")
-                except Exception:
-                    # Silently handle UI updates during screen transitions/shutdown
-                    pass
+                except Exception as e:
+                    logging.debug(f"Order book update skipped during shutdown: {e}")
 
         elif channel == "trades":
             for trade in data:
@@ -790,8 +789,8 @@ class OKXTerminalApp(App):
             trades_text = "Price (USD)  Amount\n" + ("\n".join(trade_lines) if trade_lines else "No Trades")
             try:
                 self.query_one("#last-trades-content", Static).update(trades_text)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f"Trade feed update skipped during shutdown: {e}")
 
     def update_header_display(self) -> None:
         header_widget = self.query_one("#header-bar", Static)
