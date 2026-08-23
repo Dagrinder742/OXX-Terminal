@@ -2,8 +2,6 @@ import requests
 import plotext as plt
 import logging
 import datetime
-import os
-import platform
 
 class OKXChartEngine:
     """Fetches historical OHLCV candles from OKX REST API and renders terminal-grade ASCII charts."""
@@ -53,59 +51,58 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart with defensive attribute management for Plotext v6."""
+        """Renders an ASCII candlestick chart with extremely defensive attribute checks for Plotext 6.0.0 compatibility."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            # Most resilient way to clear in Plotext (works across versions)
+            # Step 1: Clear Figure (Handling v6 vs v5)
             if hasattr(plt, "clear_figure"):
                 plt.clear_figure()
             elif hasattr(plt, "clf"):
                 plt.clf()
             
-            # Robust size management
+            # Step 2: Sizing
             if hasattr(plt, "plot_size"):
                 plt.plot_size(width, height)
             elif hasattr(plt, "plotsize"):
                 plt.plotsize(width, height)
 
-            # Theme management
+            # Step 3: Theme
             if hasattr(plt, "theme"):
                 plt.theme("dark")
 
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
             
-            prices = {
-                "Open": candle_data["open"],
-                "High": candle_data["high"],
-                "Low": candle_data["low"],
-                "Close": candle_data["close"]
-            }
-
-            # Plot candles or line fallback
+            # Step 4: Plotting (Checking for ANY available method)
             if hasattr(plt, "candlestick"):
+                prices = {
+                    "open": candle_data["open"],
+                    "high": candle_data["high"],
+                    "low": candle_data["low"],
+                    "close": candle_data["close"]
+                }
                 plt.candlestick(x_indexes, prices)
+            elif hasattr(plt, "plot"):
+                plt.plot(x_indexes, candle_data["close"])
+            elif hasattr(plt, "scatter"):
+                plt.scatter(x_indexes, candle_data["close"])
             else:
-                plt.plot(x_indexes, candle_data["close"], label="Price")
-            
-            if x_indexes:
-                try:
-                    step = max(1, len(x_indexes) // 5)
-                    plt.xticks(x_indexes[::step], [times[i] for i in range(0, len(times), step)])
-                except Exception:
-                    pass
+                # If everything fails, list what IS available so we can debug
+                available = [a for a in dir(plt) if not a.startswith("_")]
+                return f"Error: No plot methods found. Available attributes: {available[:10]}"
 
-            plt.title(f"{inst_id} [{bar}]")
+            # Step 5: Metadata
+            if hasattr(plt, "title"):
+                plt.title(f"{inst_id} [{bar}]")
             
-            # Use build() or return error string
+            # Step 6: Rendering
             if hasattr(plt, "build"):
-                return plt.build()
+                return str(plt.build())
             
-            return "Error: plotext.build() required for TUI rendering."
+            return "Error: plotext.build() not found. (Plotext v5.0+ required)"
 
         except Exception as e:
-            error_text = str(e)
-            logging.error(f"Defensive Chart Render Error: {error_text}")
-            return f"Chart Sync Error: {error_text}"
+            logging.error(f"Termux Render Crash: {str(e)}")
+            return f"Render Crash: {str(e)}"
