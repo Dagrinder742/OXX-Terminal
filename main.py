@@ -13,6 +13,7 @@ from textual.screen import ModalScreen
 from secure_vault import EncryptedVault
 from api_client import OKXPublicClient
 from chart_renderer import OKXChartEngine
+from strategy_engine import StrategyManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -87,6 +88,8 @@ class OKXTerminalApp(App):
         self.bg_worker = None
         self.client = None
         self.current_timeframe = "15m"
+        self.strategy_manager = StrategyManager()
+        self.bot_worker = None
 
     CSS = """
     Screen {
@@ -415,6 +418,14 @@ class OKXTerminalApp(App):
         if button_id == "save_btn":
             return
 
+        if button_id == "start-bot-btn":
+            self.action_start_bot()
+            return
+
+        if button_id == "stop-bot-btn":
+            self.action_stop_bot()
+            return
+
         price_val = self.query_one("#price-input", Input).value.strip()
         amount_val = self.query_one("#amount-input", Input).value.strip()
         tp_val = self.query_one("#tp-input", Input).value.strip()
@@ -433,6 +444,11 @@ class OKXTerminalApp(App):
         """Switches the active trading pair dynamically without restarting the app."""
         if self.instrument_id == new_inst:
             return
+
+        # Stop bot if instrument changes (safety)
+        if self.strategy_manager.active_bots:
+            self.action_stop_bot()
+            self.notify("Trading Bot stopped due to instrument switch.", severity="warning")
 
         old_inst = self.instrument_id
         self.instrument_id = new_inst
@@ -459,6 +475,93 @@ class OKXTerminalApp(App):
 
         self.refresh_chart()
         self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
+
+    def action_start_bot(self) -> None:
+        """Initializes and starts the Grid Bot strategy."""
+        if self.strategy_manager.active_bots:
+            self.notify("A bot is already running!", severity="warning")
+            return
+
+        # Determine bounds and grid settings from inputs or current price
+        try:
+            mid_price = float(self.current_price)
+            tp_price = self.query_one("#tp-input", Input).value.strip()
+            sl_price = self.query_one("#sl-input", Input).value.strip()
+            amount_str = self.query_one("#amount-input", Input).value.strip()
+
+            if not amount_str:
+                self.notify("Order amount required to start bot!", severity="error")
+                return
+
+            investment = float(amount_str)
+            lower = float(sl_price) if sl_price else mid_price * 0.98
+            upper = float(tp_price) if tp_price else mid_price * 1.02
+        except Exception:
+            self.notify("Enter valid Price/Amount/SL/TP to start bot!", severity="error")
+            return
+        
+        bot_id = self.strategy_manager.start_grid_bot(
+            inst_id=self.instrument_id,
+            lower=lower,
+            upper=upper,
+            grids=5,
+            investment=investment
+        )
+
+        self.bot_worker = asyncio.create_task(self._run_bot_execution_loop(bot_id))
+        self.notify(f"Grid Bot Started for {self.instrument_id}!", title="Strategy Active")
+        self.log_action(f"[cyan]Strategy Engine: Bot {bot_id} launched at ${mid_price:.2f}[/cyan]")
+        self.update_bot_ui()
+
+    def action_stop_bot(self) -> None:
+        """Stops all active strategy bots."""
+        count = self.strategy_manager.stop_all()
+        if self.bot_worker:
+            self.bot_worker.cancel()
+        
+        self.notify(f"Stopped {count} active bots.", title="Strategy Halted")
+        self.log_action("[red]Strategy Engine: All bots stopped.[/red]")
+        self.update_bot_ui()
+
+    def update_bot_ui(self) -> None:
+        """Updates the Grid Bot panel labels."""
+        summary = self.strategy_manager.get_status_summary()
+        status_color = "green" if summary["status"] == "ACTIVE" else "red"
+        
+        self.query_one("#bot-status", Static).update(f"Engine Status: [bold {status_color}]{summary['status']}[/bold {status_color}]")
+        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Strategy PnL: ${summary['pnl']:.2f}")
+
+    async def _run_bot_execution_loop(self, bot_id: str) -> None:
+        """Background loop to process market ticks through the strategy engine."""
+        bot = self.strategy_manager.active_bots.get(bot_id)
+        if not bot:
+            return
+
+        while bot_id in self.strategy_manager.active_bots:
+            try:
+                price = float(self.current_price)
+                signal = bot.process_tick(price)
+
+                if signal:
+                    sig_type, sig_px, sig_sz = signal
+                    if sig_type == "LOG":
+                        self.log_action(f"[dim]Bot {bot_id}: {sig_px}[/dim]")
+                    elif sig_type in ["BUY", "SELL"]:
+                        self.log_action(f"[bold yellow]Bot {sig_type} Signal: {sig_sz:.4f} @ {sig_px}[/bold yellow]")
+                        # Execute live order via Private Client
+                        self.run_worker(self._execute_order_task(
+                            side=sig_type.lower(),
+                            ord_type="limit",
+                            size=str(sig_sz),
+                            price=str(sig_px),
+                            tp=None,
+                            sl=None
+                        ))
+                
+                await asyncio.sleep(1) # Check every second
+            except Exception as e:
+                logging.error(f"Error in bot execution loop: {e}")
+                await asyncio.sleep(2)
 
     def refresh_chart(self) -> None:
         """Fetches and renders the ASCII chart for the current pair and timeframe asynchronously."""
@@ -666,8 +769,9 @@ class OKXTerminalApp(App):
                     if asks and bids:
                         spread = float(asks[0][0]) - float(bids[0][0])
                         self.query_one("#order-book-mid", Static).update(f"[bold white]Spread: {spread:.2f}[/bold white]")
-                except Exception as e:
-                    logging.error(f"Error updating order book widgets: {e}")
+                except Exception:
+                    # Silently handle UI updates during screen transitions/shutdown
+                    pass
 
         elif channel == "trades":
             for trade in data:
@@ -686,8 +790,8 @@ class OKXTerminalApp(App):
             trades_text = "Price (USD)  Amount\n" + ("\n".join(trade_lines) if trade_lines else "No Trades")
             try:
                 self.query_one("#last-trades-content", Static).update(trades_text)
-            except Exception as e:
-                logging.error(f"Error updating trades widgets: {e}")
+            except Exception:
+                pass
 
     def update_header_display(self) -> None:
         header_widget = self.query_one("#header-bar", Static)

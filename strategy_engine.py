@@ -1,15 +1,19 @@
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("Strategy_Engine")
 
 class GridStrategyEngine:
-    def __init__(self, lower_bound: float, upper_bound: float, grids: int, investment_amount: float):
+    def __init__(self, inst_id: str, lower_bound: float, upper_bound: float, grids: int, investment_amount: float):
+        self.inst_id = inst_id
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.grids = grids
         self.investment_amount = investment_amount
         self.grid_levels = []
+        self.last_grid_index = None
+        self.active = False
         self._initialize_grid()
 
     def _initialize_grid(self):
@@ -19,24 +23,64 @@ class GridStrategyEngine:
 
         step = (self.upper_bound - self.lower_bound) / (self.grids - 1)
         self.grid_levels = [round(self.lower_bound + (i * step), 2) for i in range(self.grids)]
-        logger.info(f"Initialized Grid Strategy with {self.grids} levels between {self.lower_bound} and {self.upper_bound}")
-        logger.info(f"Grid Levels: {self.grid_levels}")
+        logger.info(f"Initialized Grid Strategy for {self.inst_id} with {self.grids} levels between {self.lower_bound} and {self.upper_bound}")
 
-    def evaluate_price(self, current_price: float) -> str:
+    def process_tick(self, current_price: float):
         """
-        Evaluates the current market price against grid thresholds
-        to determine if a buy or sell trigger should occur.
+        Evaluates the current market price and returns a signal if a grid level is crossed.
+        Returns: (signal_type, price, size) or None
         """
-        # Find the closest grid level
-        closest_level = min(self.grid_levels, key=lambda x: abs(x - current_price))
+        if not self.active:
+            # Initial anchor point
+            for i, level in enumerate(self.grid_levels):
+                if current_price >= level:
+                    self.last_grid_index = i
+            self.active = True
+            return ("LOG", f"Bot initialized at ${current_price}. Anchor grid level: {self.grid_levels[self.last_grid_index] if self.last_grid_index is not None else 'None'}", 0)
 
-        # Simple threshold check for simulation/execution logic
-        if current_price <= self.lower_bound:
-            return "ALERT: Price breached lower grid bound! (Consider DCA / Accumulate)"
-        elif current_price >= self.upper_bound:
-            return "ALERT: Price breached upper grid bound! (Take Profit / Grid Complete)"
-        else:
-            return f"Market operating within bounds. Closest grid tier: {closest_level}"
+        # Check for grid crossing
+        new_index = None
+        for i, level in enumerate(self.grid_levels):
+            if current_price >= level:
+                new_index = i
+        
+        if new_index is not None and self.last_grid_index is not None:
+            if new_index > self.last_grid_index:
+                # Price moved up through a grid level -> SELL
+                self.last_grid_index = new_index
+                sz = self.investment_amount / current_price
+                return ("SELL", self.grid_levels[new_index], sz)
+            elif new_index < self.last_grid_index:
+                # Price moved down through a grid level -> BUY
+                self.last_grid_index = new_index
+                sz = self.investment_amount / current_price
+                return ("BUY", self.grid_levels[new_index], sz)
+
+        return None
+
+class StrategyManager:
+    """Orchestrates multiple active strategy instances."""
+    def __init__(self):
+        self.active_bots = {} # {bot_id: bot_instance}
+        self.total_pnl = 0.0
+
+    def start_grid_bot(self, inst_id: str, lower: float, upper: float, grids: int, investment: float):
+        bot_id = f"grid_{inst_id}_{int(time.time())}"
+        bot = GridStrategyEngine(inst_id, lower, upper, grids, investment)
+        self.active_bots[bot_id] = bot
+        return bot_id
+
+    def stop_all(self):
+        count = len(self.active_bots)
+        self.active_bots.clear()
+        return count
+
+    def get_status_summary(self):
+        return {
+            "count": len(self.active_bots),
+            "pnl": self.total_pnl,
+            "status": "ACTIVE" if self.active_bots else "IDLE"
+        }
 
 class DCAStrategyEngine:
     def __init__(self, target_asset: str, base_order_size: float, drop_trigger_pct: float):
@@ -58,4 +102,3 @@ class DCAStrategyEngine:
             return True
 
         return False
-
