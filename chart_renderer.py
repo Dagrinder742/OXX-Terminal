@@ -59,12 +59,11 @@ class OKXChartEngine:
             plt.clf()
             plt.plotsize(width, height)
             
-            # Use "dark" base but explicitly force Deep Black for the canvas and background
+            # Explicitly set the two main color regions for a full black background in v5.3.2
             plt.theme("dark")
-            plt.canvas_color("black")
-            plt.background_color("black")
-            plt.axes_color("black")
-            plt.ticks_color("gold") # Match Steelers theme for text
+            plt.canvas_color("black") # Inner data area
+            plt.axes_color("black")   # Outer label area
+            plt.ticks_color("gold")   # Match Steelers theme for labels
             plt.title(f"{inst_id} [{bar}]")
 
             times = candle_data["time"]
