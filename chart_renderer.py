@@ -2,6 +2,8 @@ import requests
 import plotext as plt
 import logging
 import datetime
+import os
+import platform
 
 class OKXChartEngine:
     """Fetches historical OHLCV candles from OKX REST API and renders terminal-grade ASCII charts."""
@@ -51,22 +53,26 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart with API-version fallback for cross-platform stability."""
+        """Renders an ASCII candlestick chart with strict attribute checking for Termux/Linux compatibility."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
             plt.clf()
             
-            # Version-agnostic size setting
-            if hasattr(plt, "plotsize"):
+            # Use try-except for every potential version-variant call
+            try:
                 plt.plotsize(width, height)
-            elif hasattr(plt, "plot_size"):
-                plt.plot_size(width, height)
+            except AttributeError:
+                try:
+                    plt.plot_size(width, height)
+                except AttributeError:
+                    pass # Fallback to default sizing
             
-            # Theme check
-            if hasattr(plt, "theme"):
+            try:
                 plt.theme("dark")
+            except AttributeError:
+                pass
 
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
@@ -78,26 +84,30 @@ class OKXChartEngine:
                 "Close": candle_data["close"]
             }
 
-            # Check if candlestick exists (introduced in newer plotext)
-            if hasattr(plt, "candlestick"):
+            # Check for candlestick support
+            try:
                 plt.candlestick(x_indexes, prices)
-            else:
-                # Fallback to simple line plot if candlestick is missing
+            except AttributeError:
+                # Fallback to simple line plot if candlestick is missing in older plotext
                 plt.plot(x_indexes, candle_data["close"], label="Price")
             
             if x_indexes:
-                step = max(1, len(x_indexes) // 5)
-                plt.xticks(x_indexes[::step], times[::step])
+                try:
+                    step = max(1, len(x_indexes) // 5)
+                    plt.xticks(x_indexes[::step], times[::step])
+                except Exception:
+                    pass
 
             plt.title(f"{inst_id} [{bar}]")
             
-            # Version-agnostic build/render
-            if hasattr(plt, "build"):
+            # The most important check: build() is required for string output in TUI
+            try:
                 return plt.build()
-            else:
-                # Fallback for very old versions (may not return string directly)
-                return "Plotext version too old for TUI rendering. Please 'pip install plotext --upgrade'"
+            except AttributeError:
+                return "Error: plotext.build() missing. Run 'pip install plotext --upgrade' in Termux."
 
         except Exception as e:
-            logging.exception("Error building plotext ASCII chart")
-            return f"Error rendering chart: {str(e)}"
+            # Report the exact missing attribute if possible
+            error_msg = str(e)
+            logging.error(f"Chart Render Error: {error_msg}")
+            return f"Render Error: {error_msg}. (Try upgrading plotext)"
