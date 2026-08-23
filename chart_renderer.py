@@ -51,58 +51,62 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart with extremely defensive attribute checks for Plotext 6.0.0 compatibility."""
+        """Renders an ASCII candlestick chart for Plotext v6.0.0+ using the new Object-Oriented 'figure' API."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            # Step 1: Clear Figure (Handling v6 vs v5)
-            if hasattr(plt, "clear_figure"):
-                plt.clear_figure()
-            elif hasattr(plt, "clf"):
-                plt.clf()
-            
-            # Step 2: Sizing
-            if hasattr(plt, "plot_size"):
-                plt.plot_size(width, height)
-            elif hasattr(plt, "plotsize"):
-                plt.plotsize(width, height)
+            # In Plotext v6, plotting methods have moved inside the 'figure' object/module
+            # We determine the source (either top-level or inside 'figure')
+            source = plt
+            if hasattr(plt, "figure") and not hasattr(plt, "candlestick"):
+                # If 'figure' exists but 'candlestick' doesn't, we are in the new OO API
+                source = plt.figure
 
-            # Step 3: Theme
-            if hasattr(plt, "theme"):
-                plt.theme("dark")
+            # Clear
+            if hasattr(source, "clear_figure"):
+                source.clear_figure()
+            elif hasattr(source, "clf"):
+                source.clf()
+            
+            # Sizing
+            if hasattr(source, "plot_size"):
+                source.plot_size(width, height)
+            elif hasattr(source, "plotsize"):
+                source.plotsize(width, height)
+
+            # Theme
+            if hasattr(source, "theme"):
+                source.theme("dark")
 
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
             
-            # Step 4: Plotting (Checking for ANY available method)
-            if hasattr(plt, "candlestick"):
+            # Plot
+            if hasattr(source, "candlestick"):
                 prices = {
                     "open": candle_data["open"],
                     "high": candle_data["high"],
                     "low": candle_data["low"],
                     "close": candle_data["close"]
                 }
-                plt.candlestick(x_indexes, prices)
-            elif hasattr(plt, "plot"):
-                plt.plot(x_indexes, candle_data["close"])
-            elif hasattr(plt, "scatter"):
-                plt.scatter(x_indexes, candle_data["close"])
+                source.candlestick(x_indexes, prices)
+            elif hasattr(source, "plot"):
+                source.plot(x_indexes, candle_data["close"])
             else:
-                # If everything fails, list what IS available so we can debug
-                available = [a for a in dir(plt) if not a.startswith("_")]
-                return f"Error: No plot methods found. Available attributes: {available[:10]}"
+                # Still failing? Let's check attributes of source
+                # Use str() to avoid potential issues with list comprehension in TUI context
+                return f"Error: v6 API mismatch. Source attrs: {str(dir(source))[:60]}"
 
-            # Step 5: Metadata
-            if hasattr(plt, "title"):
-                plt.title(f"{inst_id} [{bar}]")
+            if hasattr(source, "title"):
+                source.title(f"{inst_id} [{bar}]")
             
-            # Step 6: Rendering
-            if hasattr(plt, "build"):
-                return str(plt.build())
+            # Render
+            if hasattr(source, "build"):
+                return str(source.build())
             
-            return "Error: plotext.build() not found. (Plotext v5.0+ required)"
+            return "Error: .build() missing on source."
 
         except Exception as e:
-            logging.error(f"Termux Render Crash: {str(e)}")
-            return f"Render Crash: {str(e)}"
+            logging.error(f"Plotext v6 Render Crash: {str(e)}")
+            return f"V6 Render Crash: {str(e)}"
