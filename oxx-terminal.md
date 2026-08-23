@@ -40,9 +40,9 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 
 ## 4. Development Log (Completed)
 * [x] **Modular Structure**: Initialized core project files (`main.py`, `api_client.py`, `okx_private.py`, `secure_vault.py`, `auth.py`, `renderer.py`, `secure_store.py`, `strategy_engine.py`)[cite: 2].
-* [x] **Secure Auth**: Implemented `keyrings.cryptfile` and the `AuthModal` TUI for first-run setup[cite: 2].
-* [x] **API Connectivity**: Wired `us.okx.com` endpoints for account balance and order execution[cite: 2].
-* [x] **TUI Dashboard**: Built reactive layout with Portfolio, Order Book, Last Trades, and Execution Log[cite: 2].
+* [x] **Secure Auth**: Implemented `keyrings.cryptfile` and the `AuthModal` TUI for first-run setup.
+* [x] **API Connectivity**: Wired `us.okx.com` endpoints for account balance and order execution.
+* [x] **TUI Dashboard**: Built reactive layout with Portfolio, Order Book, Last Trades, and Execution Log.
 * [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py` and `renderer.py`.
 * [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
 * [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
@@ -52,11 +52,12 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 ## 5. Feature Roadmap & Brainstorming
 ### High-Priority Enhancements
 * [ ] **Order History/Fills**: Add a view to track executed orders for the active session.
-* [ ] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
+* [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.
 * [ ] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
 * [ ] **Candle Stick Charts**: Intergrate candle stick charts in the textual environment for greater visual effects.
-
+* [ ] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market 
+* [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET
 ---
 # ================================================================================================
 ## 6. NOTES FOR HOW TO COMPLETE THE WORK ABOVE (delete as work finishes)

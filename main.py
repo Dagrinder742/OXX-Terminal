@@ -133,6 +133,23 @@ class OKXTerminalApp(App):
     Button {
         width: 100%;
         margin-top: 1;
+        background: #222222;
+        color: #00ffcc;
+        border: solid #00ffcc;
+    }
+
+    Button:hover {
+        background: #333333;
+    }
+
+    Input {
+        background: #141414;
+        border: solid #444444;
+        color: #ffffff;
+    }
+
+    Input:focus {
+        border: solid #00ffcc;
     }
 
     .log-container {
@@ -241,6 +258,8 @@ class OKXTerminalApp(App):
 
         price_val = self.query_one("#price-input", Input).value.strip()
         amount_val = self.query_one("#amount-input", Input).value.strip()
+        tp_val = self.query_one("#tp-input", Input).value.strip()
+        sl_val = self.query_one("#sl-input", Input).value.strip()
 
         if not amount_val:
             self.notify("Please enter an order amount!", severity="error", title="Order Error")
@@ -254,8 +273,8 @@ class OKXTerminalApp(App):
         else:
             side = "sell"
 
-        # Run order execution asynchronously so it doesn't freeze the TUI loop
-        self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val))
+        # Run order execution asynchronously with TP/SL parameters so it doesn't freeze the TUI loop
+        self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val))
 
     def action_switch_instrument(self, new_inst: str) -> None:
         """Switches the active trading pair dynamically without restarting the app."""
@@ -291,20 +310,22 @@ class OKXTerminalApp(App):
 
         self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
 
-    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str) -> None:
+    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str) -> None:
         from okx_private import OKXPrivateClient
 
         self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
-        self.log_action(f"[yellow]Submitting {side.upper()} {ord_type} order (sz: {size})...[/yellow]")
+        self.log_action(f"[yellow]Submitting {side.upper()} {ord_type} order (sz: {size}) [TP: {tp or 'None'}, SL: {sl or 'None'}]...[/yellow]")
 
         # Run the blocking requests call in an executor thread
         result = await asyncio.to_thread(
             OKXPrivateClient.place_order,
-            inst_id="BTC-USD",
+            inst_id=self.instrument_id,
             side=side,
             order_type=ord_type,
             sz=size,
-            px=price if ord_type == "limit" else None
+            px=price if ord_type == "limit" else None,
+            tp_trigger_px=tp if tp else None,
+            sl_trigger_px=sl if sl else None
         )
 
         code = result.get("code")
