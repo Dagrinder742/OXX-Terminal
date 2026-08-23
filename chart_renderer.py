@@ -51,62 +51,69 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart for Plotext v6.0.0+ using the new Object-Oriented 'figure' API."""
+        """Renders an ASCII candlestick chart compatible with Plotext v5 and v6 (Windows/Termux)."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            # In Plotext v6, plotting methods have moved inside the 'figure' object/module
-            # We determine the source (either top-level or inside 'figure')
+            # Determine if we use the v5 top-level API or v6 Object-Oriented 'figure'
             source = plt
             if hasattr(plt, "figure") and not hasattr(plt, "candlestick"):
-                # If 'figure' exists but 'candlestick' doesn't, we are in the new OO API
                 source = plt.figure
 
-            # Clear
-            if hasattr(source, "clear_figure"):
-                source.clear_figure()
-            elif hasattr(source, "clf"):
-                source.clf()
+            # Step 1: Clear Figure
+            try:
+                if hasattr(source, "clear_figure"):
+                    source.clear_figure()
+                else:
+                    source.clf()
+            except Exception:
+                pass
             
-            # Sizing
-            if hasattr(source, "plot_size"):
-                source.plot_size(width, height)
-            elif hasattr(source, "plotsize"):
-                source.plotsize(width, height)
+            # Step 2: Set Dimensions
+            try:
+                if hasattr(source, "plot_size"):
+                    source.plot_size(width, height)
+                else:
+                    source.plotsize(width, height)
+            except Exception:
+                pass
 
-            # Theme
-            if hasattr(source, "theme"):
-                source.theme("dark")
-
+            # Step 3: Plot Data
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
             
-            # Plot
-            if hasattr(source, "candlestick"):
-                prices = {
-                    "open": candle_data["open"],
-                    "high": candle_data["high"],
-                    "low": candle_data["low"],
-                    "close": candle_data["close"]
-                }
-                source.candlestick(x_indexes, prices)
-            elif hasattr(source, "plot"):
-                source.plot(x_indexes, candle_data["close"])
-            else:
-                # Still failing? Let's check attributes of source
-                # Use str() to avoid potential issues with list comprehension in TUI context
-                return f"Error: v6 API mismatch. Source attrs: {str(dir(source))[:60]}"
+            # Note: Plotext is case-sensitive. v5 used "Open", v6 might too.
+            prices = {
+                "Open": candle_data["open"],
+                "High": candle_data["high"],
+                "Low": candle_data["low"],
+                "Close": candle_data["close"]
+            }
 
-            if hasattr(source, "title"):
+            if hasattr(source, "candlestick"):
+                source.candlestick(x_indexes, prices)
+            else:
+                # Fallback to line plot if candlestick is missing
+                source.plot(x_indexes, candle_data["close"])
+
+            # Step 4: Metadata (Title & Ticks)
+            try:
                 source.title(f"{inst_id} [{bar}]")
-            
-            # Render
-            if hasattr(source, "build"):
+                if x_indexes:
+                    step = max(1, len(x_indexes) // 5)
+                    source.xticks(x_indexes[::step], [times[i] for i in range(0, len(times), step)])
+            except Exception:
+                pass
+
+            # Step 5: Render to String
+            try:
+                # build() returns a string in v5, but a matrix in v6. 
+                # Converting the matrix to a string explicitly handles both.
                 return str(source.build())
-            
-            return "Error: .build() missing on source."
+            except AttributeError:
+                return "Error: .build() method not found in plotext."
 
         except Exception as e:
-            logging.error(f"Plotext v6 Render Crash: {str(e)}")
-            return f"V6 Render Crash: {str(e)}"
+            logging.error(f"Plotext Render Logic Error: {str(e)}")
+            return f"Render Logic Error: {str(e)}"
