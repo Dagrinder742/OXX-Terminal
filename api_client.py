@@ -37,49 +37,49 @@ class OKXPublicClient:
         return []
 
     async def connect_market_streams(self):
-        """Connects to the OKX public WebSocket and subscribes to tickers, order book, and trades."""[cite: 1]
+        """Connects to the OKX public WebSocket and subscribes to tickers, order book, and trades."""
         while True:
             try:
-                logger.info(f"Connecting to OKX WebSocket at {self.uri}...")[cite: 1]
+                logger.info(f"Connecting to OKX WebSocket at {self.uri}...")
                 async with websockets.connect(self.uri) as websocket:
 
-                    # Multi-channel subscription payload for professional layout feeds[cite: 1]
+                    # Multi-channel subscription payload for professional layout feeds
                     subscribe_msg = {
                         "op": "subscribe",
                         "args": [
                             {"channel": "tickers", "instId": self.instrument_id},
                             {"channel": "books", "instId": self.instrument_id},
-                            {"channel": "trades", "instId": self.instrument_id}[cite: 1]
+                            {"channel": "trades", "instId": self.instrument_id}
                         ]
                     }
 
-                    await websocket.send(json.dumps(subscribe_msg))[cite: 1]
-                    logger.info(f"Subscribed to tickers, books, and trades for {self.instrument_id}")[cite: 1]
+                    await websocket.send(json.dumps(subscribe_msg))
+                    logger.info(f"Subscribed to tickers, books, and trades for {self.instrument_id}")
 
                     async for message in websocket:
-                        data = json.loads(message)[cite: 1]
+                        data = json.loads(message)
 
-                        # Check if message is a data push from a specific channel[cite: 1]
-                        arg = data.get("arg", {})[cite: 1]
-                        channel = arg.get("channel")[cite: 1]
+                        # Check if message is a data push from a specific channel
+                        arg = data.get("arg", {})
+                        channel = arg.get("channel")
 
                         if "data" in data and channel and self.callback:
-                            # Forward the channel name and data payload to our UI orchestrator[cite: 1]
-                            await self.callback(channel, data["data"])[cite: 1]
+                            # Forward the channel name and data payload to our UI orchestrator
+                            await self.callback(channel, data["data"])
 
             except websockets.exceptions.ConnectionClosed as e:
-                logger.warning(f"WebSocket connection closed: {e}. Reconnecting in 5 seconds...")[cite: 1]
-                await asyncio.sleep(5)[cite: 1]
+                logger.warning(f"WebSocket connection closed: {e}. Reconnecting in 5 seconds...")
+                await asyncio.sleep(5)
             except Exception as e:
-                logger.error(f"Unexpected error in WebSocket loop: {e}. Reconnecting in 5 seconds...")[cite: 1]
-                await asyncio.sleep(5)[cite: 1]
+                logger.error(f"Unexpected error in WebSocket loop: {e}. Reconnecting in 5 seconds...")
+                await asyncio.sleep(5)
 
 if __name__ == "__main__":
     async def test_callback(channel, data):
-        print(f"Channel: {channel} | Data count: {len(data)}")[cite: 1]
+        print(f"Channel: {channel} | Data count: {len(data)}")
 
-    client = OKXPublicClient("BTC-USD", callback=test_callback)[cite: 1]
+    client = OKXPublicClient("BTC-USD", callback=test_callback)
     try:
-        asyncio.run(client.connect_market_streams())[cite: 1]
+        asyncio.run(client.connect_market_streams())
     except KeyboardInterrupt:
-        logger.info("Client stopped by user.")[cite: 1]
+        logger.info("Client stopped by user.")

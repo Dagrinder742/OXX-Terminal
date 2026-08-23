@@ -1,5 +1,10 @@
 import asyncio
 import logging
+import sys
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding.lower() != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static, Input, Button, Label
@@ -150,7 +155,7 @@ class OKXTerminalApp(App):
         # Main workspace grid split into columns
         with Horizontal(classes="row"):
 
-            # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
+        # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
             with Vertical(classes="panel", id="left-sidebar"):
                 yield Static("[bold cyan]Instrument Search[/bold cyan]")
                 yield Input(placeholder="BTC-USD", id="instrument-search-input")
@@ -160,9 +165,15 @@ class OKXTerminalApp(App):
 
                 yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
                 yield Static("Price:")
-                yield Input(placeholder="77,891.50", id="price-input")
+                yield Input(placeholder="$0.00", id="price-input")
                 yield Static("Amount:")
                 yield Input(placeholder="0.001", id="amount-input")
+
+                # New Advanced TP/SL Inputs
+                yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
+                yield Input(placeholder="Take-Profit Price...", id="tp-input")
+                yield Input(placeholder="Stop-Loss Price...", id="sl-input")
+
                 yield Button("BUY (LONG)", variant="success")
                 yield Button("SELL (SHORT)", variant="error")
 
