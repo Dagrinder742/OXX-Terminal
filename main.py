@@ -12,6 +12,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from secure_vault import EncryptedVault
 from api_client import OKXPublicClient
+from chart_renderer import OKXChartEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -83,6 +84,7 @@ class OKXTerminalApp(App):
         self.cached_trades = []
         self.bg_worker = None
         self.client = None
+        self.current_timeframe = "15m"
 
     CSS = """
     Screen {
@@ -161,6 +163,33 @@ class OKXTerminalApp(App):
         height: 10;
         margin-top: 1;
     }
+
+    #chart-container {
+        height: 1fr;
+        padding: 1;
+        background: #141414;
+        border: solid #222222;
+        margin-top: 1;
+    }
+
+    .timeframe-bar {
+        height: 3;
+        layout: horizontal;
+        margin-bottom: 1;
+    }
+
+    .tf-btn {
+        width: 1fr;
+        margin: 0 1;
+        background: #1e1e1e;
+        color: #00ffcc;
+        border: solid #333333;
+    }
+
+    .tf-btn:hover {
+        background: #00ffcc;
+        color: #000000;
+    }
     """
 
     current_price = reactive("Connecting...")
@@ -227,6 +256,17 @@ class OKXTerminalApp(App):
                     yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
                     yield Static("System initialized. Waiting for actions...", id="execution-log-content")
 
+                # Candlestick Chart Sub-Panel with Mouse-Clickable Timeframes
+                with Vertical(classes="sub-panel", id="chart-container"):
+                    yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
+                    with Horizontal(classes="timeframe-bar"):
+                        yield Button("1m", id="tf-1m", classes="tf-btn")
+                        yield Button("5m", id="tf-5m", classes="tf-btn")
+                        yield Button("15m", id="tf-15m", classes="tf-btn")
+                        yield Button("1H", id="tf-1h", classes="tf-btn")
+                        yield Button("1D", id="tf-1d", classes="tf-btn")
+                    yield Static("Loading Chart Data...", id="ascii-chart-view")
+
         yield Footer()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -254,6 +294,7 @@ class OKXTerminalApp(App):
         else:
             self.notify("Secure credentials loaded from encrypted vault.", title="Auth Success")
             self._start_terminal_services()
+            self.refresh_chart()
 
     def handle_auth_result(self, success: bool) -> None:
         if success:
@@ -262,6 +303,14 @@ class OKXTerminalApp(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
+        if button_id and button_id.startswith("tf-"):
+            # Handle timeframe clicks via mouse
+            tf_map = {"tf-1m": "1m", "tf-5m": "5m", "tf-15m": "15m", "tf-1h": "1H", "tf-1d": "1D"}
+            self.current_timeframe = tf_map.get(button_id, "15m")
+            self.notify(f"Switching timeframe to {self.current_timeframe}", title="Chart Update")
+            self.refresh_chart()
+            return
+
         if button_id == "save_btn":
             return
 
@@ -307,7 +356,31 @@ class OKXTerminalApp(App):
         self.client = OKXPublicClient(instrument_id=new_inst, callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
 
+        self.refresh_chart()
         self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
+
+    def refresh_chart(self) -> None:
+        """Fetches and renders the ASCII chart for the current pair and timeframe asynchronously."""
+        async def load_task():
+            try:
+                # Run the blocking network call and ASCII rendering in a separate thread pool
+                data = await asyncio.to_thread(
+                    OKXChartEngine.fetch_candles,
+                    inst_id=self.instrument_id,
+                    bar=self.current_timeframe,
+                    limit=35
+                )
+                chart_str = await asyncio.to_thread(
+                    OKXChartEngine.render_ascii_chart,
+                    data,
+                    self.instrument_id,
+                    self.current_timeframe
+                )
+                self.query_one("#ascii-chart-view", Static).update(chart_str)
+            except Exception as e:
+                logging.warning(f"Could not update candlestick chart widget: {e}")
+
+        self.run_worker(load_task)
 
     async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str) -> None:
         from okx_private import OKXPrivateClient
