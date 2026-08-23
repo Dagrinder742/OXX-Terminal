@@ -54,6 +54,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
 * [x] **TUI Rendering Polish**: Resolved ASCII "ghosting" and duplication artifacts through precise coordinate locking, ANSI sequence cleaning, and disabling text wrapping on chart widgets.
 * [x] **Minimalist UI**: Hidden the visual scrollbar and refined notification borders to eliminate layout "eye sores" while maintaining full navigation functionality.
+* [x] **Cross-Platform Compatibility**: Implemented environment detection in the chart engine to support stable rendering on both Windows (PowerShell) and Linux (Termux/mobile).
 
 ---
 
