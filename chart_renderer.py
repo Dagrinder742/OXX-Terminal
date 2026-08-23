@@ -1,5 +1,3 @@
-import os
-import platform
 import requests
 import plotext as plt
 import logging
@@ -46,36 +44,25 @@ class OKXChartEngine:
                 }
             else:
                 logging.error(f"Failed to fetch candles: {data.get('msg')}")
-                return {"success": False, "msg": data.get("msg")}
+                return {"success": False, "msg": data.get('msg')}
         except Exception as e:
             logging.exception("Exception during candle fetch")
             return {"success": False, "msg": str(e)}
 
     @staticmethod
-    def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 50, height: int = 15) -> str:
-        """Renders an ASCII chart with cross-platform environment fallback for Termux/Linux."""
+    def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
+        """Renders an ASCII candlestick chart string safely."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
             plt.clf()
             plt.plotsize(width, height)
-            
-            # Detect environment (Termux usually has specific environment paths or runs on Linux)
-            is_termux = "TERMUX_VERSION" in os.environ or os.path.exists("/data/data/com.termux")
-            is_windows = platform.system() == "Windows"
-
-            if is_termux:
-                plt.theme("clear")
-                # Use standard definition for mobile/Termux font rendering compatibility
-                # marker = "sd" 
-            else:
-                plt.theme("dark")
-                # marker = "hd" if is_windows else "sd"
+            plt.theme("dark")
 
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
-
+            
             prices = {
                 "Open": candle_data["open"],
                 "High": candle_data["high"],
@@ -84,7 +71,7 @@ class OKXChartEngine:
             }
 
             plt.candlestick(x_indexes, prices)
-
+            
             if x_indexes:
                 step = max(1, len(x_indexes) // 5)
                 plt.xticks(x_indexes[::step], times[::step])
