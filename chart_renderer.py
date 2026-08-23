@@ -51,39 +51,25 @@ class OKXChartEngine:
 
     @staticmethod
     def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 120, height: int = 16) -> str:
-        """Renders an ASCII candlestick chart compatible with Plotext v5 and v6 (Windows/Termux)."""
+        """Renders an ASCII candlestick chart optimized for a Deep Black TUI theme."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
         try:
-            # Determine if we use the v5 top-level API or v6 Object-Oriented 'figure'
-            source = plt
-            if hasattr(plt, "figure") and not hasattr(plt, "candlestick"):
-                source = plt.figure
-
-            # Step 1: Clear Figure
-            try:
-                if hasattr(source, "clear_figure"):
-                    source.clear_figure()
-                else:
-                    source.clf()
-            except Exception:
-                pass
+            plt.clf()
+            plt.plotsize(width, height)
             
-            # Step 2: Set Dimensions
-            try:
-                if hasattr(source, "plot_size"):
-                    source.plot_size(width, height)
-                else:
-                    source.plotsize(width, height)
-            except Exception:
-                pass
+            # Use "dark" base but explicitly force Deep Black for the canvas and background
+            plt.theme("dark")
+            plt.canvas_color("black")
+            plt.background_color("black")
+            plt.axes_color("black")
+            plt.ticks_color("gold") # Match Steelers theme for text
+            plt.title(f"{inst_id} [{bar}]")
 
-            # Step 3: Plot Data
             times = candle_data["time"]
             x_indexes = list(range(len(times)))
             
-            # Note: Plotext is case-sensitive. v5 used "Open", v6 might too.
             prices = {
                 "Open": candle_data["open"],
                 "High": candle_data["high"],
@@ -91,29 +77,13 @@ class OKXChartEngine:
                 "Close": candle_data["close"]
             }
 
-            if hasattr(source, "candlestick"):
-                source.candlestick(x_indexes, prices)
-            else:
-                # Fallback to line plot if candlestick is missing
-                source.plot(x_indexes, candle_data["close"])
+            plt.candlestick(x_indexes, prices)
+            
+            if x_indexes:
+                step = max(1, len(x_indexes) // 5)
+                plt.xticks(x_indexes[::step], [times[i] for i in range(0, len(times), step)])
 
-            # Step 4: Metadata (Title & Ticks)
-            try:
-                source.title(f"{inst_id} [{bar}]")
-                if x_indexes:
-                    step = max(1, len(x_indexes) // 5)
-                    source.xticks(x_indexes[::step], [times[i] for i in range(0, len(times), step)])
-            except Exception:
-                pass
-
-            # Step 5: Render to String
-            try:
-                # build() returns a string in v5, but a matrix in v6. 
-                # Converting the matrix to a string explicitly handles both.
-                return str(source.build())
-            except AttributeError:
-                return "Error: .build() method not found in plotext."
-
+            return plt.build()
         except Exception as e:
-            logging.error(f"Plotext Render Logic Error: {str(e)}")
-            return f"Render Logic Error: {str(e)}"
+            logging.error(f"Chart Render Error: {str(e)}")
+            return f"Error rendering chart: {str(e)}"
