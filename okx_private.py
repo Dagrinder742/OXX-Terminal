@@ -26,7 +26,7 @@ class OKXPrivateClient:
         return base64.b64encode(mac.digest()).decode("utf-8")
 
     @classmethod
-    def place_order(cls, inst_id: str, side: str, order_type: str, sz: str, px: str = None) -> dict:
+    def place_order(cls, inst_id: str, side: str, order_type: str, sz: str, px: str = None, tp_trigger_px: str = None, sl_trigger_px: str = None) -> dict:
         creds = EncryptedVault.load_credentials()
         api_key = creds.get("api_key")
         secret_key = creds.get("secret_key")
@@ -48,6 +48,14 @@ class OKXPrivateClient:
         if order_type == "limit" and px:
             payload["px"] = str(px)
 
+        # Attach Advanced TP/SL if provided
+        if tp_trigger_px:
+            payload["tpTriggerPx"] = str(tp_trigger_px)
+            payload["tpOrdPx"] = "-1"  # Market order execution upon TP trigger
+        if sl_trigger_px:
+            payload["slTriggerPx"] = str(sl_trigger_px)
+            payload["slOrdPx"] = "-1"  # Market order execution upon SL trigger
+
         body_str = json.dumps(payload)
         timestamp = cls._get_timestamp()
         signature = cls._sign(timestamp, "POST", endpoint, body_str, secret_key)
@@ -62,6 +70,62 @@ class OKXPrivateClient:
 
         try:
             response = requests.post(cls.BASE_URL + endpoint, headers=headers, data=body_str, timeout=10)
+            return response.json()
+        except Exception as e:
+            return {"code": "500", "msg": str(e)}
+
+    @classmethod
+    def get_pending_orders(cls) -> dict:
+        creds = EncryptedVault.load_credentials()
+        api_key = creds.get("api_key")
+        secret_key = creds.get("secret_key")
+        passphrase = creds.get("passphrase")
+
+        if not api_key:
+            return {"code": "1", "msg": "Missing credentials."}
+
+        endpoint = "/api/v5/trade/orders-pending"
+        timestamp = cls._get_timestamp()
+        signature = cls._sign(timestamp, "GET", endpoint, "", secret_key)
+
+        headers = {
+            "OK-ACCESS-KEY": api_key,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": passphrase,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
+            return response.json()
+        except Exception as e:
+            return {"code": "500", "msg": str(e)}
+
+    @classmethod
+    def get_positions(cls) -> dict:
+        creds = EncryptedVault.load_credentials()
+        api_key = creds.get("api_key")
+        secret_key = creds.get("secret_key")
+        passphrase = creds.get("passphrase")
+
+        if not api_key:
+            return {"code": "1", "msg": "Missing credentials."}
+
+        endpoint = "/api/v5/account/positions"
+        timestamp = cls._get_timestamp()
+        signature = cls._sign(timestamp, "GET", endpoint, "", secret_key)
+
+        headers = {
+            "OK-ACCESS-KEY": api_key,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": passphrase,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
             return response.json()
         except Exception as e:
             return {"code": "500", "msg": str(e)}

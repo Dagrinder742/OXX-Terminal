@@ -40,7 +40,7 @@ class AuthModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static("[bold cyan]🔐 OKX Secure Credential Setup[/bold cyan]")
+            yield Static("[bold cyan] OKX Secure Credential Setup[/bold cyan]")
             yield Static("Enter your API credentials. Press Enter to submit.")
 
             yield Label("API Key:")
@@ -153,7 +153,12 @@ class OKXTerminalApp(App):
     }
 
     .log-container {
-        height: 12;
+        height: 10;
+        margin-top: 1;
+    }
+
+    .positions-container {
+        height: 10;
         margin-top: 1;
     }
     """
@@ -172,7 +177,7 @@ class OKXTerminalApp(App):
         # Main workspace grid split into columns
         with Horizontal(classes="row"):
 
-        # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
+            # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
             with Vertical(classes="panel", id="left-sidebar"):
                 yield Static("[bold cyan]Instrument Search[/bold cyan]")
                 yield Input(placeholder="BTC-USD", id="instrument-search-input")
@@ -194,7 +199,7 @@ class OKXTerminalApp(App):
                 yield Button("BUY (LONG)", variant="success")
                 yield Button("SELL (SHORT)", variant="error")
 
-            # Right Main Workspace: Market Depth, Trades, and Execution Log
+            # Right Main Workspace: Market Depth, Trades, Open Orders/Positions, and Execution Log
             with Vertical(classes="panel", id="right-main"):
                 yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
 
@@ -211,6 +216,11 @@ class OKXTerminalApp(App):
                         yield Static("[bold yellow]Last Trades[/bold yellow]")
                         yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                         yield Static("Waiting for trade stream...", id="last-trades-content")
+
+                # Open Orders & Positions Sub-Panel
+                with Vertical(classes="sub-panel positions-container", id="positions-panel"):
+                    yield Static("[bold blue]Open Orders & Positions Tracking[/bold blue]")
+                    yield Static("Scanning for open orders and positions...", id="positions-content")
 
                 # Bottom Sub-Panel: Order Status / Activity Log
                 with Vertical(classes="sub-panel log-container", id="log-panel"):
@@ -252,7 +262,6 @@ class OKXTerminalApp(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
-        # If triggered from AuthModal save button, ignore here as it's handled in AuthModal
         if button_id == "save_btn":
             return
 
@@ -265,15 +274,9 @@ class OKXTerminalApp(App):
             self.notify("Please enter an order amount!", severity="error", title="Order Error")
             return
 
-        # Default to limit order if price is provided, else market
         ord_type = "limit" if price_val else "market"
+        side = "buy" if event.button.label.text.startswith("BUY") else "sell"
 
-        if event.button.label.text.startswith("BUY"):
-            side = "buy"
-        else:
-            side = "sell"
-
-        # Run order execution asynchronously with TP/SL parameters so it doesn't freeze the TUI loop
         self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val))
 
     def action_switch_instrument(self, new_inst: str) -> None:
@@ -287,12 +290,10 @@ class OKXTerminalApp(App):
         self.notify(f"Switching instrument from {old_inst} to {new_inst}...", title="Market Switch")
         self.log_action(f"[yellow]Switching feed to {new_inst}...[/yellow]")
 
-        # Clear old caches to prevent stale rendering
         self.cached_asks = []
         self.cached_bids = []
         self.cached_trades = []
 
-        # Instantly clear the UI widget text so it doesn't linger
         try:
             self.query_one("#last-trades-content", Static).update("Waiting for trade stream...")
         except Exception as e:
@@ -300,11 +301,9 @@ class OKXTerminalApp(App):
 
         self.current_price = "Connecting..."
 
-        # Cancel existing background WebSocket task if running
         if self.bg_worker and not self.bg_worker.done():
             self.bg_worker.cancel()
 
-        # Restart terminal services with the new instrument ID
         self.client = OKXPublicClient(instrument_id=new_inst, callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
 
@@ -316,7 +315,6 @@ class OKXTerminalApp(App):
         self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
         self.log_action(f"[yellow]Submitting {side.upper()} {ord_type} order (sz: {size}) [TP: {tp or 'None'}, SL: {sl or 'None'}]...[/yellow]")
 
-        # Run the blocking requests call in an executor thread
         result = await asyncio.to_thread(
             OKXPrivateClient.place_order,
             inst_id=self.instrument_id,
@@ -334,16 +332,15 @@ class OKXTerminalApp(App):
             ord_id = data.get("ordId", "Unknown")
             self.notify(f"Order placed successfully! ID: {ord_id}", severity="information", title="Success")
             self.log_action(f"[green]SUCCESS: Order ID {ord_id} placed.[/green]")
-            logging.info(f"Order success: {result}")
         else:
             msg = result.get("msg", "Unknown error")
             self.notify(f"Order failed [{code}]: {msg}", severity="error", title="API Error")
             self.log_action(f"[red]FAILED [{code}]: {msg}[/red]")
-            logging.error(f"Order failed: {result}")
 
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
-        self.set_interval(5.0, self.update_portfolio_balance)  # Poll balances every 5s
+        self.set_interval(5.0, self.update_portfolio_balance)
+        self.set_interval(5.0, self.update_open_orders_and_positions)  # Poll open orders & positions every 5s
         self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
 
@@ -364,14 +361,56 @@ class OKXTerminalApp(App):
             try:
                 self.query_one("#portfolio-balance", Static).update(balance_text)
             except Exception as e:
-                # Widget might not be mounted yet during startup/shutdown
                 logging.debug(f"Could not update portfolio balance widget: {e}")
+
+    async def update_open_orders_and_positions(self) -> None:
+        from okx_private import OKXPrivateClient
+
+        # Fetch pending orders and positions concurrently or sequentially via thread
+        orders_res = await asyncio.to_thread(OKXPrivateClient.get_pending_orders)
+        pos_res = await asyncio.to_thread(OKXPrivateClient.get_positions)
+
+        output_lines = []
+
+        # Parse Pending Orders
+        if orders_res.get("code") == "0":
+            orders = orders_res.get("data", [])
+            if orders:
+                output_lines.append("[bold yellow]Resting Orders:[/bold yellow]")
+                for o in orders[:3]:  # Show top 3
+                    inst = o.get("instId")
+                    side = o.get("side").upper()
+                    px = o.get("px")
+                    sz = o.get("sz")
+                    output_lines.append(f"  • {inst} | {side} {sz} @ {px}")
+            else:
+                output_lines.append("[dim]No open resting orders[/dim]")
         else:
-            msg = result.get("msg", "Auth check failed")
-            try:
-                self.query_one("#portfolio-balance", Static).update(f"[dim red]{msg[:30]}...[/dim red]")
-            except Exception as e:
-                logging.debug(f"Could not update portfolio error widget: {e}")
+            output_lines.append("[red]Error fetching orders[/red]")
+
+        output_lines.append("")
+
+        # Parse Positions
+        if pos_res.get("code") == "0":
+            positions = pos_res.get("data", [])
+            active_pos = [p for p in positions if float(p.get("pos", 0)) != 0]
+            if active_pos:
+                output_lines.append("[bold cyan]Active Positions:[/bold cyan]")
+                for p in active_pos:
+                    inst = p.get("instId")
+                    pos_sz = p.get("pos")
+                    pnl = float(p.get("upl", 0))
+                    pnl_color = "green" if pnl >= 0 else "red"
+                    output_lines.append(f"  • {inst} | Size: {pos_sz} | PnL: [{pnl_color}]${pnl:,.2f}[/{pnl_color}]")
+            else:
+                output_lines.append("[dim]No active trading positions[/dim]")
+        else:
+            output_lines.append("[dim]Positions feed idle (Cash/Spot mode)[/dim]")
+
+        try:
+            self.query_one("#positions-content", Static).update("\n".join(output_lines))
+        except Exception as e:
+            logging.debug(f"Could not update positions/orders widget: {e}")
 
     def log_action(self, message: str) -> None:
         """Appends status messages to the Execution Log window."""
@@ -379,7 +418,7 @@ class OKXTerminalApp(App):
             log_widget = self.query_one("#execution-log-content", Static)
             current_text = log_widget.renderable
             new_text = f"{message}\n{current_text}"
-            lines = new_text.strip().split("\n")[:5]
+            lines = new_text.strip().split("\n")[:4]
             log_widget.update("\n".join(lines))
         except Exception:
             logging.info(message)
@@ -403,13 +442,11 @@ class OKXTerminalApp(App):
                     self.cached_asks = raw_asks[:5]
                     self.cached_bids = raw_bids[:5]
                 else:
-                    # Merge delta updates into existing cached levels by price
                     for ask in raw_asks:
                         price, size, _, _ = ask[:4]
                         if float(size) == 0.0:
                             self.cached_asks = [a for a in self.cached_asks if a[0] != price]
                         else:
-                            # Update or append
                             updated = False
                             for i, a in enumerate(self.cached_asks):
                                 if a[0] == price:
@@ -431,24 +468,14 @@ class OKXTerminalApp(App):
                             if not updated:
                                 self.cached_bids.append(bid)
 
-                # Keep top 5 sorted cleanly
                 self.cached_asks = sorted(self.cached_asks, key=lambda x: float(x[0]))[:5]
                 self.cached_bids = sorted(self.cached_bids, key=lambda x: float(x[0]), reverse=True)[:5]
 
                 asks = self.cached_asks
                 bids = self.cached_bids
 
-                asks_formatted = []
-                for ask in reversed(asks):
-                    price = float(ask[0])
-                    amt = float(ask[1])
-                    asks_formatted.append(f"[red]{price:,.1f}  {amt:.4f}[/red]")
-
-                bids_formatted = []
-                for bid in bids:
-                    price = float(bid[0])
-                    amt = float(bid[1])
-                    bids_formatted.append(f"[green]{price:,.1f}  {amt:.4f}[/green]")
+                asks_formatted = [f"[red]{float(a[0]):,.1f}  {float(a[1]):.4f}[/red]" for a in reversed(asks)]
+                bids_formatted = [f"[green]{float(b[0]):,.1f}  {float(b[1]):.4f}[/green]" for b in bids]
 
                 asks_text = "Asks (Sells) [Price / Amt]\n" + ("\n".join(asks_formatted) if asks_formatted else "Waiting...")
                 bids_text = "Bids (Buys) [Price / Amt]\n" + ("\n".join(bids_formatted) if bids_formatted else "Waiting...")
@@ -467,13 +494,8 @@ class OKXTerminalApp(App):
                 price = float(trade.get("px", 0))
                 size = float(trade.get("sz", 0))
                 side = trade.get("side", "buy")
-                # Format time string if available, or just keep it clean
-                timestamp = trade.get("ts", "")
-
-                # Append to the front of our rolling list
                 self.cached_trades.insert(0, {"price": price, "size": size, "side": side})
 
-            # Keep only the last 10 trades
             self.cached_trades = self.cached_trades[:10]
 
             trade_lines = []
