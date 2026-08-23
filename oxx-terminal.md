@@ -34,6 +34,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * `auth.py`: Handles authentication helper sequences and signature mapping.
 * `renderer.py`: Houses TUI layout formatting and visual widget rendering logic.
 * `secure_store.py`: Low-level wrapper for OS credential storage integrations.
+* `chart_renderer.py`: Fetches historical OHLCV data and renders terminal-grade ASCII candlestick charts using `plotext`.
 * `strategy_engine.py`: Local logic for grid bots/DCA execution.
 
 ---
@@ -47,6 +48,10 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
 * [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
 * [x] **Open Orders & Positions Tracking**: Integrated periodic background polling for resting limit/stop orders and active trading positions with live color-coded PnL readouts.
+* [x] **Browser-Style Page Scrolling**: Implemented a vertical scrollable viewport (`VerticalScroll`) allowing panels to expand naturally beyond the terminal window height.
+* [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
+* [x] **TUI Rendering Polish**: Resolved ASCII "ghosting" and duplication artifacts through precise coordinate locking, ANSI sequence cleaning, and disabling text wrapping on chart widgets.
+* [x] **Minimalist UI**: Hidden the visual scrollbar and refined notification borders to eliminate layout "eye sores" while maintaining full navigation functionality.
 
 ---
 
@@ -56,7 +61,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.
 * [ ] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
-* [ ] **Candle Stick Charts**: Intergrate candle stick charts in the textual environment for greater visual effects.
+* [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
 * [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
 ---

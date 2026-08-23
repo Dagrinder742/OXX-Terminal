@@ -6,7 +6,7 @@ if sys.stdout.encoding.lower() != 'utf-8':
 if sys.stderr.encoding.lower() != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Static, Input, Button, Label
 from textual.reactive import reactive
 from textual.screen import ModalScreen
@@ -32,10 +32,12 @@ class AuthModal(ModalScreen):
     }
     .input-box {
         margin-bottom: 1;
+        border: solid;
     }
     Button {
         width: 100%;
         margin-top: 1;
+        border: solid;
     }
     """
 
@@ -90,6 +92,15 @@ class OKXTerminalApp(App):
     Screen {
         background: #111111;
         color: #ffffff;
+        overflow-y: auto;
+        border: solid #00ffcc;
+        scrollbar-size: 0 0;
+    }
+
+    #page-viewport {
+        width: 100%;
+        height: auto;
+        overflow-y: auto;
     }
 
     #header-bar {
@@ -101,35 +112,40 @@ class OKXTerminalApp(App):
 
     .panel {
         border: solid #333333;
-        height: 1fr;
+        height: auto;
+        min-height: 20;
         padding: 1;
         margin: 1;
         background: #181818;
+        border: solid;
     }
 
     #left-sidebar {
         width: 30%;
-        margin-bottom: 1;
+        border: solid;
     }
 
     #right-main {
         width: 70%;
+        border: solid;
     }
 
     .sub-grid {
-        height: 1fr;
+        height: auto;
+        min-height: 20;
     }
 
     .sub-panel {
         border: solid #222222;
-        height: 1fr;
+        height: auto;
+        min-height: 15;
         padding: 1;
         margin: 0 1;
         background: #141414;
     }
 
     .row {
-        height: 1fr;
+        height: auto;
     }
 
     Button {
@@ -142,12 +158,14 @@ class OKXTerminalApp(App):
 
     Button:hover {
         background: #333333;
+        border: solid;
     }
 
     Input {
         background: #141414;
         border: solid #444444;
         color: #ffffff;
+        border: solid;
     }
 
     Input:focus {
@@ -155,20 +173,32 @@ class OKXTerminalApp(App):
     }
 
     .log-container {
-        height: 10;
+        height: 5;
         margin-top: 1;
+        border: solid;
     }
 
     .positions-container {
-        height: 10;
+        height: 5;
         margin-top: 1;
+        border: solid;
     }
 
     #chart-container {
-        height: 1fr;
+        height: 30;
         padding: 1;
         background: #141414;
         border: solid #222222;
+        margin-top: 1;
+    }
+
+    #ascii-chart-view {
+        height: 18;
+        width: 125;
+        text-wrap: nowrap;
+        text-overflow: clip;
+        overflow: hidden;
+        border: solid cyan;
         margin-top: 1;
     }
 
@@ -180,6 +210,7 @@ class OKXTerminalApp(App):
 
     .tf-btn {
         width: 1fr;
+        height: 3;
         margin: 0 1;
         background: #1e1e1e;
         color: #00ffcc;
@@ -189,6 +220,26 @@ class OKXTerminalApp(App):
     .tf-btn:hover {
         background: #00ffcc;
         color: #000000;
+        border: solid;
+    }
+
+    /* Fix for notification "eye sores" */
+    Toast {
+        border: solid #00ffcc;
+        background: #1e1e1e;
+        color: #ffffff;
+    }
+
+    /* Fix for scrollbar "eye sores" */
+    ScrollBar {
+        background: #111111;
+        color: #00ffcc;
+    }
+    
+    #page-viewport {
+        width: 100%;
+        height: auto;
+        overflow-y: auto;
     }
     """
 
@@ -203,69 +254,71 @@ class OKXTerminalApp(App):
         # Top ticker strip
         yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USD')} | Loading Ticker Feed...", id="header-bar")
 
-        # Main workspace grid split into columns
-        with Horizontal(classes="row"):
+        # Main viewport with page-level scrolling
+        with VerticalScroll(id="page-viewport"):
+            # Main workspace grid split into columns
+            with Horizontal(classes="row"):
 
-            # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
-            with Vertical(classes="panel", id="left-sidebar"):
-                yield Static("[bold cyan]Instrument Search[/bold cyan]")
-                yield Input(placeholder="BTC-USD", id="instrument-search-input")
+                # Left Sidebar: Instrument Picker, Portfolio Balance & Order Entry Panel
+                with Vertical(classes="panel", id="left-sidebar"):
+                    yield Static("[bold cyan]Instrument Search[/bold cyan]")
+                    yield Input(placeholder="BTC-USD", id="instrument-search-input")
 
-                yield Static("[bold cyan]Portfolio Balance[/bold cyan]")
-                yield Static("Loading Balances...", id="portfolio-balance")
+                    yield Static("[bold cyan]Portfolio Balance[/bold cyan]")
+                    yield Static("Loading Balances...", id="portfolio-balance")
 
-                yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
-                yield Static("Price:")
-                yield Input(placeholder="$0.00", id="price-input")
-                yield Static("Amount:")
-                yield Input(placeholder="0.001", id="amount-input")
+                    yield Static("[bold cyan]Order Entry Panel[/bold cyan]")
+                    yield Static("Price:")
+                    yield Input(placeholder="$0.00", id="price-input")
+                    yield Static("Amount:")
+                    yield Input(placeholder="0.001", id="amount-input")
 
-                # New Advanced TP/SL Inputs
-                yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
-                yield Input(placeholder="Take-Profit Price...", id="tp-input")
-                yield Input(placeholder="Stop-Loss Price...", id="sl-input")
+                    # New Advanced TP/SL Inputs
+                    yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
+                    yield Input(placeholder="Take-Profit Price...", id="tp-input")
+                    yield Input(placeholder="Stop-Loss Price...", id="sl-input")
 
-                yield Button("BUY (LONG)", variant="success")
-                yield Button("SELL (SHORT)", variant="error")
+                    yield Button("BUY (LONG)", variant="success")
+                    yield Button("SELL (SHORT)", variant="error")
 
-            # Right Main Workspace: Market Depth, Trades, Open Orders/Positions, and Execution Log
-            with Vertical(classes="panel", id="right-main"):
-                yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
+                # Right Main Workspace: Market Depth, Trades, Open Orders/Positions, and Execution Log
+                with Vertical(classes="panel", id="right-main"):
+                    yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
 
-                with Horizontal(classes="sub-grid"):
-                    # Order Book Panel (Bids & Asks)
-                    with Vertical(classes="sub-panel", id="order-book-panel"):
-                        yield Static("[bold cyan]Order Book[/bold cyan]")
-                        yield Static("Asks (Sells)\n---------------------\nWaiting for depth...", id="order-book-asks")
-                        yield Static("[bold green]Spread / Mid-Price[/bold green]", id="order-book-mid")
-                        yield Static("Bids (Buys)\n---------------------\nWaiting for depth...", id="order-book-bids")
+                    with Horizontal(classes="sub-grid"):
+                        # Order Book Panel (Bids & Asks)
+                        with Vertical(classes="sub-panel", id="order-book-panel"):
+                            yield Static("[bold cyan]Order Book[/bold cyan]")
+                            yield Static("Asks (Sells)\n---------------------\nWaiting for depth...", id="order-book-asks")
+                            yield Static("[bold green]Spread / Mid-Price[/bold green]", id="order-book-mid")
+                            yield Static("Bids (Buys)\n---------------------\nWaiting for depth...", id="order-book-bids")
 
-                    # Last Trades Panel
-                    with Vertical(classes="sub-panel", id="last-trades-panel"):
-                        yield Static("[bold yellow]Last Trades[/bold yellow]")
-                        yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
-                        yield Static("Waiting for trade stream...", id="last-trades-content")
+                        # Last Trades Panel
+                        with Vertical(classes="sub-panel", id="last-trades-panel"):
+                            yield Static("[bold yellow]Last Trades[/bold yellow]")
+                            yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
+                            yield Static("Waiting for trade stream...", id="last-trades-content")
 
-                # Open Orders & Positions Sub-Panel
-                with Vertical(classes="sub-panel positions-container", id="positions-panel"):
-                    yield Static("[bold blue]Open Orders & Positions Tracking[/bold blue]")
-                    yield Static("Scanning for open orders and positions...", id="positions-content")
+                    # Open Orders & Positions Sub-Panel
+                    with Vertical(classes="sub-panel positions-container", id="positions-panel"):
+                        yield Static("[bold blue]Open Orders & Positions Tracking[/bold blue]")
+                        yield Static("Scanning for open orders and positions...", id="positions-content")
 
-                # Bottom Sub-Panel: Order Status / Activity Log
-                with Vertical(classes="sub-panel log-container", id="log-panel"):
-                    yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
-                    yield Static("System initialized. Waiting for actions...", id="execution-log-content")
+                    # Bottom Sub-Panel: Order Status / Activity Log
+                    with Vertical(classes="sub-panel log-container", id="log-panel"):
+                        yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
+                        yield Static("System initialized. Waiting for actions...", id="execution-log-content")
 
-                # Candlestick Chart Sub-Panel with Mouse-Clickable Timeframes
-                with Vertical(classes="sub-panel", id="chart-container"):
-                    yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
-                    with Horizontal(classes="timeframe-bar"):
-                        yield Button("1m", id="tf-1m", classes="tf-btn")
-                        yield Button("5m", id="tf-5m", classes="tf-btn")
-                        yield Button("15m", id="tf-15m", classes="tf-btn")
-                        yield Button("1H", id="tf-1h", classes="tf-btn")
-                        yield Button("1D", id="tf-1d", classes="tf-btn")
-                    yield Static("Loading Chart Data...", id="ascii-chart-view")
+                    # Candlestick Chart Sub-Panel with Mouse-Clickable Timeframes
+                    with Vertical(classes="sub-panel", id="chart-container"):
+                        yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
+                        with Horizontal(classes="timeframe-bar"):
+                            yield Button("1m", id="tf-1m", classes="tf-btn")
+                            yield Button("5m", id="tf-5m", classes="tf-btn")
+                            yield Button("15m", id="tf-15m", classes="tf-btn")
+                            yield Button("1H", id="tf-1h", classes="tf-btn")
+                            yield Button("1D", id="tf-1d", classes="tf-btn")
+                        yield Static("Loading Chart Data...", id="ascii-chart-view")
 
         yield Footer()
 
@@ -368,15 +421,20 @@ class OKXTerminalApp(App):
                     OKXChartEngine.fetch_candles,
                     inst_id=self.instrument_id,
                     bar=self.current_timeframe,
-                    limit=35
+                    limit=80
                 )
                 chart_str = await asyncio.to_thread(
                     OKXChartEngine.render_ascii_chart,
                     data,
                     self.instrument_id,
-                    self.current_timeframe
+                    self.current_timeframe,
+                    width=120,
+                    height=16
                 )
-                self.query_one("#ascii-chart-view", Static).update(chart_str)
+                from rich.text import Text
+                # Clean ANSI output and use Rich to parse it correctly
+                cleaned_chart = "\n".join(line.rstrip() for line in chart_str.splitlines())
+                self.query_one("#ascii-chart-view", Static).update(Text.from_ansi(cleaned_chart))
             except Exception as e:
                 logging.warning(f"Could not update candlestick chart widget: {e}")
 
@@ -414,6 +472,7 @@ class OKXTerminalApp(App):
         self.set_interval(0.1, self.update_header_display)
         self.set_interval(5.0, self.update_portfolio_balance)
         self.set_interval(5.0, self.update_open_orders_and_positions)  # Poll open orders & positions every 5s
+        self.set_interval(30.0, self.refresh_chart)  # Auto-refresh chart every 30 seconds
         self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
 

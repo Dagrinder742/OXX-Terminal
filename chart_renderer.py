@@ -4,7 +4,7 @@ import logging
 import datetime
 
 class OKXChartEngine:
-    """Fetches historical OHLCV candles from OKX US REST API and renders terminal-grade ASCII charts."""
+    """Fetches historical OHLCV candles from OKX REST API and renders terminal-grade ASCII charts."""
 
     BASE_URL = "https://us.okx.com"
 
@@ -50,26 +50,34 @@ class OKXChartEngine:
             return {"success": False, "msg": str(e)}
 
     @staticmethod
-    def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 70, height: int = 18) -> str:
-        """Renders an ANSI/ASCII candlestick chart string using plotext."""
+    def render_ascii_chart(candle_data: dict, inst_id: str, bar: str, width: int = 60, height: int = 16) -> str:
+        """Renders a precisely bounded ASCII chart string."""
         if not candle_data.get("success"):
             return "Unable to load candlestick telemetry."
 
-        plt.clf()
-        plt.plotsize(width, height)
-        plt.theme("dark")
+        try:
+            plt.clf()
+            plt.plotsize(width, height)
+            plt.theme("dark")
 
-        times = candle_data["time"]
-        prices = {
-            "Open": candle_data["open"],
-            "High": candle_data["high"],
-            "Low": candle_data["low"],
-            "Close": candle_data["close"]
-        }
+            times = candle_data["time"]
+            x_indexes = list(range(len(times)))
 
-        plt.candlestick(times, prices)
-        plt.title(f"{inst_id} [{bar}] - OKX Feed")
-        plt.xlabel("Time (UTC)")
-        plt.ylabel("Price")
+            prices = {
+                "Open": candle_data["open"],
+                "High": candle_data["high"],
+                "Low": candle_data["low"],
+                "Close": candle_data["close"]
+            }
 
-        return plt.build()
+            plt.candlestick(x_indexes, prices)
+
+            if x_indexes:
+                step = max(1, len(x_indexes) // 5)
+                plt.xticks(x_indexes[::step], times[::step])
+
+            plt.title(f"{inst_id} [{bar}]")
+            return plt.build()
+        except Exception as e:
+            logging.exception("Error building plotext ASCII chart")
+            return f"Error rendering chart: {str(e)}"

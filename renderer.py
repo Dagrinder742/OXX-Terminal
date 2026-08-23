@@ -91,6 +91,7 @@ class OKXTerminalUI(App):
 
     #right-main {
         width: 70%;
+        height: 2fr;
     }
 
     .sub-grid {
