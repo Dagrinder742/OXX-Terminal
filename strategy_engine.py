@@ -64,6 +64,58 @@ class StrategyManager:
         self.active_bots = {} # {bot_id: bot_instance}
         self.total_pnl = 0.0
 
+    @staticmethod
+    def calculate_ema(data: list, period: int) -> list:
+        """Computes the Exponential Moving Average (EMA) for a given series."""
+        if len(data) < period:
+            return [None] * len(data)
+        
+        ema = [None] * len(data)
+        multiplier = 2 / (period + 1)
+        
+        # Start with simple SMA for the first valid point
+        initial_sma = sum(data[:period]) / period
+        ema[period - 1] = initial_sma
+        
+        for i in range(period, len(data)):
+            ema[i] = (data[i] - ema[i - 1]) * multiplier + ema[i - 1]
+            
+        return ema
+
+    @staticmethod
+    def calculate_rsi(data: list, period: int = 14) -> list:
+        """Computes the Relative Strength Index (RSI) using Wilder's smoothing."""
+        if len(data) <= period:
+            return [None] * len(data)
+            
+        rsi = [None] * len(data)
+        deltas = [data[i] - data[i - 1] for i in range(1, len(data))]
+        
+        gains = [d if d > 0 else 0 for d in deltas]
+        losses = [-d if d < 0 else 0 for d in deltas]
+        
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        
+        if avg_loss == 0:
+            rsi[period] = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi[period] = 100 - (100 / (1 + rs))
+            
+        for i in range(period + 1, len(data)):
+            # Wilder's Smoothing
+            avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
+            
+            if avg_loss == 0:
+                rsi[i] = 100
+            else:
+                rs = avg_gain / avg_loss
+                rsi[i] = 100 - (100 / (1 + rs))
+                
+        return rsi
+
     def start_grid_bot(self, inst_id: str, lower: float, upper: float, grids: int, investment: float):
         bot_id = f"grid_{inst_id}_{int(time.time())}"
         bot = GridStrategyEngine(inst_id, lower, upper, grids, investment)

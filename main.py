@@ -225,21 +225,33 @@ class OKXTerminalApp(App):
     }
 
     #chart-container {
-        height: 30;
+        height: auto;
         padding: 1;
         background: #000000;
         border: solid #ffcc00;
         margin-top: 1;
+        layout: vertical;
     }
 
-    #ascii-chart-view {
-        height: 18;
+    .chart-view {
         width: 125;
         text-wrap: nowrap;
         text-overflow: clip;
         overflow: hidden;
         border: solid #ffcc00;
-        margin-top: 1;
+        margin-bottom: 1;
+    }
+
+    #chart-price {
+        height: 22;
+    }
+
+    #chart-trend {
+        height: 12;
+    }
+
+    #chart-momentum {
+        height: 10;
     }
 
     .timeframe-bar {
@@ -343,7 +355,11 @@ class OKXTerminalApp(App):
                             yield Button("15m", id="tf-15m", classes="tf-btn")
                             yield Button("1H", id="tf-1h", classes="tf-btn")
                             yield Button("1D", id="tf-1d", classes="tf-btn")
-                        yield Static("Loading Chart Data...", id="ascii-chart-view")
+                        
+                        # Triple-Threat Decoupled Chart Widgets
+                        yield Static("Loading Price...", id="chart-price", classes="chart-view")
+                        yield Static("Loading Trend...", id="chart-trend", classes="chart-view")
+                        yield Static("Loading Momentum...", id="chart-momentum", classes="chart-view")
 
                     # 2. Market Depth & Last Trades
                     yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
@@ -574,18 +590,31 @@ class OKXTerminalApp(App):
                     bar=self.current_timeframe,
                     limit=80
                 )
-                chart_str = await asyncio.to_thread(
-                    OKXChartEngine.render_ascii_chart,
-                    data,
-                    self.instrument_id,
-                    self.current_timeframe,
-                    width=120,
-                    height=16
+                # Calculate indicators
+                close_prices = data["close"]
+                ema9 = StrategyManager.calculate_ema(close_prices, 9)
+                ema21 = StrategyManager.calculate_ema(close_prices, 21)
+                rsi = StrategyManager.calculate_rsi(close_prices, 14)
+
+                # Sequentially render each view to ensure plotext state integrity
+                price_str = await asyncio.to_thread(
+                    OKXChartEngine.render_price_view,
+                    data, self.instrument_id, self.current_timeframe, 120, 20
                 )
+                trend_str = await asyncio.to_thread(
+                    OKXChartEngine.render_trend_view,
+                    data, 120, 10, ema9, ema21
+                )
+                momentum_str = await asyncio.to_thread(
+                    OKXChartEngine.render_momentum_view,
+                    data, 120, 8, rsi
+                )
+
                 from rich.text import Text
-                # Clean ANSI output and use Rich to parse it correctly
-                cleaned_chart = "\n".join(line.rstrip() for line in chart_str.splitlines())
-                self.query_one("#ascii-chart-view", Static).update(Text.from_ansi(cleaned_chart))
+                # Update widgets with cleaned ANSI output
+                self.query_one("#chart-price", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in price_str.splitlines())))
+                self.query_one("#chart-trend", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in trend_str.splitlines())))
+                self.query_one("#chart-momentum", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in momentum_str.splitlines())))
             except Exception as e:
                 logging.warning(f"Could not update candlestick chart widget: {e}")
 

@@ -3,7 +3,14 @@
 # us.okx.com
 # wss://ws.okx.com:8443/ws/v5/public
 # ================================================================================================
-# OXX Terminal Project Roadmap
+# PACKAGE VERSIONS
+# ================================================================================================
+# Plotext> = v5.3.2
+# ================================================================================================
+## OXX Terminal Project Roadmap
+# ------------------------------------------------------------------------------------------------
+## THE ONYX TERMINAL
+# ------------------------------------------------------------------------------------------------
 
 ## 1. Project Overview & Blueprint
 The goal is to replicate a multi-pane web dashboard layout within a terminal environment using **Textual** and **Rich**. This project focuses on high-performance data pipelines and secure, OS-level credential management.
@@ -34,7 +41,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * `auth.py`: Handles authentication helper sequences and signature mapping.
 * `renderer.py`: Houses TUI layout formatting and visual widget rendering logic.
 * `secure_store.py`: Low-level wrapper for OS credential storage integrations.
-* `chart_renderer.py`: Fetches historical OHLCV data and renders terminal-grade ASCII candlestick charts using `plotext`.
+* `chart_renderer.py`: Fetches historical OHLCV data and renders terminal-grade ASCII candlestick charts using `plotext==5.3.2`.
 * `strategy_engine.py`: Local logic for grid bots/DCA execution.
 
 ---
@@ -54,16 +61,17 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
 * [x] **TUI Rendering Polish**: Resolved ASCII "ghosting" and duplication artifacts through precise coordinate locking, ANSI sequence cleaning, and disabling text wrapping on chart widgets.
 * [x] **Minimalist UI**: Hidden the visual scrollbar and refined notification borders to eliminate layout "eye sores" while maintaining full navigation functionality.
-* [x] **Cross-Platform Compatibility**: Implemented environment detection in the chart engine to support stable rendering on both Windows (PowerShell) and Linux (Termux/mobile).
+* [x] **Cross-Platform Compatibility**: Implemented environment detection and adaptive rendering to support stable, synchronized charts on both Windows (PowerShell) and Linux (Termux/mobile). Standardized on `plotext==5.3.2` for cross-platform API stability.
 
 ---
 
 ## 5. Feature Roadmap & Brainstorming
 ### High-Priority Enhancements
-* [ ] **Technical Overlays**: Add EMA (Moving Average) lines to the ASCII charts and a compact RSI oscillator pane.
+* [x] **Technical Overlays**: Added EMA-9, EMA-21, and RSI-14 indicators using a robust **Decoupled Multi-Container Chart Architecture** for maximum cross-platform stability.
 * [ ] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
 * [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
-* [ ] **Order History/Fills**: Add a view to track executed orders for the active session.
+* [ ] **Order History & Session Fills**: Add a dedicated view to track executed orders and bot fills for the active session.
+* [ ] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.
 * [x] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
