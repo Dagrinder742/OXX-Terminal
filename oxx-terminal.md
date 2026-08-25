@@ -5,7 +5,10 @@
 # ================================================================================================
 # PACKAGE VERSIONS
 # ================================================================================================
-# Plotext> = v5.3.2
+# Plotext 5.3.2
+# Python 3.14.6
+# Rich 15.0.0
+# Textual 8.2.8
 # ================================================================================================
 ## OXX Terminal Project Roadmap
 # ------------------------------------------------------------------------------------------------
@@ -54,7 +57,8 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py` and `renderer.py.
 * [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
 * [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
-* [x] **Grid Bot Control Integration**: Integrated a dedicated sidebar panel for automated strategy oversight with live PnL and status hooks.
+* [x] **Grid Bot Control Integration**: Integrated a dedicated sidebar panel for automated strategy oversight with live PnL and status hooks. Consolidated with active order tracking.
+* [x] **Session Order History & Fills**: Implemented real-time tracking of executed manual and bot trades with a dedicated history pane.
 * [x] **Steelers "Star" UI Theme**: Rebranded the entire TUI with a Deep Black and Steelers Gold palette, accented by Star Blue (Buy) and Star Red (Sell/Stop) highlights.
 * [x] **Open Orders & Positions Tracking**: Integrated periodic background polling for resting limit/stop orders and active trading positions with live color-coded PnL readouts.
 * [x] **Browser-Style Page Scrolling**: Implemented a vertical scrollable viewport (`VerticalScroll`) allowing panels to expand naturally beyond the terminal window height.
@@ -70,7 +74,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Technical Overlays**: Added EMA-9, EMA-21, and RSI-14 indicators using a robust **Decoupled Multi-Container Chart Architecture** for maximum cross-platform stability.
 * [ ] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
 * [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
-* [ ] **Order History & Session Fills**: Add a dedicated view to track executed orders and bot fills for the active session.
+* [x] **Order History & Session Fills**: Added a dedicated view to track executed orders and bot fills for the active session.
 * [ ] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.

@@ -36,7 +36,7 @@ class GridStrategyEngine:
                 if current_price >= level:
                     self.last_grid_index = i
             self.active = True
-            return ("LOG", f"Bot initialized at ${current_price}. Anchor grid level: {self.grid_levels[self.last_grid_index] if self.last_grid_index is not None else 'None'}", 0)
+            return ("LOG", f"Bot initialized at ${current_price}. Anchor grid level: {self.grid_levels[self.last_grid_index] if self.last_grid_index is not None else 'None'}", 0, "Bot")
 
         # Check for grid crossing
         new_index = None
@@ -49,12 +49,12 @@ class GridStrategyEngine:
                 # Price moved up through a grid level -> SELL
                 self.last_grid_index = new_index
                 sz = self.investment_amount / current_price
-                return ("SELL", self.grid_levels[new_index], sz)
+                return ("SELL", self.grid_levels[new_index], sz, "Bot")
             elif new_index < self.last_grid_index:
                 # Price moved down through a grid level -> BUY
                 self.last_grid_index = new_index
                 sz = self.investment_amount / current_price
-                return ("BUY", self.grid_levels[new_index], sz)
+                return ("BUY", self.grid_levels[new_index], sz, "Bot")
 
         return None
 

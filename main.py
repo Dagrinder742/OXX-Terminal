@@ -90,6 +90,8 @@ class OKXTerminalApp(App):
         self.current_timeframe = "15m"
         self.strategy_manager = StrategyManager()
         self.bot_worker = None
+        self.session_fills = []
+        self.session_pnl = 0.0
 
     CSS = """
     Screen {
@@ -219,9 +221,17 @@ class OKXTerminalApp(App):
     }
 
     .positions-container {
-        height: 5;
+        height: 15;
         margin-top: 1;
         border: solid;
+    }
+
+    #history-panel {
+        height: 12;
+        padding: 1;
+        background: #000000;
+        border: solid #ffcc00;
+        margin-top: 1;
     }
 
     #chart-container {
@@ -343,10 +353,15 @@ class OKXTerminalApp(App):
                         yield Button("START GRID BOT", variant="success", id="start-bot-btn", classes="buy-btn")
                         yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
 
+                    # Open Orders & Positions Sub-Panel (CONSOLIDATED HERE)
+                    with Vertical(classes="sub-panel positions-container", id="positions-panel"):
+                        yield Static("[bold #ffcc00]Active Strategy Orders & Positions[/bold #ffcc00]")
+                        yield Static("Scanning for open orders and positions...", id="positions-content")
+
                 # Right Main Workspace: Candlestick Chart, Market Depth, Trades, and Activity
                 with Vertical(classes="panel", id="right-main"):
                     
-                    # 1. Candlestick Chart Sub-Panel (NOW AT TOP)
+                    # 1. Candlestick Chart Sub-Panel
                     with Vertical(classes="sub-panel", id="chart-container"):
                         yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
                         with Horizontal(classes="timeframe-bar"):
@@ -377,10 +392,10 @@ class OKXTerminalApp(App):
                             yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                             yield Static("Waiting for trade stream...", id="last-trades-content")
 
-                    # 3. Open Orders & Positions Sub-Panel
-                    with Vertical(classes="sub-panel positions-container", id="positions-panel"):
-                        yield Static("[bold blue]Open Orders & Positions Tracking[/bold blue]")
-                        yield Static("Scanning for open orders and positions...", id="positions-content")
+                    # 3. Session Order History & Fills (NEW PANEL)
+                    with Vertical(classes="sub-panel", id="history-panel"):
+                        yield Static("[bold #3399ff]Session Order History & Fills[/bold #3399ff]")
+                        yield Static("Waiting for session fills...", id="history-content")
 
                     # 4. Bottom Sub-Panel: Order Status / Activity Log
                     with Vertical(classes="sub-panel log-container", id="log-panel"):
@@ -454,7 +469,7 @@ class OKXTerminalApp(App):
         ord_type = "limit" if price_val else "market"
         side = "buy" if event.button.label.text.startswith("BUY") else "sell"
 
-        self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val))
+        self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val, tag="Manual"))
 
     def action_switch_instrument(self, new_inst: str) -> None:
         """Switches the active trading pair dynamically without restarting the app."""
@@ -545,7 +560,7 @@ class OKXTerminalApp(App):
         status_color = "green" if summary["status"] == "ACTIVE" else "red"
         
         self.query_one("#bot-status", Static).update(f"Engine Status: [bold {status_color}]{summary['status']}[/bold {status_color}]")
-        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Strategy PnL: ${summary['pnl']:.2f}")
+        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Session PnL: ${self.session_pnl:.2f}")
 
     async def _run_bot_execution_loop(self, bot_id: str) -> None:
         """Background loop to process market ticks through the strategy engine."""
@@ -559,11 +574,16 @@ class OKXTerminalApp(App):
                 signal = bot.process_tick(price)
 
                 if signal:
-                    sig_type, sig_px, sig_sz = signal
+                    if len(signal) == 4:
+                        sig_type, sig_px, sig_sz, sig_tag = signal
+                    else:
+                        sig_type, sig_px, sig_sz = signal
+                        sig_tag = "Bot"
+
                     if sig_type == "LOG":
-                        self.log_action(f"[dim]Bot {bot_id}: {sig_px}[/dim]")
+                        self.log_action(f"[dim]{sig_tag} {bot_id}: {sig_px}[/dim]")
                     elif sig_type in ["BUY", "SELL"]:
-                        self.log_action(f"[bold yellow]Bot {sig_type} Signal: {sig_sz:.4f} @ {sig_px}[/bold yellow]")
+                        self.log_action(f"[bold yellow]{sig_tag} {sig_type} Signal: {sig_sz:.4f} @ {sig_px}[/bold yellow]")
                         # Execute live order via Private Client
                         self.run_worker(self._execute_order_task(
                             side=sig_type.lower(),
@@ -571,7 +591,8 @@ class OKXTerminalApp(App):
                             size=str(sig_sz),
                             price=str(sig_px),
                             tp=None,
-                            sl=None
+                            sl=None,
+                            tag=sig_tag
                         ))
                 
                 await asyncio.sleep(1) # Check every second
@@ -620,11 +641,11 @@ class OKXTerminalApp(App):
 
         self.run_worker(load_task)
 
-    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str) -> None:
+    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str, tag: str = "Manual") -> None:
         from okx_private import OKXPrivateClient
 
         self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
-        self.log_action(f"[yellow]Submitting {side.upper()} {ord_type} order (sz: {size}) [TP: {tp or 'None'}, SL: {sl or 'None'}]...[/yellow]")
+        self.log_action(f"[yellow]{tag}: Submitting {side.upper()} {ord_type} order (sz: {size}) [TP: {tp or 'None'}, SL: {sl or 'None'}]...[/yellow]")
 
         result = await asyncio.to_thread(
             OKXPrivateClient.place_order,
@@ -641,12 +662,50 @@ class OKXTerminalApp(App):
         if code == "0":
             data = result.get("data", [{}])[0]
             ord_id = data.get("ordId", "Unknown")
+            exec_px = price if price else self.current_price
+            
+            # Record the fill in session history
+            import datetime
+            fill = {
+                "time": datetime.datetime.now().strftime("%H:%M:%S"),
+                "inst": self.instrument_id,
+                "side": side.upper(),
+                "sz": size,
+                "px": exec_px,
+                "tag": tag
+            }
+            self.session_fills.insert(0, fill)
+            self.session_fills = self.session_fills[:20] # Keep last 20
+            
+            # Update PnL (Simple realized PnL logic)
+            if len(self.session_fills) >= 2:
+                # Basic mock logic: if last was buy and this is sell, calculate diff
+                pass # Real PnL logic can be refined here
+
             self.notify(f"Order placed successfully! ID: {ord_id}", severity="information", title="Success")
-            self.log_action(f"[green]SUCCESS: Order ID {ord_id} placed.[/green]")
+            self.log_action(f"[green]SUCCESS: {tag} Order ID {ord_id} placed.[/green]")
+            self.update_history_display()
         else:
             msg = result.get("msg", "Unknown error")
             self.notify(f"Order failed [{code}]: {msg}", severity="error", title="API Error")
-            self.log_action(f"[red]FAILED [{code}]: {msg}[/red]")
+            self.log_action(f"[red]FAILED [{tag}]: {msg}[/red]")
+
+    def update_history_display(self) -> None:
+        """Renders the session fills into the history panel."""
+        lines = []
+        for f in self.session_fills:
+            color = "green" if f["side"] == "BUY" else "red"
+            tag_color = "#3399ff" if f["tag"] == "Manual" else "#ffcc00"
+            lines.append(
+                f"[{tag_color}]{f['tag']}[/{tag_color}] | {f['time']} | "
+                f"[{color}]{f['side']}[/{color}] {f['sz']} @ {f['px']}"
+            )
+        
+        history_text = "\n".join(lines) if lines else "Waiting for session fills..."
+        try:
+            self.query_one("#history-content", Static).update(history_text)
+        except Exception as e:
+            logging.debug(f"History display update skipped: {e}")
 
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)

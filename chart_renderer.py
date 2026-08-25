@@ -64,8 +64,8 @@ class OKXChartEngine:
         try:
             plt.clear_data()
             plt.clear_color()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Plotext clear failed: {e}")
             
         plt.plotsize(width, height)
         plt.theme("dark")
