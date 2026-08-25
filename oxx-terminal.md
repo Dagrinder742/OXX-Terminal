@@ -75,7 +75,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 ## 5. Feature Roadmap & Brainstorming
 ### High-Priority Enhancements
 * [x] **Technical Overlays**: Added EMA-9, EMA-21, and RSI-14 indicators using a robust **Decoupled Multi-Container Chart Architecture** for maximum cross-platform stability.
-* [ ] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
+* [x] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
 * [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
 * [x] **Order History & Session Fills**: Added a dedicated view to track executed orders and bot fills for the active session.
 * [x] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.

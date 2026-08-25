@@ -104,9 +104,8 @@ class OKXTerminalApp(App):
 
     #page-viewport {
         width: 100%;
-        height: 1fr;
+        height: auto;
         overflow-y: auto;
-        scrollbar-size: 0 0;
     }
 
     #header-bar {
@@ -119,41 +118,35 @@ class OKXTerminalApp(App):
     .panel {
         border: solid #ffcc00;
         height: auto;
-        min-height: 10;
+        min-height: 20;
         padding: 1;
         margin: 1;
         background: #000000;
+        border: solid;
     }
 
     #left-column {
-        width: 44;
-        height: 100%;
-        align-vertical: top;
-    }
-
-    #left-scroll-container {
-        width: 100%;
-        height: 100%;
-        overflow-y: auto;
-        scrollbar-size: 0 0; /* Hides scrollbar completely while keeping independent wheel scrolling active */
-    }
-
-    #left-sidebar {
+        width: 30%;
         height: auto;
     }
 
+    #left-sidebar {
+        border: solid;
+        margin-bottom: 1;
+    }
+
     #bot-panel {
-        height: 22; /* Fixed height to anchor the border against nested rows */
         border: solid #ffcc00;
+        height: auto;
+        min-height: 15;
         padding: 1;
         margin: 1;
         background: #000000;
     }
 
     #right-main {
-        width: 1fr;
-        height: auto;
-        border: solid #ffcc00;
+        width: 70%;
+        border: solid;
     }
 
     .sub-grid {
@@ -228,9 +221,9 @@ class OKXTerminalApp(App):
     }
 
     .positions-container {
-        height: auto;
-        min-height: 12;
-        margin: 1;
+        height: 15;
+        margin-top: 1;
+        border: solid;
     }
 
     #history-panel {
@@ -251,7 +244,7 @@ class OKXTerminalApp(App):
     }
 
     .chart-view {
-        width: 135;
+        width: 125;
         text-wrap: nowrap;
         text-overflow: clip;
         overflow: hidden;
@@ -304,6 +297,12 @@ class OKXTerminalApp(App):
         background: #000000;
         color: #ffcc00;
     }
+    
+    #page-viewport {
+        width: 100%;
+        height: auto;
+        overflow-y: auto;
+    }
     """
 
     current_price = reactive("Connecting...")
@@ -322,56 +321,42 @@ class OKXTerminalApp(App):
             # Main workspace grid split into columns
             with Horizontal(classes="row"):
 
-                # Left Column: Wrapped in a VerticalScroll for independent action panel navigation
+                # Left Column: Manual Order Entry & Bot Control
                 with Vertical(id="left-column"):
-                    with VerticalScroll(id="left-scroll-container"):
-                        # Sidebar: Portfolio Balance & Order Entry Panel
-                        with Vertical(classes="panel", id="left-sidebar"):
-                            yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
-                            yield Input(placeholder="BTC-USD", id="instrument-search-input")
+                    # Sidebar: Portfolio Balance & Order Entry Panel
+                    with Vertical(classes="panel", id="left-sidebar"):
+                        yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
+                        yield Input(placeholder="BTC-USD", id="instrument-search-input")
 
-                            yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
-                            yield Static("Loading Balances...", id="portfolio-balance")
+                        yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
+                        yield Static("Loading Balances...", id="portfolio-balance")
 
-                            yield Static("[bold #ffcc00]Order Entry Panel[/bold #ffcc00]")
-                            yield Static("Price:")
-                            yield Input(placeholder="$0.00", id="price-input")
-                            yield Static("Amount:")
-                            yield Input(placeholder="0.001", id="amount-input")
+                        yield Static("[bold #ffcc00]Order Entry Panel[/bold #ffcc00]")
+                        yield Static("Price:")
+                        yield Input(placeholder="$0.00", id="price-input")
+                        yield Static("Amount:")
+                        yield Input(placeholder="0.001", id="amount-input")
 
-                            # New Advanced TP/SL Inputs
-                            yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
-                            yield Input(placeholder="Take-Profit Price...", id="tp-input")
-                            yield Input(placeholder="Stop-Loss Price...", id="sl-input")
+                        # New Advanced TP/SL Inputs
+                        yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
+                        yield Input(placeholder="Take-Profit Price...", id="tp-input")
+                        yield Input(placeholder="Stop-Loss Price...", id="sl-input")
 
-                            yield Button("BUY (LONG)", variant="success", classes="buy-btn")
-                            yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
+                        yield Button("BUY (LONG)", variant="success", classes="buy-btn")
+                        yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
 
-                        # Bot Control Panel
-                        with Vertical(classes="panel", id="bot-panel"):
-                            yield Static("[bold #ffcc00]Strategy Control Panel[/bold #ffcc00]")
-                            yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
-                            yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
-                            
-                            yield Static("[dim]Strategy Parameters:[/dim]")
-                            with Horizontal(classes="row"):
-                                with Vertical():
-                                    yield Static("Grid Count:")
-                                    yield Input(placeholder="5", id="grid-count-input")
-                                with Vertical():
-                                    yield Static("DCA Drop %:")
-                                    yield Input(placeholder="2.0", id="dca-drop-input")
-                            
-                            with Horizontal(classes="row"):
-                                yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
-                                yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
-                            
-                            yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
+                    # Bot Control Panel
+                    with Vertical(classes="panel", id="bot-panel"):
+                        yield Static("[bold #ffcc00]Grid Bot Control Panel[/bold #ffcc00]")
+                        yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
+                        yield Static("Active Bots: 0 | Strategy PnL: $0.00", id="bot-metrics")
+                        yield Button("START GRID BOT", variant="success", id="start-bot-btn", classes="buy-btn")
+                        yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
 
-                        # Open Orders & Positions Sub-Panel
-                        with Vertical(classes="sub-panel positions-container", id="positions-panel"):
-                            yield Static("[bold #ffcc00]Active Strategy Orders & Positions[/bold #ffcc00]")
-                            yield Static("Scanning for open orders and positions...", id="positions-content")
+                    # Open Orders & Positions Sub-Panel (CONSOLIDATED HERE)
+                    with Vertical(classes="sub-panel positions-container", id="positions-panel"):
+                        yield Static("[bold #ffcc00]Active Strategy Orders & Positions[/bold #ffcc00]")
+                        yield Static("Scanning for open orders and positions...", id="positions-content")
 
                 # Right Main Workspace: Candlestick Chart, Market Depth, Trades, and Activity
                 with Vertical(classes="panel", id="right-main"):
@@ -426,9 +411,11 @@ class OKXTerminalApp(App):
             if not new_inst:
                 return
 
+            # Normalize spaces to hyphens (e.g., "SOL USD" -> "SOL-USD")
             if " " in new_inst:
                 new_inst = new_inst.replace(" ", "-")
 
+            # Default to -USD if no quote asset or hyphen is provided
             if "-" not in new_inst:
                 new_inst = f"{new_inst}-USD"
 
@@ -452,6 +439,7 @@ class OKXTerminalApp(App):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
         if button_id and button_id.startswith("tf-"):
+            # Handle timeframe clicks via mouse
             tf_map = {"tf-1m": "1m", "tf-5m": "5m", "tf-15m": "15m", "tf-1h": "1H", "tf-1d": "1D"}
             self.current_timeframe = tf_map.get(button_id, "15m")
             self.notify(f"Switching timeframe to {self.current_timeframe}", title="Chart Update")
@@ -461,12 +449,8 @@ class OKXTerminalApp(App):
         if button_id == "save_btn":
             return
 
-        if button_id == "start-grid-btn":
-            self.action_start_bot(strategy_type="GRID")
-            return
-
-        if button_id == "start-dca-btn":
-            self.action_start_bot(strategy_type="DCA")
+        if button_id == "start-bot-btn":
+            self.action_start_bot()
             return
 
         if button_id == "stop-bot-btn":
@@ -492,6 +476,7 @@ class OKXTerminalApp(App):
         if self.instrument_id == new_inst:
             return
 
+        # Stop bot if instrument changes (safety)
         if self.strategy_manager.active_bots:
             self.action_stop_bot()
             self.notify("Trading Bot stopped due to instrument switch.", severity="warning")
@@ -522,52 +507,42 @@ class OKXTerminalApp(App):
         self.refresh_chart()
         self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
 
-    def action_start_bot(self, strategy_type: str = "GRID") -> None:
-        """Initializes and starts the selected trading strategy."""
+    def action_start_bot(self) -> None:
+        """Initializes and starts the Grid Bot strategy."""
+        if self.strategy_manager.active_bots:
+            self.notify("A bot is already running!", severity="warning")
+            return
+
+        # Determine bounds and grid settings from inputs or current price
         try:
-            curr_px_str = str(self.current_price).replace(",", "")
-            mid_price = float(curr_px_str)
+            mid_price = float(self.current_price)
             tp_price = self.query_one("#tp-input", Input).value.strip()
             sl_price = self.query_one("#sl-input", Input).value.strip()
             amount_str = self.query_one("#amount-input", Input).value.strip()
 
             if not amount_str:
-                self.notify("Order amount/investment required to start bot!", severity="error")
+                self.notify("Order amount required to start bot!", severity="error")
                 return
 
             investment = float(amount_str)
-            
-            if strategy_type == "GRID":
-                grid_count_str = self.query_one("#grid-count-input", Input).value.strip()
-                grids = int(grid_count_str) if grid_count_str else 5
-                lower = float(sl_price) if sl_price else mid_price * 0.98
-                upper = float(tp_price) if tp_price else mid_price * 1.02
-                
-                bot_id = self.strategy_manager.start_grid_bot(
-                    inst_id=self.instrument_id,
-                    lower=lower,
-                    upper=upper,
-                    grids=grids,
-                    investment=investment
-                )
-            else: # DCA
-                drop_pct_str = self.query_one("#dca-drop-input", Input).value.strip()
-                drop_pct = float(drop_pct_str) if drop_pct_str else 2.0
-                
-                bot_id = self.strategy_manager.start_dca_bot(
-                    inst_id=self.instrument_id,
-                    base_amount=investment,
-                    drop_pct=drop_pct
-                )
-
-            self.bot_worker = asyncio.create_task(self._run_bot_execution_loop(bot_id))
-            self.notify(f"{strategy_type} Bot Started for {self.instrument_id}!", title="Strategy Active")
-            self.log_action(f"[cyan]Strategy Engine: {strategy_type} Bot {bot_id} launched @ ${mid_price:.2f}[/cyan]")
-            self.update_bot_ui()
-            
-        except Exception as e:
-            self.notify(f"Invalid parameters: {e}", severity="error")
+            lower = float(sl_price) if sl_price else mid_price * 0.98
+            upper = float(tp_price) if tp_price else mid_price * 1.02
+        except Exception:
+            self.notify("Enter valid Price/Amount/SL/TP to start bot!", severity="error")
             return
+        
+        bot_id = self.strategy_manager.start_grid_bot(
+            inst_id=self.instrument_id,
+            lower=lower,
+            upper=upper,
+            grids=5,
+            investment=investment
+        )
+
+        self.bot_worker = asyncio.create_task(self._run_bot_execution_loop(bot_id))
+        self.notify(f"Grid Bot Started for {self.instrument_id}!", title="Strategy Active")
+        self.log_action(f"[cyan]Strategy Engine: Bot {bot_id} launched at ${mid_price:.2f}[/cyan]")
+        self.update_bot_ui()
 
     def action_stop_bot(self) -> None:
         """Stops all active strategy bots."""
@@ -584,6 +559,7 @@ class OKXTerminalApp(App):
         summary = self.strategy_manager.get_status_summary()
         status_color = "green" if summary["status"] == "ACTIVE" else "red"
         
+        # Calculate live PnL across active bots
         try:
             curr_px_str = str(self.current_price).replace(",", "")
             curr_px = float(curr_px_str)
@@ -592,9 +568,10 @@ class OKXTerminalApp(App):
             live_pnl = 0.0
             
         self.query_one("#bot-status", Static).update(f"Engine Status: [bold {status_color}]{summary['status']}[/bold {status_color}]")
-        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Session PnL: ${live_pnl:,.2f}\n[dim]{summary['details']}[/dim]")
+        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Session PnL: ${live_pnl:,.2f}")
 
     async def _run_bot_execution_loop(self, bot_id: str) -> None:
+        """Background loop to process market ticks through the strategy engine."""
         bot = self.strategy_manager.active_bots.get(bot_id)
         if not bot:
             return
@@ -616,6 +593,7 @@ class OKXTerminalApp(App):
                         self.log_action(f"[dim]{sig_tag} {bot_id}: {sig_px}[/dim]")
                     elif sig_type in ["BUY", "SELL"]:
                         self.log_action(f"[bold yellow]{sig_tag} {sig_type} Signal: {sig_sz:.4f} @ {sig_px}[/bold yellow]")
+                        # Execute live order via Private Client
                         self.run_worker(self._execute_order_task(
                             side=sig_type.lower(),
                             ord_type="limit",
@@ -627,40 +605,46 @@ class OKXTerminalApp(App):
                             bot_id=bot_id
                         ))
                 
+                # Update UI PnL more frequently when bot is active
                 self.update_bot_ui()
-                await asyncio.sleep(1)
+                await asyncio.sleep(1) # Check every second
             except Exception as e:
                 logging.error(f"Error in bot execution loop: {e}")
                 await asyncio.sleep(2)
 
     def refresh_chart(self) -> None:
+        """Fetches and renders the ASCII chart for the current pair and timeframe asynchronously."""
         async def load_task():
             try:
+                # Run the blocking network call and ASCII rendering in a separate thread pool
                 data = await asyncio.to_thread(
                     OKXChartEngine.fetch_candles,
                     inst_id=self.instrument_id,
                     bar=self.current_timeframe,
                     limit=80
                 )
+                # Calculate indicators
                 close_prices = data["close"]
                 ema9 = StrategyManager.calculate_ema(close_prices, 9)
                 ema21 = StrategyManager.calculate_ema(close_prices, 21)
                 rsi = StrategyManager.calculate_rsi(close_prices, 14)
 
+                # Sequentially render each view to ensure plotext state integrity
                 price_str = await asyncio.to_thread(
                     OKXChartEngine.render_price_view,
-                    data, self.instrument_id, self.current_timeframe, 130, 20
+                    data, self.instrument_id, self.current_timeframe, 120, 20
                 )
                 trend_str = await asyncio.to_thread(
                     OKXChartEngine.render_trend_view,
-                    data, 130, 10, ema9, ema21
+                    data, 120, 10, ema9, ema21
                 )
                 momentum_str = await asyncio.to_thread(
                     OKXChartEngine.render_momentum_view,
-                    data, 130, 8, rsi
+                    data, 120, 8, rsi
                 )
 
                 from rich.text import Text
+                # Update widgets with cleaned ANSI output
                 self.query_one("#chart-price", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in price_str.splitlines())))
                 self.query_one("#chart-trend", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in trend_str.splitlines())))
                 self.query_one("#chart-momentum", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in momentum_str.splitlines())))
@@ -692,6 +676,7 @@ class OKXTerminalApp(App):
             ord_id = data.get("ordId", "Unknown")
             exec_px = price if price else str(self.current_price).replace(",", "")
             
+            # Record the fill in session history
             import datetime
             fill = {
                 "time": datetime.datetime.now().strftime("%H:%M:%S"),
@@ -702,8 +687,9 @@ class OKXTerminalApp(App):
                 "tag": tag
             }
             self.session_fills.insert(0, fill)
-            self.session_fills = self.session_fills[:20]
+            self.session_fills = self.session_fills[:20] # Keep last 20
             
+            # Update Bot PnL State if applicable
             if bot_id:
                 try:
                     self.strategy_manager.update_bot_fill(bot_id, side, float(exec_px), float(size))
@@ -720,6 +706,7 @@ class OKXTerminalApp(App):
             self.log_action(f"[red]FAILED [{tag}]: {msg}[/red]")
 
     def update_history_display(self) -> None:
+        """Renders the session fills into the history panel."""
         lines = []
         for f in self.session_fills:
             color = "green" if f["side"] == "BUY" else "red"
@@ -738,8 +725,8 @@ class OKXTerminalApp(App):
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
         self.set_interval(5.0, self.update_portfolio_balance)
-        self.set_interval(5.0, self.update_open_orders_and_positions)
-        self.set_interval(30.0, self.refresh_chart)
+        self.set_interval(5.0, self.update_open_orders_and_positions)  # Poll open orders & positions every 5s
+        self.set_interval(30.0, self.refresh_chart)  # Auto-refresh chart every 30 seconds
         self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
 
@@ -765,16 +752,18 @@ class OKXTerminalApp(App):
     async def update_open_orders_and_positions(self) -> None:
         from okx_private import OKXPrivateClient
 
+        # Fetch pending orders and positions concurrently or sequentially via thread
         orders_res = await asyncio.to_thread(OKXPrivateClient.get_pending_orders)
         pos_res = await asyncio.to_thread(OKXPrivateClient.get_positions)
 
         output_lines = []
 
+        # Parse Pending Orders
         if orders_res.get("code") == "0":
             orders = orders_res.get("data", [])
             if orders:
                 output_lines.append("[bold yellow]Resting Orders:[/bold yellow]")
-                for o in orders[:3]:
+                for o in orders[:3]:  # Show top 3
                     inst = o.get("instId")
                     side = o.get("side").upper()
                     px = o.get("px")
@@ -787,6 +776,7 @@ class OKXTerminalApp(App):
 
         output_lines.append("")
 
+        # Parse Positions
         if pos_res.get("code") == "0":
             positions = pos_res.get("data", [])
             active_pos = [p for p in positions if float(p.get("pos", 0)) != 0]
@@ -809,6 +799,7 @@ class OKXTerminalApp(App):
             logging.debug(f"Could not update positions/orders widget: {e}")
 
     def log_action(self, message: str) -> None:
+        """Appends status messages to the Execution Log window."""
         try:
             log_widget = self.query_one("#execution-log-content", Static)
             current_text = log_widget.renderable
@@ -819,6 +810,7 @@ class OKXTerminalApp(App):
             logging.info(message)
 
     async def handle_ws_data(self, channel: str, data: list) -> None:
+        """Parses multi-channel telemetry from api_client.py and updates target TUI widgets."""
         if channel == "tickers":
             for ticker in data:
                 self.current_price = ticker.get("last", "0.0")

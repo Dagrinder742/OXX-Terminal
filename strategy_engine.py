@@ -25,8 +25,9 @@ class GridStrategyEngine:
             raise ValueError("Grid count must be greater than 1.")
 
         step = (self.upper_bound - self.lower_bound) / (self.grids - 1)
-        self.grid_levels = [round(self.lower_bound + (i * step), 2) for i in range(self.grids)]
-        logger.info(f"Initialized Grid Strategy for {self.inst_id} with {self.grids} levels between {self.lower_bound} and {self.upper_bound}")
+        # Sort levels to ensure logical index progression
+        self.grid_levels = sorted([round(self.lower_bound + (i * step), 2) for i in range(self.grids)])
+        logger.info(f"Initialized Grid Strategy for {self.inst_id} with {self.grids} levels: {self.grid_levels}")
 
     def process_tick(self, current_price: float):
         """
@@ -39,7 +40,8 @@ class GridStrategyEngine:
                 if current_price >= level:
                     self.last_grid_index = i
             self.active = True
-            return ("LOG", f"Bot initialized at ${current_price}. Anchor grid level: {self.grid_levels[self.last_grid_index] if self.last_grid_index is not None else 'None'}", 0, "Bot")
+            anchor_lvl = self.grid_levels[self.last_grid_index] if self.last_grid_index is not None else "None"
+            return ("LOG", f"Grid Bot Active @ ${current_price}. Anchor Level: {anchor_lvl}", 0, "GridBot")
 
         # Check for grid crossing
         new_index = None
@@ -49,15 +51,15 @@ class GridStrategyEngine:
         
         if new_index is not None and self.last_grid_index is not None:
             if new_index > self.last_grid_index:
-                # Price moved up through a grid level -> SELL
+                # Price moved up -> SELL at the levels we crossed
                 self.last_grid_index = new_index
-                sz = self.investment_amount / current_price
-                return ("SELL", self.grid_levels[new_index], sz, "Bot")
+                sz = self.investment_amount / self.grids / current_price
+                return ("SELL", self.grid_levels[new_index], sz, "GridBot")
             elif new_index < self.last_grid_index:
-                # Price moved down through a grid level -> BUY
+                # Price moved down -> BUY at the level we crossed
                 self.last_grid_index = new_index
-                sz = self.investment_amount / current_price
-                return ("BUY", self.grid_levels[new_index], sz, "Bot")
+                sz = self.investment_amount / self.grids / current_price
+                return ("BUY", self.grid_levels[new_index], sz, "GridBot")
 
         return None
 
@@ -68,7 +70,7 @@ class GridStrategyEngine:
             if new_pos > 0:
                 self.avg_price = ((self.avg_price * self.current_pos) + (price * size)) / new_pos
             self.current_pos = new_pos
-            logger.info(f"Bot {self.inst_id} filled BUY: {size} @ {price}. New Pos: {self.current_pos}, Avg: {self.avg_price}")
+            logger.info(f"GridBot {self.inst_id} filled BUY: {size} @ {price}. New Pos: {self.current_pos}, Avg: {self.avg_price}")
         
         elif side.lower() == "sell":
             if self.current_pos > 0:
@@ -76,13 +78,9 @@ class GridStrategyEngine:
                 pnl_gain = (price - self.avg_price) * size
                 self.realized_pnl += pnl_gain
                 self.current_pos -= size
-                logger.info(f"Bot {self.inst_id} filled SELL: {size} @ {price}. Realized Gain: {pnl_gain}. Total Realized: {self.realized_pnl}")
+                logger.info(f"GridBot {self.inst_id} filled SELL: {size} @ {price}. Realized Gain: {pnl_gain}. Total Realized: {self.realized_pnl}")
             else:
-                # Shorting or selling with no position (shouldn't happen in simple spot grid)
-                # But we track it for completeness
-                new_pos = self.current_pos - size
-                # Invert logic for shorting? For now, assume spot-like behavior
-                self.current_pos = new_pos
+                self.current_pos -= size
 
     def calculate_pnl(self, current_price: float) -> float:
         """Calculates total PnL (Realized + Unrealized)."""
@@ -153,6 +151,12 @@ class StrategyManager:
         self.active_bots[bot_id] = bot
         return bot_id
 
+    def start_dca_bot(self, inst_id: str, base_amount: float, drop_pct: float):
+        bot_id = f"dca_{inst_id}_{int(time.time())}"
+        bot = DCAStrategyEngine(inst_id, base_amount, drop_pct)
+        self.active_bots[bot_id] = bot
+        return bot_id
+
     def update_bot_fill(self, bot_id, side, price, size):
         """Passes a fill event to a specific bot."""
         if bot_id in self.active_bots:
@@ -179,29 +183,62 @@ class StrategyManager:
         return count
 
     def get_status_summary(self):
+        bot_details = []
+        for bid, bot in self.active_bots.items():
+            type_str = "GRID" if isinstance(bot, GridStrategyEngine) else "DCA"
+            bot_details.append(f"{type_str} | {bot.inst_id} | Pos: {bot.current_pos:.4f}")
+            
         return {
             "count": len(self.active_bots),
-            "pnl": self.total_pnl,
-            "status": "ACTIVE" if self.active_bots else "IDLE"
+            "status": "ACTIVE" if self.active_bots else "IDLE",
+            "details": "\n".join(bot_details) if bot_details else "No active bots"
         }
 
 class DCAStrategyEngine:
-    def __init__(self, target_asset: str, base_order_size: float, drop_trigger_pct: float):
-        self.target_asset = target_asset
-        self.base_order_size = base_order_size
+    def __init__(self, inst_id: str, base_order_size: float, drop_trigger_pct: float):
+        self.inst_id = inst_id
+        self.base_order_size = base_order_size # In USD
         self.drop_trigger_pct = drop_trigger_pct
         self.last_purchase_price = None
+        self.active = False
+        self.realized_pnl = 0.0
+        self.current_pos = 0.0
+        self.avg_price = 0.0
 
-    def check_dca_trigger(self, current_price: float) -> bool:
+    def process_tick(self, current_price: float):
         """Checks if the price has dropped enough from the last buy to trigger a DCA order."""
-        if self.last_purchase_price is None:
+        if not self.active:
+            self.active = True
             self.last_purchase_price = current_price
-            return True # Initial order
+            sz = self.base_order_size / current_price
+            return ("BUY", current_price, sz, "DCABot")
 
         drop_pct = ((self.last_purchase_price - current_price) / self.last_purchase_price) * 100
         if drop_pct >= self.drop_trigger_pct:
-            logger.info(f"DCA Triggered! Price dropped by {drop_pct:.2f}% (Target: {self.drop_trigger_pct}%)")
+            logger.info(f"DCA Triggered! Price dropped by {drop_pct:.2f}%")
             self.last_purchase_price = current_price
-            return True
+            sz = self.base_order_size / current_price
+            return ("BUY", current_price, sz, "DCABot")
 
-        return False
+        return None
+
+    def update_position(self, side: str, price: float, size: float):
+        if side.lower() == "buy":
+            new_pos = self.current_pos + size
+            if new_pos > 0:
+                self.avg_price = ((self.avg_price * self.current_pos) + (price * size)) / new_pos
+            self.current_pos = new_pos
+            logger.info(f"DCABot {self.inst_id} filled BUY: {size} @ {price}. New Pos: {self.current_pos}, Avg: {self.avg_price}")
+        elif side.lower() == "sell":
+            # DCA usually only buys, but we allow sell for manual intervention/TP
+            if self.current_pos > 0:
+                pnl_gain = (price - self.avg_price) * size
+                self.realized_pnl += pnl_gain
+                self.current_pos -= size
+                logger.info(f"DCABot {self.inst_id} filled SELL: {size} @ {price}. Realized Gain: {pnl_gain}")
+            else:
+                self.current_pos -= size
+
+    def calculate_pnl(self, current_price: float) -> float:
+        unrealized = self.current_pos * (current_price - self.avg_price) if self.current_pos != 0 else 0
+        return self.realized_pnl + unrealized
