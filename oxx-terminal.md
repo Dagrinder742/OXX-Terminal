@@ -9,6 +9,9 @@
 # Python 3.14.6
 # Rich 15.0.0
 # Textual 8.2.8
+# Keyrings.cryptfile 1.3.9
+# Websockets 15.0.1
+# Asyncio 4.0.0
 # ================================================================================================
 ## OXX Terminal Project Roadmap
 # ------------------------------------------------------------------------------------------------
@@ -75,13 +78,14 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [ ] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
 * [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
 * [x] **Order History & Session Fills**: Added a dedicated view to track executed orders and bot fills for the active session.
-* [ ] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
+* [x] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.
 * [x] **Multi-Pair Switching**: Implement hotkeys or a picker to swap instruments (e.g., BTC to ETH) without restarts.
 * [x] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
 * [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
 * [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
+* [ ] **Bot Range**: we need to add the target range for bots execution e.g. 60k to 85k
 ---
 # ================================================================================================
 ## 6. NOTES FOR HOW TO COMPLETE THE WORK ABOVE (delete as work finishes)

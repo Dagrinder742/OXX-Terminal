@@ -14,6 +14,9 @@ class GridStrategyEngine:
         self.grid_levels = []
         self.last_grid_index = None
         self.active = False
+        self.realized_pnl = 0.0
+        self.current_pos = 0.0
+        self.avg_price = 0.0
         self._initialize_grid()
 
     def _initialize_grid(self):
@@ -57,6 +60,34 @@ class GridStrategyEngine:
                 return ("BUY", self.grid_levels[new_index], sz, "Bot")
 
         return None
+
+    def update_position(self, side: str, price: float, size: float):
+        """Updates internal state based on a confirmed fill."""
+        if side.lower() == "buy":
+            new_pos = self.current_pos + size
+            if new_pos > 0:
+                self.avg_price = ((self.avg_price * self.current_pos) + (price * size)) / new_pos
+            self.current_pos = new_pos
+            logger.info(f"Bot {self.inst_id} filled BUY: {size} @ {price}. New Pos: {self.current_pos}, Avg: {self.avg_price}")
+        
+        elif side.lower() == "sell":
+            if self.current_pos > 0:
+                # Realize PnL against the average price
+                pnl_gain = (price - self.avg_price) * size
+                self.realized_pnl += pnl_gain
+                self.current_pos -= size
+                logger.info(f"Bot {self.inst_id} filled SELL: {size} @ {price}. Realized Gain: {pnl_gain}. Total Realized: {self.realized_pnl}")
+            else:
+                # Shorting or selling with no position (shouldn't happen in simple spot grid)
+                # But we track it for completeness
+                new_pos = self.current_pos - size
+                # Invert logic for shorting? For now, assume spot-like behavior
+                self.current_pos = new_pos
+
+    def calculate_pnl(self, current_price: float) -> float:
+        """Calculates total PnL (Realized + Unrealized)."""
+        unrealized = self.current_pos * (current_price - self.avg_price) if self.current_pos != 0 else 0
+        return self.realized_pnl + unrealized
 
 class StrategyManager:
     """Orchestrates multiple active strategy instances."""
@@ -121,6 +152,26 @@ class StrategyManager:
         bot = GridStrategyEngine(inst_id, lower, upper, grids, investment)
         self.active_bots[bot_id] = bot
         return bot_id
+
+    def update_bot_fill(self, bot_id, side, price, size):
+        """Passes a fill event to a specific bot."""
+        if bot_id in self.active_bots:
+            self.active_bots[bot_id].update_position(side, price, size)
+
+    def get_total_session_pnl(self, current_prices):
+        """
+        Aggregates PnL across all active bots.
+        current_prices: {inst_id: price}
+        """
+        total = 0.0
+        for bot in self.active_bots.values():
+            price = current_prices.get(bot.inst_id)
+            if price is not None:
+                total += bot.calculate_pnl(price)
+            else:
+                # If no current price, just add realized
+                total += bot.realized_pnl
+        return total
 
     def stop_all(self):
         count = len(self.active_bots)

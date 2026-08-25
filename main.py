@@ -559,8 +559,16 @@ class OKXTerminalApp(App):
         summary = self.strategy_manager.get_status_summary()
         status_color = "green" if summary["status"] == "ACTIVE" else "red"
         
+        # Calculate live PnL across active bots
+        try:
+            curr_px_str = str(self.current_price).replace(",", "")
+            curr_px = float(curr_px_str)
+            live_pnl = self.strategy_manager.get_total_session_pnl({self.instrument_id: curr_px})
+        except:
+            live_pnl = 0.0
+            
         self.query_one("#bot-status", Static).update(f"Engine Status: [bold {status_color}]{summary['status']}[/bold {status_color}]")
-        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Session PnL: ${self.session_pnl:.2f}")
+        self.query_one("#bot-metrics", Static).update(f"Active Bots: {summary['count']} | Session PnL: ${live_pnl:,.2f}")
 
     async def _run_bot_execution_loop(self, bot_id: str) -> None:
         """Background loop to process market ticks through the strategy engine."""
@@ -570,7 +578,8 @@ class OKXTerminalApp(App):
 
         while bot_id in self.strategy_manager.active_bots:
             try:
-                price = float(self.current_price)
+                price_str = str(self.current_price).replace(",", "")
+                price = float(price_str)
                 signal = bot.process_tick(price)
 
                 if signal:
@@ -592,9 +601,12 @@ class OKXTerminalApp(App):
                             price=str(sig_px),
                             tp=None,
                             sl=None,
-                            tag=sig_tag
+                            tag=sig_tag,
+                            bot_id=bot_id
                         ))
                 
+                # Update UI PnL more frequently when bot is active
+                self.update_bot_ui()
                 await asyncio.sleep(1) # Check every second
             except Exception as e:
                 logging.error(f"Error in bot execution loop: {e}")
@@ -641,7 +653,7 @@ class OKXTerminalApp(App):
 
         self.run_worker(load_task)
 
-    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str, tag: str = "Manual") -> None:
+    async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str, tag: str = "Manual", bot_id: str = None) -> None:
         from okx_private import OKXPrivateClient
 
         self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
@@ -662,7 +674,7 @@ class OKXTerminalApp(App):
         if code == "0":
             data = result.get("data", [{}])[0]
             ord_id = data.get("ordId", "Unknown")
-            exec_px = price if price else self.current_price
+            exec_px = price if price else str(self.current_price).replace(",", "")
             
             # Record the fill in session history
             import datetime
@@ -677,14 +689,17 @@ class OKXTerminalApp(App):
             self.session_fills.insert(0, fill)
             self.session_fills = self.session_fills[:20] # Keep last 20
             
-            # Update PnL (Simple realized PnL logic)
-            if len(self.session_fills) >= 2:
-                # Basic mock logic: if last was buy and this is sell, calculate diff
-                pass # Real PnL logic can be refined here
+            # Update Bot PnL State if applicable
+            if bot_id:
+                try:
+                    self.strategy_manager.update_bot_fill(bot_id, side, float(exec_px), float(size))
+                except Exception as e:
+                    logging.error(f"Failed to update bot fill: {e}")
 
             self.notify(f"Order placed successfully! ID: {ord_id}", severity="information", title="Success")
             self.log_action(f"[green]SUCCESS: {tag} Order ID {ord_id} placed.[/green]")
             self.update_history_display()
+            self.update_bot_ui()
         else:
             msg = result.get("msg", "Unknown error")
             self.notify(f"Order failed [{code}]: {msg}", severity="error", title="API Error")
