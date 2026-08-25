@@ -127,15 +127,15 @@ class OKXTerminalApp(App):
 
     #left-column {
         width: 44;
-        height: 100%;
-        align-vertical: top;
+        height: 54; /* Locked fixed height so the inner scroll container knows its vertical bounds */
+        dock: left;
     }
 
     #left-scroll-container {
         width: 100%;
         height: 100%;
-        overflow-y: auto;
-        scrollbar-size: 0 0; /* Hides scrollbar completely while keeping independent wheel scrolling active */
+        overflow-y: scroll;
+        scrollbar-size: 0 0; /* Hides scrollbar track/thumb completely while allowing wheel/trackpad scrolling */
     }
 
     #left-sidebar {
@@ -143,7 +143,7 @@ class OKXTerminalApp(App):
     }
 
     #bot-panel {
-        height: 22; /* Fixed height to anchor the border against nested rows */
+        height: 22;
         border: solid #ffcc00;
         padding: 1;
         margin: 1;
@@ -188,7 +188,6 @@ class OKXTerminalApp(App):
         border: solid;
     }
 
-    /* Star Blue for BUY */
     Button.buy-btn {
         background: #000000;
         color: #3399ff;
@@ -199,7 +198,6 @@ class OKXTerminalApp(App):
         color: #000000;
     }
 
-    /* Star Red for SELL/STOP */
     Button.sell-btn {
         background: #000000;
         color: #ff3333;
@@ -292,14 +290,12 @@ class OKXTerminalApp(App):
         border: solid;
     }
 
-    /* Fix for notification "eye sores" */
     Toast {
         border: solid #ffcc00;
         background: #000000;
         color: #ffffff;
     }
 
-    /* Fix for scrollbar "eye sores" */
     ScrollBar {
         background: #000000;
         color: #ffcc00;
@@ -322,7 +318,7 @@ class OKXTerminalApp(App):
             # Main workspace grid split into columns
             with Horizontal(classes="row"):
 
-                # Left Column: Wrapped in a VerticalScroll for independent action panel navigation
+                # Left Column: Fixed viewport height container hosting the independently scrolling scroll-container
                 with Vertical(id="left-column"):
                     with VerticalScroll(id="left-scroll-container"):
                         # Sidebar: Portfolio Balance & Order Entry Panel
@@ -339,7 +335,6 @@ class OKXTerminalApp(App):
                             yield Static("Amount:")
                             yield Input(placeholder="0.001", id="amount-input")
 
-                            # New Advanced TP/SL Inputs
                             yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
                             yield Input(placeholder="Take-Profit Price...", id="tp-input")
                             yield Input(placeholder="Stop-Loss Price...", id="sl-input")
@@ -386,7 +381,6 @@ class OKXTerminalApp(App):
                             yield Button("1H", id="tf-1h", classes="tf-btn")
                             yield Button("1D", id="tf-1d", classes="tf-btn")
                         
-                        # Triple-Threat Decoupled Chart Widgets
                         yield Static("Loading Price...", id="chart-price", classes="chart-view")
                         yield Static("Loading Trend...", id="chart-trend", classes="chart-view")
                         yield Static("Loading Momentum...", id="chart-momentum", classes="chart-view")
@@ -394,20 +388,18 @@ class OKXTerminalApp(App):
                     # 2. Market Depth & Last Trades
                     yield Static("[bold green]Market Depth & Execution Feed[/bold green]")
                     with Horizontal(classes="sub-grid"):
-                        # Order Book Panel (Bids & Asks)
                         with Vertical(classes="sub-panel", id="order-book-panel"):
                             yield Static("[bold cyan]Order Book[/bold cyan]")
                             yield Static("Asks (Sells)\n---------------------\nWaiting for depth...", id="order-book-asks")
                             yield Static("[bold green]Spread / Mid-Price[/bold green]", id="order-book-mid")
                             yield Static("Bids (Buys)\n---------------------\nWaiting for depth...", id="order-book-bids")
 
-                        # Last Trades Panel
                         with Vertical(classes="sub-panel", id="last-trades-panel"):
                             yield Static("[bold yellow]Last Trades[/bold yellow]")
                             yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                             yield Static("Waiting for trade stream...", id="last-trades-content")
 
-                    # 3. Session Order History & Fills (NEW PANEL)
+                    # 3. Session Order History & Fills
                     with Vertical(classes="sub-panel", id="history-panel"):
                         yield Static("[bold #3399ff]Session Order History & Fills[/bold #3399ff]")
                         yield Static("Waiting for session fills...", id="history-content")
@@ -420,7 +412,6 @@ class OKXTerminalApp(App):
         yield Footer()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handles submission from the instrument search input."""
         if event.input.id == "instrument-search-input":
             new_inst = event.value.strip().upper().replace("/", "-")
             if not new_inst:
@@ -488,7 +479,6 @@ class OKXTerminalApp(App):
         self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val, tag="Manual"))
 
     def action_switch_instrument(self, new_inst: str) -> None:
-        """Switches the active trading pair dynamically without restarting the app."""
         if self.instrument_id == new_inst:
             return
 
@@ -523,7 +513,6 @@ class OKXTerminalApp(App):
         self.notify(f"Successfully tuned to {new_inst}", title="Feed Active")
 
     def action_start_bot(self, strategy_type: str = "GRID") -> None:
-        """Initializes and starts the selected trading strategy."""
         try:
             curr_px_str = str(self.current_price).replace(",", "")
             mid_price = float(curr_px_str)
@@ -550,7 +539,7 @@ class OKXTerminalApp(App):
                     grids=grids,
                     investment=investment
                 )
-            else: # DCA
+            else:
                 drop_pct_str = self.query_one("#dca-drop-input", Input).value.strip()
                 drop_pct = float(drop_pct_str) if drop_pct_str else 2.0
                 
@@ -570,7 +559,6 @@ class OKXTerminalApp(App):
             return
 
     def action_stop_bot(self) -> None:
-        """Stops all active strategy bots."""
         count = self.strategy_manager.stop_all()
         if self.bot_worker:
             self.bot_worker.cancel()
@@ -580,7 +568,6 @@ class OKXTerminalApp(App):
         self.update_bot_ui()
 
     def update_bot_ui(self) -> None:
-        """Updates the Grid Bot panel labels."""
         summary = self.strategy_manager.get_status_summary()
         status_color = "green" if summary["status"] == "ACTIVE" else "red"
         
