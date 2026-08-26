@@ -77,7 +77,7 @@ class AuthModal(ModalScreen):
             self.query_one(Static).update("[bold red]All fields are required! Please fill out all inputs.[/bold red]")
 
 class OKXTerminalApp(App):
-    """A fully asynchronous, real-time OKX TUI trading terminal with live market depth grids."""
+    """DIAGNOSTIC TEST VERSION - FLATTENED LAYOUT"""
 
     def __init__(self):
         super().__init__()
@@ -119,7 +119,6 @@ class OKXTerminalApp(App):
     .panel {
         border: solid #ffcc00;
         height: auto;
-        min-height: 10;
         padding: 1;
         margin: 1;
         background: #000000;
@@ -127,7 +126,14 @@ class OKXTerminalApp(App):
 
     #left-column {
         width: 48;
-        height: auto;
+        height: 1fr;
+    }
+
+    #left-scroll-container {
+        width: 100%;
+        height: 1fr;
+        overflow-y: auto;
+        scrollbar-size: 0 0;
     }
 
     #left-sidebar {
@@ -135,34 +141,9 @@ class OKXTerminalApp(App):
         border: solid #ffcc00;
     }
 
-    /* Bot Control Buttons */
-    Button.bot-start-btn {
-        background: #000000;
-        color: #00ff66; /* Or your preferred green */
-        border: solid #00ff66;
-        width: 100%;
-        margin-top: 1;
-    }
-    Button.bot-start-btn:hover {
-        background: #00ff66;
-        color: #000000;
-    }
-
-    Button.bot-stop-btn {
-        background: #000000;
-        color: #ff3333;
-        border: solid #ff3333;
-        width: 100%;
-        margin-top: 1;
-    }
-    Button.bot-stop-btn:hover {
-        background: #ff3333;
-        color: #000000;
-    }
-
     #bot-panel {
         height: auto;
-        min-height: 26;
+        min-height: 20;
         border: solid #ffcc00;
         padding: 1;
         margin: 1;
@@ -185,17 +166,12 @@ class OKXTerminalApp(App):
         height: auto;
         min-height: 15;
         padding: 1;
-        margin: 0 1;
+        margin: 1;
         background: #000000;
     }
 
     .row {
         height: auto;
-    }
-
-    .bot-row {
-        height: auto;
-        margin-bottom: 1;
     }
 
     Button {
@@ -335,57 +311,59 @@ class OKXTerminalApp(App):
         yield Header()
 
         # Top ticker strip
-        yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USD')} | Loading Ticker Feed...", id="header-bar")
+        yield Static(f" OXX TUI > BTC-USD | Loading Ticker Feed...", id="header-bar")
 
         # Main viewport with page-level scrolling
         with VerticalScroll(id="page-viewport"):
             # Main workspace grid split into columns
             with Horizontal(classes="row"):
 
-                # Left Column: Standard Vertical container
+                # Left Column: Fixed viewport height container hosting the independently scrolling scroll-container
                 with Vertical(id="left-column"):
-                    # Sidebar: Portfolio Balance & Order Entry Panel
-                    with Vertical(classes="panel", id="left-sidebar"):
-                        yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
-                        yield Input(placeholder="BTC-USD", id="instrument-search-input")
+                    with VerticalScroll(id="left-scroll-container"):
+                        # Sidebar: Portfolio Balance & Order Entry Panel
+                        with Vertical(classes="panel", id="left-sidebar"):
+                            yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
+                            yield Input(placeholder="BTC-USD", id="instrument-search-input")
 
-                        yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
-                        yield Static("Loading Balances...", id="portfolio-balance")
+                            yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
+                            yield Static("Loading Balances...", id="portfolio-balance")
 
-                        yield Static("[bold #ffcc00]Order Entry Panel[/bold #ffcc00]")
-                        yield Static("Price:")
-                        yield Input(placeholder="$0.00", id="price-input")
-                        yield Static("Amount:")
-                        yield Input(placeholder="0.001", id="amount-input")
+                            yield Static("[bold #ffcc00]Order Entry Panel[/bold #ffcc00]")
+                            yield Static("Price:")
+                            yield Input(placeholder="$0.00", id="price-input")
+                            yield Static("Amount:")
+                            yield Input(placeholder="0.001", id="amount-input")
 
-                        yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
-                        yield Input(placeholder="Take-Profit Price...", id="tp-input")
-                        yield Input(placeholder="Stop-Loss Price...", id="sl-input")
+                            yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
+                            yield Input(placeholder="Take-Profit Price...", id="tp-input")
+                            yield Input(placeholder="Stop-Loss Price...", id="sl-input")
 
-                        yield Button("BUY (LONG)", variant="success", classes="buy-btn")
-                        yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
+                            yield Button("BUY (LONG)", variant="success", classes="buy-btn")
+                            yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
 
-                    # Bot Control Panel - FLATTENED ARCHITECTURE
-                    with Vertical(classes="panel", id="bot-panel"):
-                        yield Static("[bold #ffcc00]Strategy Control Panel[/bold #ffcc00]")
-                        yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
-                        yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
+                        # Bot Control Panel - DIAGNOSTIC FLATTENED VERSION
+                        with Vertical(classes="panel", id="bot-panel"):
+                            yield Static("[bold #ffcc00]Strategy Control Panel[/bold #ffcc00]")
+                            yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
+                            yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
 
-                        yield Static("[dim]Grid Count:[/dim]")
-                        yield Input(placeholder="5", id="grid-count-input")
-                        
-                        yield Static("[dim]DCA Drop %:[/dim]")
-                        yield Input(placeholder="2.0", id="dca-drop-input")
+                            yield Static("[dim]Grid Count:[/dim]")
+                            yield Input(placeholder="5", id="grid-count-input")
+                            
+                            yield Static("[dim]DCA Drop %:[/dim]")
+                            yield Input(placeholder="2.0", id="dca-drop-input")
 
-                        # Vertical Stacked Buttons
-                        yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
-                        yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
-                        yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
+                            # Stacked full-width buttons
+                            yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
+                            yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
+                            yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
 
-                    # Open Orders & Positions Sub-Panel
-                    with Vertical(classes="sub-panel positions-container", id="positions-panel"):
-                        yield Static("[bold #ffcc00]Active Strategy Orders & Positions[/bold #ffcc00]")
-                        yield Static("Scanning for open orders and positions...", id="positions-content")
+
+                        # Open Orders & Positions Sub-Panel
+                        with Vertical(classes="sub-panel positions-container", id="positions-panel"):
+                            yield Static("[bold #ffcc00]Active Strategy Orders & Positions[/bold #ffcc00]")
+                            yield Static("Scanning for open orders and positions...", id="positions-content")
 
                 # Right Main Workspace: Candlestick Chart, Market Depth, Trades, and Activity
                 with Vertical(classes="panel", id="right-main"):
@@ -622,6 +600,7 @@ class OKXTerminalApp(App):
                         self.log_action(f"[dim]{sig_tag} {bot_id}: {sig_px}[/dim]")
                     elif sig_type in ["BUY", "SELL"]:
                         self.log_action(f"[bold yellow]{sig_tag} {sig_type} Signal: {sig_sz:.4f} @ {sig_px}[/bold yellow]")
+                        # Execute live order via Private Client
                         self.run_worker(self._execute_order_task(
                             side=sig_type.lower(),
                             ord_type="limit",
