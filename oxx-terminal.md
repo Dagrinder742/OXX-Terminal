@@ -88,6 +88,8 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
 * [x] **Bot Range**: Added dedicated inputs for Lower and Upper price bounds to define the trading corridor for Grid bots.
 * [x] **Dynamic Credential Manager**: Added a "MANAGE API KEYS" interface to allow on-the-fly updates to API credentials without restarting the application.
+* [x] **Smart Quick Load (25%-100%)**: Implemented a professional-grade percentage selector for order entry that automatically calculates buy/sell quantities based on real-time portfolio balances and market price.
+* [x] **Total USD Cost Estimation**: Integrated a dedicated price estimation field that synchronizes with the Quick Load feature to provide immediate transparency on the total cost of an order.
 * [x] **Exchange-Grade Validation**: Implemented production-grade OKX validation rules for spot grid creation, including price containment, investment thresholds, and grid limits.
 ---
 # ================================================================================================

@@ -94,6 +94,7 @@ class OKXTerminalApp(App):
         self.bot_worker = None
         self.session_fills = []
         self.session_pnl = 0.0
+        self.portfolio_balances = {} # {asset: available_balance}
 
     CSS = """
     Screen {
@@ -326,6 +327,28 @@ class OKXTerminalApp(App):
         background: #000000;
         color: #ffcc00;
     }
+
+    .pct-bar {
+        height: 3;
+        margin-top: 1;
+        layout: horizontal;
+    }
+
+    .pct-btn {
+        width: 1fr;
+        height: 3;
+        margin: 0 1;
+        background: #000000;
+        color: #ffcc00;
+        border: solid #333333;
+        min-width: 5;
+    }
+
+    .pct-btn:hover {
+        background: #ffcc00;
+        color: #000000;
+        border: solid;
+    }
     """
 
     current_price = reactive("Connecting...")
@@ -359,6 +382,15 @@ class OKXTerminalApp(App):
                         yield Input(placeholder="$0.00", id="price-input")
                         yield Static("Amount:")
                         yield Input(placeholder="0.001", id="amount-input")
+
+                        with Horizontal(classes="pct-bar"):
+                            yield Button("25%", id="pct-25", classes="pct-btn")
+                            yield Button("50%", id="pct-50", classes="pct-btn")
+                            yield Button("75%", id="pct-75", classes="pct-btn")
+                            yield Button("100%", id="pct-100", classes="pct-btn")
+
+                        yield Static("Total (USD Estimate):")
+                        yield Input(placeholder="$0.00", id="total-input", disabled=True)
 
                         yield Static("[dim]Advanced Risk Management (TP/SL)[/dim]")
                         yield Input(placeholder="Take-Profit Price...", id="tp-input")
@@ -504,6 +536,11 @@ class OKXTerminalApp(App):
             self.action_manage_keys()
             return
 
+        if button_id and button_id.startswith("pct-"):
+            pct = float(button_id.split("-")[1]) / 100.0
+            self.action_quick_load_amount(pct)
+            return
+
         price_val = self.query_one("#price-input", Input).value.strip()
         amount_val = self.query_one("#amount-input", Input).value.strip()
         tp_val = self.query_one("#tp-input", Input).value.strip()
@@ -627,6 +664,50 @@ class OKXTerminalApp(App):
     def action_manage_keys(self) -> None:
         """Allows re-authenticating and updating API credentials on the fly."""
         self.push_screen(AuthModal(), self.handle_auth_result)
+
+    def action_quick_load_amount(self, percentage: float) -> None:
+        """Calculates and fills the price, amount, and total based on available balance."""
+        try:
+            base_asset, quote_asset = self.instrument_id.split("-")
+            
+            curr_px_str = str(self.current_price).replace(",", "")
+            curr_px = float(curr_px_str) if curr_px_str != "Connecting..." else 1.0
+            
+            price_input_widget = self.query_one("#price-input", Input)
+            price_input_val = price_input_widget.value.strip()
+            target_px = float(price_input_val) if price_input_val else curr_px
+
+            available_quote = self.portfolio_balances.get(quote_asset, 0.0)
+            available_base = self.portfolio_balances.get(base_asset, 0.0)
+            
+            if available_quote > 0:
+                # BUY Side Logic
+                spend_amount = available_quote * percentage
+                buy_qty = spend_amount / target_px
+                
+                # Update TUI
+                self.query_one("#amount-input", Input).value = f"{buy_qty:.6f}"
+                self.query_one("#total-input", Input).value = f"{spend_amount:.2f}"
+                if not price_input_val:
+                    price_input_widget.value = f"{target_px:.2f}"
+                
+                self.notify(f"Prepared to BUY with {int(percentage*100)}% of {quote_asset}", title="Quick Load")
+            
+            elif available_base > 0:
+                # SELL Side Logic
+                sell_qty = available_base * percentage
+                total_value = sell_qty * target_px
+                
+                # Update TUI
+                self.query_one("#amount-input", Input).value = f"{sell_qty:.6f}"
+                self.query_one("#total-input", Input).value = f"{total_value:.2f}"
+                if not price_input_val:
+                    price_input_widget.value = f"{target_px:.2f}"
+                    
+                self.notify(f"Prepared to SELL {int(percentage*100)}% of {base_asset}", title="Quick Load")
+            
+        except Exception as e:
+            self.notify(f"Quick Load failed: {e}", severity="error")
 
     def update_bot_ui(self) -> None:
         summary = self.strategy_manager.get_status_summary()
@@ -798,9 +879,11 @@ class OKXTerminalApp(App):
         if result.get("code") == "0":
             details = result.get("data", [{}])[0].get("details", [])
             bal_lines = []
+            self.portfolio_balances = {}
             for asset in details:
                 ccy = asset.get("ccy")
                 avail = float(asset.get("availBal", 0))
+                self.portfolio_balances[ccy] = avail
                 if avail > 0:
                     bal_lines.append(f"[bold white]{ccy}:[/bold white] {avail:,.4f}")
 
