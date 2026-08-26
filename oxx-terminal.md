@@ -85,7 +85,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
 * [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
-* [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
+* [ ] **Market Sentiment Hub**: Explore adding live volatility or Long/Short ratio data to provide a tactical edge without cluttering the layout.
 * [x] **Bot Range**: Added dedicated inputs for Lower and Upper price bounds to define the trading corridor for Grid bots.
 * [x] **Dynamic Credential Manager**: Added a "MANAGE API KEYS" interface to allow on-the-fly updates to API credentials without restarting the application.
 * [x] **Smart Quick Load (25%-100%)**: Implemented a professional-grade percentage selector for order entry that automatically calculates buy/sell quantities based on real-time portfolio balances and market price.
@@ -145,7 +145,12 @@ How to structure the initial prototype for this? we draft a standalone `chart_re
 *   **Cause**: Textual's layout engine can struggle to calculate the cumulative height of nested rows containing `Input` or `Button` widgets before the parent's `height: auto` border is drawn.
 *   **Solution (Flattening)**: Flatten the composition of dynamic panels. Instead of nesting widgets in multiple horizontal rows, yield them in a direct vertical sequence. This ensures the layout engine calculates the height correctly and locks the borders.
 *   **Scrollbar Stability**: For complex dashboards, a single page-level `VerticalScroll` is significantly more stable than nested `VerticalScroll` containers for sidebar components, which can cause height calculation conflicts.
-*   **Fixed vs. Fluid Widths**: Using fixed character widths (e.g., `width: 48;`) for sidebar columns prevents text-wrapping reflows that can break border alignments during terminal resizing.
+*  * **Fixed vs. Fluid Widths**: Using fixed character widths (e.g., `width: 48;`) for sidebar columns prevents text-wrapping reflows that can break border alignments during terminal resizing.
+
+### The "Telemetry Clutter" Trap
+*   **Lesson**: Adding too much secondary data (like broad market tickers) into a focused execution terminal can dilute the user's tactical focus.
+*   **Result**: Scrapped the "DEX & MAINNET Hub" experiment. It added visual noise (generic tables) without improving execution speed or trend analysis. 
+*   **Takeaway**: Keep the primary dashboard optimized for the active instrument. Secondary telemetry should be high-signal (like volatility or RSI across a watchlist) or hidden behind a toggle.
 
 ---
 

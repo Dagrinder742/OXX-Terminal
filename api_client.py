@@ -12,22 +12,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("OKX_Client")
 
 class OKXPublicClient:
-    def __init__(self, instrument_id: str = "BTC-USD", callback: Optional[Callable[[str, dict], None]] = None, watchlist: List[str] = None):
+    def __init__(self, instrument_id: str = "BTC-USD", callback: Optional[Callable[[str, dict], None]] = None):
         self.instrument_id = instrument_id
-        self.watchlist = watchlist or []
         self.uri = OKX_WS_PUBLIC
         self.callback = callback  # Callback function to push data packets back to the TUI app
-
-    def fetch_instruments(self, inst_type: str = "SPOT") -> List[Dict[str, Any]]:
-        """Fetches active instruments for a given type (SPOT, SWAP, etc.)"""
-        try:
-            url = f"https://www.okx.com/api/v5/public/instruments?instType={inst_type}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                return response.json().get("data", [])
-        except Exception as e:
-            logger.warning(f"Failed to fetch {inst_type} instruments: {e}")
-        return []
 
     def fetch_recent_trades(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Fetches a one-time REST snapshot of recent trades for instant UI hydration."""
@@ -55,23 +43,18 @@ class OKXPublicClient:
                 logger.info(f"Connecting to OKX WebSocket at {self.uri}...")
                 async with websockets.connect(self.uri) as websocket:
 
-                    # Build subscription arguments for tickers (Main + Watchlist)
-                    ticker_args = [{"channel": "tickers", "instId": self.instrument_id}]
-                    for inst in self.watchlist:
-                        if inst != self.instrument_id:
-                            ticker_args.append({"channel": "tickers", "instId": inst})
-
-                    # Multi-channel subscription payload
+                    # Multi-channel subscription payload for professional layout feeds
                     subscribe_msg = {
                         "op": "subscribe",
-                        "args": ticker_args + [
+                        "args": [
+                            {"channel": "tickers", "instId": self.instrument_id},
                             {"channel": "books", "instId": self.instrument_id},
                             {"channel": "trades", "instId": self.instrument_id}
                         ]
                     }
 
                     await websocket.send(json.dumps(subscribe_msg))
-                    logger.info(f"Subscribed to tickers (count: {len(ticker_args)}), books, and trades.")
+                    logger.info(f"Subscribed to tickers, books, and trades for {self.instrument_id}")
 
                     async for message in websocket:
                         data = json.loads(message)
