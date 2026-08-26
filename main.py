@@ -13,7 +13,7 @@ from textual.screen import ModalScreen
 from secure_vault import EncryptedVault
 from api_client import OKXPublicClient
 from chart_renderer import OKXChartEngine
-from strategy_engine import StrategyManager
+from strategy_engine import StrategyManager, OKXGridValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -89,6 +89,8 @@ class OKXTerminalApp(App):
         self.client = None
         self.current_timeframe = "15m"
         self.strategy_manager = StrategyManager()
+        self.grid_validator = OKXGridValidator()
+        self.grid_type = "arithmetic"
         self.bot_worker = None
         self.session_fills = []
         self.session_pnl = 0.0
@@ -162,7 +164,7 @@ class OKXTerminalApp(App):
 
     #bot-panel {
         height: auto;
-        min-height: 26;
+        min-height: 34; /* Increased to accommodate Range inputs */
         border: solid #ffcc00;
         padding: 1;
         margin: 1;
@@ -364,12 +366,22 @@ class OKXTerminalApp(App):
 
                         yield Button("BUY (LONG)", variant="success", classes="buy-btn")
                         yield Button("SELL (SHORT)", variant="error", classes="sell-btn")
+                        
+                        yield Static("[dim]System Settings:[/dim]")
+                        yield Button(" MANAGE API KEYS", id="manage-keys-btn")
 
                     # Bot Control Panel - FLATTENED ARCHITECTURE
                     with Vertical(classes="panel", id="bot-panel"):
                         yield Static("[bold #ffcc00]Strategy Control Panel[/bold #ffcc00]")
                         yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
                         yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
+
+                        yield Static("[dim]Bot Range (Lower - Upper):[/dim]")
+                        yield Input(placeholder="Lower Price...", id="bot-lower-input")
+                        yield Input(placeholder="Upper Price...", id="bot-upper-input")
+
+                        yield Static("[dim]Strategy Parameters:[/dim]")
+                        yield Button("Grid Type: ARITHMETIC", id="grid-type-btn")
 
                         yield Static("[dim]Grid Count:[/dim]")
                         yield Input(placeholder="5", id="grid-count-input")
@@ -483,6 +495,15 @@ class OKXTerminalApp(App):
             self.action_stop_bot()
             return
 
+        if button_id == "grid-type-btn":
+            self.grid_type = "geometric" if self.grid_type == "arithmetic" else "arithmetic"
+            event.button.label = f"Grid Type: {self.grid_type.upper()}"
+            return
+
+        if button_id == "manage-keys-btn":
+            self.action_manage_keys()
+            return
+
         price_val = self.query_one("#price-input", Input).value.strip()
         amount_val = self.query_one("#amount-input", Input).value.strip()
         tp_val = self.query_one("#tp-input", Input).value.strip()
@@ -535,8 +556,6 @@ class OKXTerminalApp(App):
         try:
             curr_px_str = str(self.current_price).replace(",", "")
             mid_price = float(curr_px_str)
-            tp_price = self.query_one("#tp-input", Input).value.strip()
-            sl_price = self.query_one("#sl-input", Input).value.strip()
             amount_str = self.query_one("#amount-input", Input).value.strip()
 
             if not amount_str:
@@ -548,15 +567,34 @@ class OKXTerminalApp(App):
             if strategy_type == "GRID":
                 grid_count_str = self.query_one("#grid-count-input", Input).value.strip()
                 grids = int(grid_count_str) if grid_count_str else 5
-                lower = float(sl_price) if sl_price else mid_price * 0.98
-                upper = float(tp_price) if tp_price else mid_price * 1.02
+                
+                lower_str = self.query_one("#bot-lower-input", Input).value.strip()
+                upper_str = self.query_one("#bot-upper-input", Input).value.strip()
+                
+                lower = float(lower_str) if lower_str else mid_price * 0.98
+                upper = float(upper_str) if upper_str else mid_price * 1.02
+
+                # OKX Production-Grade Validation
+                success, msg = self.grid_validator.validate_setup(
+                    lower_price=lower,
+                    upper_price=upper,
+                    grid_count=grids,
+                    total_investment=investment,
+                    current_market_price=mid_price
+                )
+
+                if not success:
+                    self.notify(msg, severity="error", title="Validation Error")
+                    self.log_action(f"[red]{msg}[/red]")
+                    return
 
                 bot_id = self.strategy_manager.start_grid_bot(
                     inst_id=self.instrument_id,
                     lower=lower,
                     upper=upper,
                     grids=grids,
-                    investment=investment
+                    investment=investment,
+                    grid_type=self.grid_type
                 )
             else:
                 drop_pct_str = self.query_one("#dca-drop-input", Input).value.strip()
@@ -585,6 +623,10 @@ class OKXTerminalApp(App):
         self.notify(f"Stopped {count} active bots.", title="Strategy Halted")
         self.log_action("[red]Strategy Engine: All bots stopped.[/red]")
         self.update_bot_ui()
+
+    def action_manage_keys(self) -> None:
+        """Allows re-authenticating and updating API credentials on the fly."""
+        self.push_screen(AuthModal(), self.handle_auth_result)
 
     def update_bot_ui(self) -> None:
         summary = self.strategy_manager.get_status_summary()

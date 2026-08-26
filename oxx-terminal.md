@@ -68,6 +68,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
 * [x] **TUI Rendering Polish**: Resolved ASCII "ghosting" and duplication artifacts through precise coordinate locking, ANSI sequence cleaning, and disabling text wrapping on chart widgets.
 * [x] **Minimalist UI**: Hidden the visual scrollbar and refined notification borders to eliminate layout "eye sores" while maintaining full navigation functionality.
+* [x] **Flattened Bot UI Architecture**: Resolved layout "bottoming out" issues by flattening nested horizontal rows into a linear vertical sequence for reliable border rendering.
 * [x] **Cross-Platform Compatibility**: Implemented environment detection and adaptive rendering to support stable, synchronized charts on both Windows (PowerShell) and Linux (Termux/mobile). Standardized on `plotext==5.3.2` for cross-platform API stability.
 
 ---
@@ -75,7 +76,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 ## 5. Feature Roadmap & Brainstorming
 ### High-Priority Enhancements
 * [x] **Technical Overlays**: Added EMA-9, EMA-21, and RSI-14 indicators using a robust **Decoupled Multi-Container Chart Architecture** for maximum cross-platform stability.
-* [x] **Strategy Engine Core**: Implement the trade logic in `strategy_engine.py` and wire it to the TUI "Start/Stop" controls.
+* [x] **Strategy Engine Core**: Fully implemented Grid and DCA trade logic with robust position tracking and PnL calculation.
 * [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
 * [x] **Order History & Session Fills**: Added a dedicated view to track executed orders and bot fills for the active session.
 * [x] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
@@ -85,7 +86,9 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
 * [ ] **Expanding Our DEX/Token Telemetry Feeds**: making a dedicated section for DEX based assets away from MAINNET.
-* [ ] **Bot Range**: we need to add the target range for bots execution e.g. 60k to 85k
+* [x] **Bot Range**: Added dedicated inputs for Lower and Upper price bounds to define the trading corridor for Grid bots.
+* [x] **Dynamic Credential Manager**: Added a "MANAGE API KEYS" interface to allow on-the-fly updates to API credentials without restarting the application.
+* [x] **Exchange-Grade Validation**: Implemented production-grade OKX validation rules for spot grid creation, including price containment, investment thresholds, and grid limits.
 ---
 # ================================================================================================
 ## 6. NOTES FOR HOW TO COMPLETE THE WORK ABOVE (delete as work finishes)
@@ -131,3 +134,30 @@ To render this smoothly inside a Textual `Static` widget without external graphi
 * **AsciiChartPy:** Lightweight, clean, but sometimes more rigid with multi-line overlays. (Plotext is usually the favorite for full dashboard charting).
 
 How to structure the initial prototype for this? we draft a standalone `chart_renderer.py` module first to test pulling and drawing a 15m BTC-USD ASCII chart, or map out the specific UI layout space in `renderer.py`? or rename it and combine it to be the ultimate renderer view file 
+
+---
+
+## 7. TUI Architectural Lessons & Troubleshooting
+### The "Bottom Falling Out" Border Issue
+*   **Problem**: In complex Textual layouts, borders around panels with nested `Horizontal` and `Vertical` rows often fail to render or "bottom out" (leaving the bottom border open).
+*   **Cause**: Textual's layout engine can struggle to calculate the cumulative height of nested rows containing `Input` or `Button` widgets before the parent's `height: auto` border is drawn.
+*   **Solution (Flattening)**: Flatten the composition of dynamic panels. Instead of nesting widgets in multiple horizontal rows, yield them in a direct vertical sequence. This ensures the layout engine calculates the height correctly and locks the borders.
+*   **Scrollbar Stability**: For complex dashboards, a single page-level `VerticalScroll` is significantly more stable than nested `VerticalScroll` containers for sidebar components, which can cause height calculation conflicts.
+*   **Fixed vs. Fluid Widths**: Using fixed character widths (e.g., `width: 48;`) for sidebar columns prevents text-wrapping reflows that can break border alignments during terminal resizing.
+
+---
+
+## 8. OKX Exchange Compliance & Grid Validation
+To ensure the OXX Terminal operates as a production-grade portal for the OKX ecosystem, we have implemented the following rigorous exchange-side rules:
+
+### Spot Grid Core Constraints
+*   **Arithmetic vs. Geometric Spacing**: 
+    *   **Arithmetic**: Equal price difference between levels ($P_{n} - P_{n-1} = \text{Constant}$).
+    *   **Geometric**: Equal ratio/percentage difference between levels ($\frac{P_n}{P_{n-1}} = \text{Constant}$).
+*   **Price Boundary Containment**: The bot initialization is strictly blocked unless the current market price sits within the user-defined `[Lower Price, Upper Price]` range.
+*   **Investment Thresholds**: Enforces a minimum investment per grid slice (default: $1.00) to ensure orders meet exchange minimum size requirements.
+*   **Grid Quantity Limits**: Enforces OKX-standard grid counts between **2 and 150** levels.
+
+### User Feedback & Safety
+*   **Real-Time Validation**: The terminal performs a pre-flight check before submitting algo orders. If validation fails, the UI provides immediate visual feedback (e.g., a "Validation Error" toast) and logs the specific rule violation to the Execution Log.
+*   **Dynamic Range Defaulting**: If range inputs are left blank, the system intelligently defaults to a $\pm 2\%$ corridor around the current mid-price to prevent "trigger errors" on launch.

@@ -1,16 +1,49 @@
 import logging
 import time
+import math
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("Strategy_Engine")
 
+class OKXGridValidator:
+    def __init__(self, min_order_val: float = 1.0, min_grids: int = 2, max_grids: int = 150):
+        self.min_order_val = min_order_val
+        self.min_grids = min_grids
+        self.max_grids = max_grids
+
+    def validate_setup(self, lower_price: float, upper_price: float, grid_count: int, 
+                       total_investment: float, current_market_price: float) -> tuple:
+        
+        # 1. Range bounds check
+        if lower_price >= upper_price:
+            return False, "Error: Lower price must be strictly less than upper price."
+        
+        # 2. Market price containment check (OKX requirement for Spot Grid)
+        if not (lower_price <= current_market_price <= upper_price):
+            return False, f"Error: Price (${current_market_price}) is outside grid range [${lower_price}, ${upper_price}]."
+
+        # 3. Grid count boundaries
+        if not (self.min_grids <= grid_count <= self.max_grids):
+            return False, f"Error: Grid count must be between {self.min_grids} and {self.max_grids}."
+
+        # 4. Investment per grid (OKX minimum sizing check)
+        investment_per_grid = total_investment / grid_count
+        if investment_per_grid < self.min_order_val:
+            return False, (
+                f"Error: Investment per grid (${investment_per_grid:.2f}) is below "
+                f"OKX minimum threshold (${self.min_order_val:.2f})."
+            )
+
+        return True, "Validation Passed"
+
 class GridStrategyEngine:
-    def __init__(self, inst_id: str, lower_bound: float, upper_bound: float, grids: int, investment_amount: float):
+    def __init__(self, inst_id: str, lower_bound: float, upper_bound: float, grids: int, investment_amount: float, grid_type: str = "arithmetic"):
         self.inst_id = inst_id
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.grids = grids
         self.investment_amount = investment_amount
+        self.grid_type = grid_type.lower()
         self.grid_levels = []
         self.last_grid_index = None
         self.active = False
@@ -24,10 +57,17 @@ class GridStrategyEngine:
         if self.grids <= 1:
             raise ValueError("Grid count must be greater than 1.")
 
-        step = (self.upper_bound - self.lower_bound) / (self.grids - 1)
-        # Sort levels to ensure logical index progression
-        self.grid_levels = sorted([round(self.lower_bound + (i * step), 2) for i in range(self.grids)])
-        logger.info(f"Initialized Grid Strategy for {self.inst_id} with {self.grids} levels: {self.grid_levels}")
+        if self.grid_type == "geometric":
+            # Geometric ratio
+            ratio = (self.upper_bound / self.lower_bound) ** (1 / (self.grids - 1))
+            self.grid_levels = [round(self.lower_bound * (ratio ** i), 2) for i in range(self.grids)]
+        else:
+            # Arithmetic (default)
+            step = (self.upper_bound - self.lower_bound) / (self.grids - 1)
+            self.grid_levels = [round(self.lower_bound + (i * step), 2) for i in range(self.grids)]
+            
+        self.grid_levels = sorted(self.grid_levels)
+        logger.info(f"Initialized {self.grid_type.upper()} Grid Strategy for {self.inst_id} with {self.grids} levels: {self.grid_levels}")
 
     def process_tick(self, current_price: float):
         """
@@ -145,9 +185,9 @@ class StrategyManager:
                 
         return rsi
 
-    def start_grid_bot(self, inst_id: str, lower: float, upper: float, grids: int, investment: float):
+    def start_grid_bot(self, inst_id: str, lower: float, upper: float, grids: int, investment: float, grid_type: str = "arithmetic"):
         bot_id = f"grid_{inst_id}_{int(time.time())}"
-        bot = GridStrategyEngine(inst_id, lower, upper, grids, investment)
+        bot = GridStrategyEngine(inst_id, lower, upper, grids, investment, grid_type)
         self.active_bots[bot_id] = bot
         return bot_id
 
