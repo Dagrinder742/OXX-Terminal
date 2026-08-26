@@ -126,24 +126,24 @@ class OKXTerminalApp(App):
     }
 
     #left-column {
-        width: 44;
-        height: 54; /* Locked fixed height so the inner scroll container knows its vertical bounds */
-        dock: left;
+        width: 48;
+        height: 1fr;
     }
 
     #left-scroll-container {
         width: 100%;
-        height: 100%;
-        overflow-y: scroll;
-        scrollbar-size: 0 0; /* Hides scrollbar track/thumb completely while allowing wheel/trackpad scrolling */
+        height: 1fr;
+        overflow-y: auto;
+        scrollbar-size: 0 0;
     }
 
     #left-sidebar {
         height: auto;
+        border: solid #ffcc00;
     }
 
     #bot-panel {
-        height: 22;
+        height: auto;
         border: solid #ffcc00;
         padding: 1;
         margin: 1;
@@ -172,6 +172,16 @@ class OKXTerminalApp(App):
 
     .row {
         height: auto;
+    }
+
+    .bot-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+    
+    .bot-row Button {
+        width: 1fr;
+        margin: 0 1;
     }
 
     Button {
@@ -349,7 +359,7 @@ class OKXTerminalApp(App):
                             yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
                             
                             yield Static("[dim]Strategy Parameters:[/dim]")
-                            with Horizontal(classes="row"):
+                            with Horizontal(classes="bot-row"):
                                 with Vertical():
                                     yield Static("Grid Count:")
                                     yield Input(placeholder="5", id="grid-count-input")
@@ -357,7 +367,7 @@ class OKXTerminalApp(App):
                                     yield Static("DCA Drop %:")
                                     yield Input(placeholder="2.0", id="dca-drop-input")
                             
-                            with Horizontal(classes="row"):
+                            with Horizontal(classes="bot-row"):
                                 yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
                                 yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
                             
