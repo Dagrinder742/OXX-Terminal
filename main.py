@@ -142,10 +142,36 @@ class OKXTerminalApp(App):
         border: solid #ffcc00;
     }
 
+    /* Bot Control Buttons */
+    Button.bot-start-btn {
+        background: #000000;
+        color: #00ff66; /* Or your preferred green */
+        border: solid #00ff66;
+        width: 100%;
+        margin-top: 1;
+    }
+    Button.bot-start-btn:hover {
+        background: #00ff66;
+        color: #000000;
+    }
+
+    Button.bot-stop-btn {
+        background: #000000;
+        color: #ff3333;
+        border: solid #ff3333;
+        width: 100%;
+        margin-top: 1;
+    }
+    Button.bot-stop-btn:hover {
+        background: #ff3333;
+        color: #000000;
+    }
+
     #bot-panel {
         height: auto;
         border: solid #ffcc00;
         padding: 1;
+        width: 100%;
         margin: 1;
         background: #000000;
     }
@@ -178,7 +204,7 @@ class OKXTerminalApp(App):
         height: auto;
         margin-bottom: 1;
     }
-    
+
     .bot-row Button {
         width: 1fr;
         margin: 0 1;
@@ -357,7 +383,7 @@ class OKXTerminalApp(App):
                             yield Static("[bold #ffcc00]Strategy Control Panel[/bold #ffcc00]")
                             yield Static("Engine Status: [bold red]IDLE[/bold red]", id="bot-status")
                             yield Static("Active Bots: 0 | Session PnL: $0.00", id="bot-metrics")
-                            
+
                             yield Static("[dim]Strategy Parameters:[/dim]")
                             with Horizontal(classes="bot-row"):
                                 with Vertical():
@@ -366,12 +392,12 @@ class OKXTerminalApp(App):
                                 with Vertical():
                                     yield Static("DCA Drop %:")
                                     yield Input(placeholder="2.0", id="dca-drop-input")
-                            
-                            with Horizontal(classes="bot-row"):
-                                yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
-                                yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
-                            
+
+                            # These are now completely separate and un-nested from .bot-row
+                            yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
+                            yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
                             yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
+
 
                         # Open Orders & Positions Sub-Panel
                         with Vertical(classes="sub-panel positions-container", id="positions-panel"):
@@ -380,7 +406,7 @@ class OKXTerminalApp(App):
 
                 # Right Main Workspace: Candlestick Chart, Market Depth, Trades, and Activity
                 with Vertical(classes="panel", id="right-main"):
-                    
+
                     # 1. Candlestick Chart Sub-Panel
                     with Vertical(classes="sub-panel", id="chart-container"):
                         yield Static("[bold cyan]Candlestick Price Action[/bold cyan]")
@@ -390,7 +416,7 @@ class OKXTerminalApp(App):
                             yield Button("15m", id="tf-15m", classes="tf-btn")
                             yield Button("1H", id="tf-1h", classes="tf-btn")
                             yield Button("1D", id="tf-1d", classes="tf-btn")
-                        
+
                         yield Static("Loading Price...", id="chart-price", classes="chart-view")
                         yield Static("Loading Trend...", id="chart-trend", classes="chart-view")
                         yield Static("Loading Momentum...", id="chart-momentum", classes="chart-view")
@@ -535,13 +561,13 @@ class OKXTerminalApp(App):
                 return
 
             investment = float(amount_str)
-            
+
             if strategy_type == "GRID":
                 grid_count_str = self.query_one("#grid-count-input", Input).value.strip()
                 grids = int(grid_count_str) if grid_count_str else 5
                 lower = float(sl_price) if sl_price else mid_price * 0.98
                 upper = float(tp_price) if tp_price else mid_price * 1.02
-                
+
                 bot_id = self.strategy_manager.start_grid_bot(
                     inst_id=self.instrument_id,
                     lower=lower,
@@ -552,7 +578,7 @@ class OKXTerminalApp(App):
             else:
                 drop_pct_str = self.query_one("#dca-drop-input", Input).value.strip()
                 drop_pct = float(drop_pct_str) if drop_pct_str else 2.0
-                
+
                 bot_id = self.strategy_manager.start_dca_bot(
                     inst_id=self.instrument_id,
                     base_amount=investment,
@@ -563,7 +589,7 @@ class OKXTerminalApp(App):
             self.notify(f"{strategy_type} Bot Started for {self.instrument_id}!", title="Strategy Active")
             self.log_action(f"[cyan]Strategy Engine: {strategy_type} Bot {bot_id} launched @ ${mid_price:.2f}[/cyan]")
             self.update_bot_ui()
-            
+
         except Exception as e:
             self.notify(f"Invalid parameters: {e}", severity="error")
             return
@@ -572,7 +598,7 @@ class OKXTerminalApp(App):
         count = self.strategy_manager.stop_all()
         if self.bot_worker:
             self.bot_worker.cancel()
-        
+
         self.notify(f"Stopped {count} active bots.", title="Strategy Halted")
         self.log_action("[red]Strategy Engine: All bots stopped.[/red]")
         self.update_bot_ui()
