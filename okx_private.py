@@ -170,12 +170,12 @@ class OKXPrivateClient:
             return {"code": "1", "msg": "Missing credentials."}
 
         endpoint = "/api/v5/trade/fills"
-        query_params = f"?limit={limit}"
+        # Always include instType=SPOT for stability on US endpoints
+        query_params = f"?instType=SPOT&limit={limit}"
         if inst_id:
             query_params += f"&instId={inst_id}"
             
         timestamp = cls._get_timestamp()
-        # Note: Signing for GET includes the query string in the path
         signature = cls._sign(timestamp, "GET", endpoint + query_params, "", secret_key)
 
         headers = {

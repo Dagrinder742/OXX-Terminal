@@ -485,14 +485,14 @@ class OKXTerminalApp(App):
                     with Horizontal(classes="sub-grid"):
                         with Vertical(classes="sub-panel", id="hub-a"):
                             yield Static("[bold cyan]MARKET HUB A[/bold cyan]")
-                            yield Static("Asset        Price        24H %", classes="telemetry-row")
-                            yield Static("-------------------------------", classes="telemetry-row")
+                            yield Static("Asset        Price       24H %    RNG %", classes="telemetry-row")
+                            yield Static("------------------------------------------", classes="telemetry-row")
                             yield Static("Loading Hub A...", id="hub-a-content")
 
                         with Vertical(classes="sub-panel", id="hub-b"):
                             yield Static("[bold cyan]MARKET HUB B[/bold cyan]")
-                            yield Static("Asset        Price        24H %", classes="telemetry-row")
-                            yield Static("-------------------------------", classes="telemetry-row")
+                            yield Static("Asset        Price       24H %    RNG %", classes="telemetry-row")
+                            yield Static("------------------------------------------", classes="telemetry-row")
                             yield Static("Loading Hub B...", id="hub-b-content")
 
                     # 4. Session Activity Hub
@@ -905,34 +905,50 @@ class OKXTerminalApp(App):
         from okx_private import OKXPrivateClient
         self.log_action("[dim]Hydrating account trade history...[/dim]")
         
-        result = await asyncio.to_thread(OKXPrivateClient.get_fill_history, limit=20)
-        
-        if result.get("code") == "0":
-            fills = result.get("data", [])
-            for f in reversed(fills): # Older first so they appear in order
-                # Convert OKX timestamp (ms) to HH:MM:SS
-                import datetime
-                ts = int(f.get("fillTime", 0))
-                time_str = datetime.datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
-                
-                fill = {
-                    "time": time_str,
-                    "inst": f.get("instId"),
-                    "side": f.get("side").upper(),
-                    "sz": f.get("fillSz"),
-                    "px": f.get("fillPx"),
-                    "tag": "ACCOUNT" # Mark as historical account trade
-                }
-                # Check if already exists to avoid duplicates
-                if not any(x["time"] == time_str and x["px"] == fill["px"] for x in self.session_fills):
-                    self.session_fills.insert(0, fill)
+        try:
+            result = await asyncio.to_thread(OKXPrivateClient.get_fill_history, limit=40)
+            code = result.get("code")
+            self.log_action(f"[dim]Fill API Response Code: {code}[/dim]")
             
-            self.session_fills = self.session_fills[:20]
-            self.update_history_display()
-            self.log_action(f"[green]SUCCESS: Loaded {len(fills)} historical fills.[/green]")
-        else:
-            msg = result.get("msg", "Unknown error")
-            self.log_action(f"[red]FAILED to hydrate history: {msg}[/red]")
+            if code == "0":
+                fills = result.get("data", [])
+                self.log_action(f"[dim]Found {len(fills)} historical fills.[/dim]")
+                
+                for f in reversed(fills): # Older first
+                    import datetime
+                    ts = int(f.get("fillTime", 0))
+                    time_str = datetime.datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
+                    
+                    fill = {
+                        "time": time_str,
+                        "inst": f.get("instId"),
+                        "side": f.get("side").upper(),
+                        "sz": f.get("fillSz"),
+                        "px": f.get("fillPx"),
+                        "tag": "ACCOUNT"
+                    }
+                    
+                    # Manual check to avoid duplicates instead of using 'any'
+                    exists = False
+                    for x in self.session_fills:
+                        if x["time"] == time_str and x["px"] == fill["px"] and x["inst"] == fill["inst"]:
+                            exists = True
+                            break
+                            
+                    if not exists:
+                        self.session_fills.insert(0, fill)
+                
+                self.session_fills = self.session_fills[:40] # Keep more history
+                self.update_history_display()
+                if fills:
+                    self.log_action(f"[green]SUCCESS: Loaded {len(fills)} account fills.[/green]")
+                else:
+                    self.log_action("[yellow]No recent fills found (last 3 days).[/yellow]")
+            else:
+                msg = result.get("msg", "Unknown error")
+                self.log_action(f"[red]Hydration Error: {msg}[/red]")
+        except Exception as e:
+            self.log_action(f"[red]Hydration critical failure: {str(e)}[/red]")
 
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
@@ -1040,13 +1056,18 @@ class OKXTerminalApp(App):
                 if inst_id in WATCHLIST:
                     last_px = float(last)
                     open_24h = float(ticker.get("open24h", 0))
+                    high_24h = float(ticker.get("high24h", 0))
+                    low_24h = float(ticker.get("low24h", 0))
                     change_pct = 0.0
                     if open_24h > 0:
                         change_pct = ((last_px - open_24h) / open_24h) * 100
                     
                     self.telemetry_data[inst_id] = {
                         "last": f"{last_px:,.2f}",
-                        "change": f"{change_pct:+.2f}%"
+                        "change": f"{change_pct:+.2f}%",
+                        "high": high_24h,
+                        "low": low_24h,
+                        "raw_last": last_px
                     }
             
             self.refresh_hubs()
@@ -1138,10 +1159,34 @@ class OKXTerminalApp(App):
     def refresh_hub_content(self, inst_list, widget_id):
         lines = []
         for inst in inst_list:
-            data = self.telemetry_data.get(inst, {"last": "---", "change": "---"})
-            color = "#3399ff" if "+" in data["change"] else "#ff3333"
-            if data["change"] == "---": color = "white"
-            lines.append(f"{inst:<12} {data['last']:>10}    [{color}]{data['change']:>7}[/{color}]")
+            data = self.telemetry_data.get(inst, {"last": "---", "change": "---", "high": 0, "low": 0, "raw_last": 0})
+            
+            # Price Change Color
+            change_color = "#3399ff" if "+" in data["change"] else "#ff3333"
+            if data["change"] == "---": change_color = "white"
+            
+            # RPI Calculation
+            high = data.get("high", 0)
+            low = data.get("low", 0)
+            last = data.get("raw_last", 0)
+            
+            rng_pos_str = "---"
+            rng_color = "white"
+            
+            if high > low:
+                rpi = ((last - low) / (high - low)) * 100
+                rng_pos_str = f"{rpi:.1f}%"
+                
+                # Steelers Stars Theme: Blue (Dip), White (Neutral), Red (Chase)
+                if rpi <= 30:
+                    rng_color = "#3399ff" # Star Blue
+                elif rpi >= 70:
+                    rng_color = "#ff3333" # Star Red
+                else:
+                    rng_color = "#ffffff" # White
+            
+            # Asset (12) Price (10) 24H% (9) RNG% (8)
+            lines.append(f"{inst:<12} {data['last']:>10}  [{change_color}]{data['change']:>7}[/{change_color}]  [{rng_color}]{rng_pos_str:>6}[/{rng_color}]")
         
         try:
             self.query_one(widget_id, Static).update("\n".join(lines))

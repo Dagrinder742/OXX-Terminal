@@ -90,7 +90,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 * [x] **Grid Bot Hooks**: Integrate hooks to monitor live PnL and threshold data from active bots.
 * [x] **Candle Stick Charts**: Integrated live, auto-refreshing ASCII candlestick charts with `plotext` and `Rich` for a professional-grade TUI aesthetic.
 * [x] **Handling Open Orders/Positions Tracking**: Tracking of unfilled orders that are on the books either higher or lower than current market.
-* [ ] **Market Sentiment Hub**: Explore adding live volatility or Long/Short ratio data to provide a tactical edge without cluttering the layout.
+* [x] **Market Sentiment Hub**: Integrated a custom Daily Range Position Index (RPI) to provide a tactical edge without cluttering the layout.
 * [x] **Bot Range**: Added dedicated inputs for Lower and Upper price bounds to define the trading corridor for Grid bots.
 * [x] **Dynamic Credential Manager**: Added a "MANAGE API KEYS" interface to allow on-the-fly updates to API credentials without restarting the application.
 * [x] **Smart Quick Load (25%-100%)**: Implemented a professional-grade percentage selector for order entry that automatically calculates buy/sell quantities based on real-time portfolio balances and market price.
@@ -173,3 +173,30 @@ To ensure the OXX Terminal operates as a production-grade portal for the OKX eco
 ### User Feedback & Safety
 *   **Real-Time Validation**: The terminal performs a pre-flight check before submitting algo orders. If validation fails, the UI provides immediate visual feedback (e.g., a "Validation Error" toast) and logs the specific rule violation to the Execution Log.
 *   **Dynamic Range Defaulting**: If range inputs are left blank, the system intelligently defaults to a $\pm 2\%$ corridor around the current mid-price to prevent "trigger errors" on launch.
+
+---
+
+## 9. Custom Indicator: Daily Range Position Index (RPI)
+To provide users with an immediate, high-signal decision support tool, the OXX Terminal features a proprietary **Daily Range Position Index (RPI)**. This indicator is engineered to solve the "Is it a good time to buy?" dilemma by visualizing exactly where the current price sits within its 24-hour cycle.
+
+### How It Works (The Math)
+The RPI is calculated locally for all 24 pairs in the Market Hub using live WebSocket ticker data:
+
+$$RPI = \frac{Current Price - Low_{24h}}{High_{24h} - Low_{24h}} \times 100$$
+
+*   **0%**: The asset is trading at its absolute 24-hour low.
+*   **100%**: The asset is trading at its absolute 24-hour high.
+
+### Tactical Visual Cues (Steelers Star Theme)
+The Market Hub uses professional, high-contrast color coding to allow traders to scan 24 pairs in under a second:
+
+| Zone | RPI Range | Color | Signal |
+| :--- | :--- | :--- | :--- |
+| **Dip Zone** | 0% - 30% | **Star Blue (#3399ff)** | High Value: Asset is cooling near its daily floor. |
+| **Neutral** | 30% - 70% | **White (#ffffff)** | Consolidation: Trading within normal mid-range bounds. |
+| **Chase Zone** | 70% - 100% | **Star Red (#ff3333)** | Caution: Asset is overextended and pushing daily highs. |
+
+### User Benefits
+*   **Zero-Gap Coverage**: Unlike standard sentiment APIs that only support "Major" pairs, the RPI works for all 24 pairs in the watchlist.
+*   **Anti-FOMO Guardrail**: Prevents "chasing green candles" by visually flagging assets that are already at the top of their daily range.
+*   **Mean Reversion Edge**: Helps identify deep-value dips that are objectively oversold relative to the last 24 hours of price action.
