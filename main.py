@@ -1190,8 +1190,8 @@ class OKXTerminalApp(App):
         
         try:
             self.query_one(widget_id, Static).update("\n".join(lines))
-        except:
-            pass
+        except Exception as e:
+            logging.warning(f"Unable To Retrieve RPI Calculation: {e}", exc_info=True)
 
     def refresh_hubs(self):
         hub_a_pairs = WATCHLIST[:12]
