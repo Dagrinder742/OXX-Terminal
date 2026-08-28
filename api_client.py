@@ -34,7 +34,7 @@ class OKXPublicClient:
                     })
                 return trades
         except Exception as e:
-            logger.warning(f"Failed to fetch initial trade REST snapshot: {e}")
+            logger.warning(f"Failed to fetch initial trade REST snapshot: {e}", exc_info=True)
         return []
 
     async def connect_market_streams(self):
@@ -77,7 +77,7 @@ class OKXPublicClient:
                 logger.warning(f"WebSocket connection closed: {e}. Reconnecting in 5 seconds...")
                 await asyncio.sleep(5)
             except Exception as e:
-                logger.error(f"Unexpected error in WebSocket loop: {e}. Reconnecting in 5 seconds...")
+                logger.error(f"Unexpected error in WebSocket loop: {e}. Reconnecting in 5 seconds...", exc_info=True)
                 await asyncio.sleep(5)
 
 if __name__ == "__main__":

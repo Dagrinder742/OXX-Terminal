@@ -30,4 +30,4 @@ class SecureCredentialStore:
             keyring.delete_password(SERVICE_NAME, "passphrase")
             print("[SECURE] Credentials wiped from system vault.")
         except Exception as e:  # keyring can throw various exceptions if a key isn't found
-            logging.warning(f"Could not clear credentials from OS vault: {e}")
+            logging.warning(f"Could not clear credentials from OS vault: {e}", exc_info=True)

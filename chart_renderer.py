@@ -65,7 +65,7 @@ class OKXChartEngine:
             plt.clear_data()
             plt.clear_color()
         except Exception as e:
-            logging.debug(f"Plotext clear failed: {e}")
+            logging.warning(f"Plotext clear failed: {e}", exc_info=True)
             
         plt.plotsize(width, height)
         plt.theme("dark")
@@ -97,6 +97,7 @@ class OKXChartEngine:
                 
                 return plt.build()
             except Exception as e:
+                logging.error(f"Price Render Error: {e}", exc_info=True)
                 return f"Price Render Error: {str(e)}"
 
     @staticmethod
@@ -116,6 +117,7 @@ class OKXChartEngine:
                 plt.xticks([], []) # Minimalist
                 return plt.build()
             except Exception as e:
+                logging.error(f"Trend Render Error: {e}", exc_info=True)
                 return f"Trend Render Error: {str(e)}"
 
     @staticmethod
@@ -136,4 +138,5 @@ class OKXChartEngine:
                 plt.xticks([], []) # Minimalist
                 return plt.build()
             except Exception as e:
+                logging.error(f"Momentum Render Error: {e}", exc_info=True)
                 return f"Momentum Render Error: {str(e)}"

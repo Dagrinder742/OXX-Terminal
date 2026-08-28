@@ -28,7 +28,7 @@ class EncryptedVault:
         try:
             os.chmod(key_path, 0o600)
         except Exception as e:
-            logging.warning(f"Could not secure file permissions on {key_path}: {e}")
+            logging.warning(f"Could not secure file permissions on {key_path}: {e}", exc_info=True)
 
         return kr
 

@@ -612,7 +612,7 @@ class OKXTerminalApp(App):
         try:
             self.query_one("#last-trades-content", Static).update("Waiting for trade stream...")
         except Exception as e:
-            logging.warning(f"Could not clear trades widget on switch: {e}")
+            logging.warning(f"Could not clear trades widget on switch: {e}", exc_info=True)
 
         self.current_price = "Connecting..."
 
@@ -686,6 +686,7 @@ class OKXTerminalApp(App):
 
         except Exception as e:
             self.notify(f"Invalid parameters: {e}", severity="error")
+            logging.error(f"Bot start failed: {e}", exc_info=True)
             return
 
     def action_stop_bot(self) -> None:
@@ -744,6 +745,7 @@ class OKXTerminalApp(App):
             
         except Exception as e:
             self.notify(f"Quick Load failed: {e}", severity="error")
+            logging.error(f"Quick Load failed: {e}", exc_info=True)
 
     def update_bot_ui(self) -> None:
         summary = self.strategy_manager.get_status_summary()
@@ -795,7 +797,7 @@ class OKXTerminalApp(App):
                 self.update_bot_ui()
                 await asyncio.sleep(1)
             except Exception as e:
-                logging.error(f"Error in bot execution loop: {e}")
+                logging.error(f"Error in bot execution loop: {e}", exc_info=True)
                 await asyncio.sleep(2)
 
     def refresh_chart(self) -> None:
@@ -830,7 +832,7 @@ class OKXTerminalApp(App):
                 self.query_one("#chart-trend", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in trend_str.splitlines())))
                 self.query_one("#chart-momentum", Static).update(Text.from_ansi("\n".join(line.rstrip() for line in momentum_str.splitlines())))
             except Exception as e:
-                logging.warning(f"Could not update candlestick chart widget: {e}")
+                logging.warning(f"Could not update candlestick chart widget: {e}", exc_info=True)
 
         self.run_worker(load_task)
 
@@ -873,7 +875,7 @@ class OKXTerminalApp(App):
                 try:
                     self.strategy_manager.update_bot_fill(bot_id, side, float(exec_px), float(size))
                 except Exception as e:
-                    logging.error(f"Failed to update bot fill: {e}")
+                    logging.error(f"Failed to update bot fill: {e}", exc_info=True)
 
             self.notify(f"Order placed successfully! ID: {ord_id}", severity="information", title="Success")
             self.log_action(f"[green]SUCCESS: {tag} Order ID {ord_id} placed.[/green]")
@@ -898,7 +900,7 @@ class OKXTerminalApp(App):
         try:
             self.query_one("#history-content", Static).update(history_text)
         except Exception as e:
-            logging.debug(f"History display update skipped: {e}")
+            logging.warning(f"History display update skipped: {e}", exc_info=True)
 
     async def hydrate_fill_history(self) -> None:
         """Fetches recent account fills from the REST API to populate the history panel on boot."""
@@ -949,6 +951,7 @@ class OKXTerminalApp(App):
                 self.log_action(f"[red]Hydration Error: {msg}[/red]")
         except Exception as e:
             self.log_action(f"[red]Hydration critical failure: {str(e)}[/red]")
+            logging.error(f"Hydration critical failure: {e}", exc_info=True)
 
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
@@ -980,7 +983,7 @@ class OKXTerminalApp(App):
             try:
                 self.query_one("#portfolio-balance", Static).update(balance_text)
             except Exception as e:
-                logging.debug(f"Could not update portfolio balance widget: {e}")
+                logging.warning(f"Could not update portfolio balance widget: {e}", exc_info=True)
 
     async def update_open_orders_and_positions(self) -> None:
         from okx_private import OKXPrivateClient
@@ -1026,7 +1029,7 @@ class OKXTerminalApp(App):
         try:
             self.query_one("#positions-content", Static).update("\n".join(output_lines))
         except Exception as e:
-            logging.debug(f"Could not update positions/orders widget: {e}")
+            logging.warning(f"Could not update positions/orders widget: {e}", exc_info=True)
 
     def log_action(self, message: str) -> None:
         try:
@@ -1127,7 +1130,7 @@ class OKXTerminalApp(App):
                         spread = float(asks[0][0]) - float(bids[0][0])
                         self.query_one("#order-book-mid", Static).update(f"[bold white]Spread: {spread:.2f}[/bold white]")
                 except Exception as e:
-                    logging.debug(f"Order book update skipped during shutdown: {e}")
+                    logging.warning(f"Order book update skipped during shutdown: {e}", exc_info=True)
 
         elif channel == "trades":
             for trade in data:
@@ -1147,7 +1150,7 @@ class OKXTerminalApp(App):
             try:
                 self.query_one("#last-trades-content", Static).update(trades_text)
             except Exception as e:
-                logging.debug(f"Trade feed update skipped during shutdown: {e}")
+                logging.warning(f"Trade feed update skipped during shutdown: {e}", exc_info=True)
 
     def update_header_display(self) -> None:
         header_widget = self.query_one("#header-bar", Static)

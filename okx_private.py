@@ -4,6 +4,7 @@ import hashlib
 import base64
 import json
 import requests
+import logging
 from secure_vault import EncryptedVault
 
 class OKXPrivateClient:
@@ -72,6 +73,7 @@ class OKXPrivateClient:
             response = requests.post(cls.BASE_URL + endpoint, headers=headers, data=body_str, timeout=10)
             return response.json()
         except Exception as e:
+            logging.error(f"API place_order critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
 
     @classmethod
@@ -100,6 +102,7 @@ class OKXPrivateClient:
             response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
             return response.json()
         except Exception as e:
+            logging.error(f"API get_pending_orders critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
 
     @classmethod
@@ -128,6 +131,7 @@ class OKXPrivateClient:
             response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
             return response.json()
         except Exception as e:
+            logging.error(f"API get_positions critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
 
     @classmethod
@@ -156,6 +160,7 @@ class OKXPrivateClient:
             response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
             return response.json()
         except Exception as e:
+            logging.error(f"API get_account_balance critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
 
     @classmethod
@@ -190,4 +195,5 @@ class OKXPrivateClient:
             response = requests.get(cls.BASE_URL + endpoint + query_params, headers=headers, timeout=10)
             return response.json()
         except Exception as e:
+            logging.error(f"API get_fill_history critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
