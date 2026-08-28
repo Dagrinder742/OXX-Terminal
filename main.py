@@ -17,6 +17,14 @@ from strategy_engine import StrategyManager, OKXGridValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+WATCHLIST = [
+    "BTC-USD", "HYPE-USD", "SOL-USD", "ETH-USD", "JUP-USD",
+    "JTO-USD", "APT-USD", "PAXG-USD", "TRX-USD", "SHIB-USD",
+    "RENDER-USD", "OP-USD", "ATOM-USD", "LTC-USD",
+    "NEAR-USD", "UNI-USD", "LINK-USD", "ADA-USD", "AVAX-USD",
+    "XRP-USD", "SUI-USD", "DOGE-USD", "BNB-USD", "USDT-USD"
+]
+
 class AuthModal(ModalScreen):
     """A modal screen that prompts the user for secure API credentials on first launch."""
 
@@ -95,6 +103,7 @@ class OKXTerminalApp(App):
         self.session_fills = []
         self.session_pnl = 0.0
         self.portfolio_balances = {} # {asset: available_balance}
+        self.telemetry_data = {} # {instId: {last: str, change: str}}
 
     CSS = """
     Screen {
@@ -129,7 +138,7 @@ class OKXTerminalApp(App):
     }
 
     #left-column {
-        width: 48;
+        width: 54; /* Increased from 48 to fix button border distortion */
         height: auto;
     }
 
@@ -201,9 +210,18 @@ class OKXTerminalApp(App):
         margin-bottom: 1;
     }
 
+    .bot-row Button {
+        width: 1fr;
+        margin: 0 1;
+    }
+
+    .telemetry-row {
+        height: 1;
+        margin-bottom: 0;
+        text-wrap: nowrap;
+    }
+
     Button {
-        width: 100%;
-        margin-top: 1;
         background: #111111;
         color: #ffcc00;
         border: solid #ffcc00;
@@ -462,15 +480,33 @@ class OKXTerminalApp(App):
                             yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
                             yield Static("Waiting for trade stream...", id="last-trades-content")
 
-                    # 3. Session Order History & Fills
-                    with Vertical(classes="sub-panel", id="history-panel"):
-                        yield Static("[bold #3399ff]Session Order History & Fills[/bold #3399ff]")
-                        yield Static("Waiting for session fills...", id="history-content")
+                    # 3. Onyx Ticker Board (Live Watchlist)
+                    yield Static("[bold #ffcc00]Onyx Ticker Board (Live Market Hub)[/bold #ffcc00]")
+                    with Horizontal(classes="sub-grid"):
+                        with Vertical(classes="sub-panel", id="hub-a"):
+                            yield Static("[bold cyan]MARKET HUB A[/bold cyan]")
+                            yield Static("Asset        Price        24H %", classes="telemetry-row")
+                            yield Static("-------------------------------", classes="telemetry-row")
+                            yield Static("Loading Hub A...", id="hub-a-content")
 
-                    # 4. Bottom Sub-Panel: Order Status / Activity Log
-                    with Vertical(classes="sub-panel log-container", id="log-panel"):
-                        yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
-                        yield Static("System initialized. Waiting for actions...", id="execution-log-content")
+                        with Vertical(classes="sub-panel", id="hub-b"):
+                            yield Static("[bold cyan]MARKET HUB B[/bold cyan]")
+                            yield Static("Asset        Price        24H %", classes="telemetry-row")
+                            yield Static("-------------------------------", classes="telemetry-row")
+                            yield Static("Loading Hub B...", id="hub-b-content")
+
+                    # 4. Session Activity Hub
+                    yield Static("[bold #3399ff]Session Activity & Execution Hub[/bold #3399ff]")
+                    with Horizontal(classes="sub-grid"):
+                        # Session Order History & Fills
+                        with Vertical(classes="sub-panel", id="history-panel"):
+                            yield Static("[bold #3399ff]Order History & Fills[/bold #3399ff]")
+                            yield Static("Waiting for session fills...", id="history-content")
+
+                        # Bottom Sub-Panel: Order Status / Activity Log
+                        with Vertical(classes="sub-panel log-container", id="log-panel"):
+                            yield Static("[bold magenta]Execution & Order Log[/bold magenta]")
+                            yield Static("System initialized. Waiting for actions...", id="execution-log-content")
 
         yield Footer()
 
@@ -864,13 +900,50 @@ class OKXTerminalApp(App):
         except Exception as e:
             logging.debug(f"History display update skipped: {e}")
 
+    async def hydrate_fill_history(self) -> None:
+        """Fetches recent account fills from the REST API to populate the history panel on boot."""
+        from okx_private import OKXPrivateClient
+        self.log_action("[dim]Hydrating account trade history...[/dim]")
+        
+        result = await asyncio.to_thread(OKXPrivateClient.get_fill_history, limit=20)
+        
+        if result.get("code") == "0":
+            fills = result.get("data", [])
+            for f in reversed(fills): # Older first so they appear in order
+                # Convert OKX timestamp (ms) to HH:MM:SS
+                import datetime
+                ts = int(f.get("fillTime", 0))
+                time_str = datetime.datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
+                
+                fill = {
+                    "time": time_str,
+                    "inst": f.get("instId"),
+                    "side": f.get("side").upper(),
+                    "sz": f.get("fillSz"),
+                    "px": f.get("fillPx"),
+                    "tag": "ACCOUNT" # Mark as historical account trade
+                }
+                # Check if already exists to avoid duplicates
+                if not any(x["time"] == time_str and x["px"] == fill["px"] for x in self.session_fills):
+                    self.session_fills.insert(0, fill)
+            
+            self.session_fills = self.session_fills[:20]
+            self.update_history_display()
+            self.log_action(f"[green]SUCCESS: Loaded {len(fills)} historical fills.[/green]")
+        else:
+            msg = result.get("msg", "Unknown error")
+            self.log_action(f"[red]FAILED to hydrate history: {msg}[/red]")
+
     def _start_terminal_services(self) -> None:
         self.set_interval(0.1, self.update_header_display)
         self.set_interval(5.0, self.update_portfolio_balance)
         self.set_interval(5.0, self.update_open_orders_and_positions)
         self.set_interval(30.0, self.refresh_chart)
-        self.client = OKXPublicClient(instrument_id="BTC-USD", callback=self.handle_ws_data)
+        self.client = OKXPublicClient(instrument_id=self.instrument_id, watchlist=WATCHLIST, callback=self.handle_ws_data)
         self.bg_worker = asyncio.create_task(self.client.connect_market_streams())
+        
+        # Trigger history hydration
+        self.run_worker(self.hydrate_fill_history())
 
     async def update_portfolio_balance(self) -> None:
         from okx_private import OKXPrivateClient
@@ -950,12 +1023,33 @@ class OKXTerminalApp(App):
             logging.info(message)
 
     async def handle_ws_data(self, channel: str, data: list) -> None:
+        """Parses multi-channel telemetry from api_client.py and updates target TUI widgets."""
         if channel == "tickers":
             for ticker in data:
-                self.current_price = ticker.get("last", "0.0")
-                self.high_24h = ticker.get("high24h", "0.0")
-                self.low_24h = ticker.get("low24h", "0.0")
-                self.volume_24h = ticker.get("vol24h", "0.0")
+                inst_id = ticker.get("instId")
+                last = ticker.get("last", "0.0")
+                
+                # Routing for primary focus instrument
+                if inst_id == self.instrument_id:
+                    self.current_price = last
+                    self.high_24h = ticker.get("high24h", "0.0")
+                    self.low_24h = ticker.get("low24h", "0.0")
+                    self.volume_24h = ticker.get("vol24h", "0.0")
+
+                # Routing for Watchlist Telemetry
+                if inst_id in WATCHLIST:
+                    last_px = float(last)
+                    open_24h = float(ticker.get("open24h", 0))
+                    change_pct = 0.0
+                    if open_24h > 0:
+                        change_pct = ((last_px - open_24h) / open_24h) * 100
+                    
+                    self.telemetry_data[inst_id] = {
+                        "last": f"{last_px:,.2f}",
+                        "change": f"{change_pct:+.2f}%"
+                    }
+            
+            self.refresh_hubs()
 
         elif channel == "books":
             for book in data:
@@ -1040,6 +1134,25 @@ class OKXTerminalApp(App):
             f" OXX TUI > {self.instrument_id} [dim]│[/dim] Price: [bold green]{self.current_price}[/bold green] "
             f"[dim]│[/dim] High: {self.high_24h} [dim]│[/dim] Low: {self.low_24h} [dim]│[/dim] Vol: {self.volume_24h}"
         )
+
+    def refresh_hub_content(self, inst_list, widget_id):
+        lines = []
+        for inst in inst_list:
+            data = self.telemetry_data.get(inst, {"last": "---", "change": "---"})
+            color = "#3399ff" if "+" in data["change"] else "#ff3333"
+            if data["change"] == "---": color = "white"
+            lines.append(f"{inst:<12} {data['last']:>10}    [{color}]{data['change']:>7}[/{color}]")
+        
+        try:
+            self.query_one(widget_id, Static).update("\n".join(lines))
+        except:
+            pass
+
+    def refresh_hubs(self):
+        hub_a_pairs = WATCHLIST[:12]
+        hub_b_pairs = WATCHLIST[12:]
+        self.refresh_hub_content(hub_a_pairs, "#hub-a-content")
+        self.refresh_hub_content(hub_b_pairs, "#hub-b-content")
 
 if __name__ == "__main__":
     app = OKXTerminalApp()

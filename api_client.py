@@ -12,8 +12,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("OKX_Client")
 
 class OKXPublicClient:
-    def __init__(self, instrument_id: str = "BTC-USD", callback: Optional[Callable[[str, dict], None]] = None):
+    def __init__(self, instrument_id: str = "BTC-USD", callback: Optional[Callable[[str, dict], None]] = None, watchlist: List[str] = None):
         self.instrument_id = instrument_id
+        self.watchlist = watchlist or []
         self.uri = OKX_WS_PUBLIC
         self.callback = callback  # Callback function to push data packets back to the TUI app
 
@@ -43,18 +44,23 @@ class OKXPublicClient:
                 logger.info(f"Connecting to OKX WebSocket at {self.uri}...")
                 async with websockets.connect(self.uri) as websocket:
 
-                    # Multi-channel subscription payload for professional layout feeds
+                    # Build subscription arguments for tickers (Main + Watchlist)
+                    ticker_args = [{"channel": "tickers", "instId": self.instrument_id}]
+                    for inst in self.watchlist:
+                        if inst != self.instrument_id:
+                            ticker_args.append({"channel": "tickers", "instId": inst})
+
+                    # Multi-channel subscription payload
                     subscribe_msg = {
                         "op": "subscribe",
-                        "args": [
-                            {"channel": "tickers", "instId": self.instrument_id},
+                        "args": ticker_args + [
                             {"channel": "books", "instId": self.instrument_id},
                             {"channel": "trades", "instId": self.instrument_id}
                         ]
                     }
 
                     await websocket.send(json.dumps(subscribe_msg))
-                    logger.info(f"Subscribed to tickers, books, and trades for {self.instrument_id}")
+                    logger.info(f"Subscribed to tickers (count: {len(ticker_args)}), books, and trades.")
 
                     async for message in websocket:
                         data = json.loads(message)

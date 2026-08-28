@@ -82,7 +82,7 @@ The goal is to replicate a multi-pane web dashboard layout within a terminal env
 ### High-Priority Enhancements
 * [x] **Technical Overlays**: Added EMA-9, EMA-21, and RSI-14 indicators using a robust **Decoupled Multi-Container Chart Architecture** for maximum cross-platform stability.
 * [x] **Strategy Engine Core**: Fully implemented Grid and DCA trade logic with robust position tracking and PnL calculation.
-* [ ] **Market Watchlist**: Add a multi-asset ticker tape or "Top Movers" grid for broader market oversight.
+* [x] **Onyx Ticker Board (Live Watchlist)**: Integrated a high-performance, 24-pair market hub that tracks live prices and 24h % changes across Majors, L1s, and DeFi assets, featuring a dedicated `USDT-USD` macro liquidity anchor.
 * [x] **Order History & Session Fills**: Added a dedicated view to track executed orders and bot fills for the active session.
 * [x] **Session Live PnL**: Implement live calculation of cumulative profit/loss for the current active bot session.
 * [x] **Advanced Orders**: Add inputs for Stop-Loss (SL) and Take-Profit (TP) to the Order Entry panel.

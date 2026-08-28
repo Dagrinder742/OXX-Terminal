@@ -157,3 +157,37 @@ class OKXPrivateClient:
             return response.json()
         except Exception as e:
             return {"code": "500", "msg": str(e)}
+
+    @classmethod
+    def get_fill_history(cls, inst_id=None, limit=20):
+        """Retrieves recent trade fill history from OKX."""
+        creds = EncryptedVault.load_credentials()
+        api_key = creds.get("api_key")
+        secret_key = creds.get("secret_key")
+        passphrase = creds.get("passphrase")
+
+        if not api_key:
+            return {"code": "1", "msg": "Missing credentials."}
+
+        endpoint = "/api/v5/trade/fills"
+        query_params = f"?limit={limit}"
+        if inst_id:
+            query_params += f"&instId={inst_id}"
+            
+        timestamp = cls._get_timestamp()
+        # Note: Signing for GET includes the query string in the path
+        signature = cls._sign(timestamp, "GET", endpoint + query_params, "", secret_key)
+
+        headers = {
+            "OK-ACCESS-KEY": api_key,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": passphrase,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.get(cls.BASE_URL + endpoint + query_params, headers=headers, timeout=10)
+            return response.json()
+        except Exception as e:
+            return {"code": "500", "msg": str(e)}
