@@ -17,6 +17,11 @@
 # ------------------------------------------------------------------------------------------------
 ## THE ONYX TERMINAL
 # ------------------------------------------------------------------------------------------------
+Are we approaching a tipping point if a developer can distill the extreme mathematical of 
+visual complexity of a high frequency financial platform back down to pure hyper fast 
+terminal text strings? What other massive daily software applications are secretly ripe for 
+a retro TUI revolution? We are so obsessed with pushing graphics forward, what if the 
+future of software development forces us to look backwards?
 
 ## 1. Project Overview & Blueprint
 The goal is to replicate a multi-pane web dashboard layout within a terminal environment using **Textual** and **Rich**. This project focuses on high-performance data pipelines and secure, OS-level credential management.
