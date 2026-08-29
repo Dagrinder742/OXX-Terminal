@@ -700,7 +700,7 @@ class OKXTerminalApp(App):
         from okx_private import OKXPrivateClient
         self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
         result = await asyncio.to_thread(OKXPrivateClient.place_order, self.instrument_id, side, ord_type, size, price, tp, sl)
-        code = result.get("code")
+        code = code = result.get("code")
         if code == "0":
             data = result.get("data", [{}])[0]
             ord_id = data.get("ordId", "Unknown")
