@@ -834,7 +834,7 @@ class OKXTerminalApp(App):
             except Exception as e:
                 logging.warning(f"Could not update candlestick chart widget: {e}", exc_info=True)
 
-        self.run_worker(load_task)
+        self.run_worker(load_task, name="chart_update", exclusive=True)
 
     async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str, tag: str = "Manual", bot_id: str = None) -> None:
         from okx_private import OKXPrivateClient
