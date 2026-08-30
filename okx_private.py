@@ -197,3 +197,33 @@ class OKXPrivateClient:
         except Exception as e:
             logging.error(f"API get_fill_history critical failure: {e}", exc_info=True)
             return {"code": "500", "msg": str(e)}
+
+    @classmethod
+    def get_trade_fee(cls, inst_type: str = "SPOT") -> dict:
+        """Queries the exact maker/taker fee rates for the authenticated account."""
+        creds = EncryptedVault.load_credentials()
+        api_key = creds.get("api_key")
+        secret_key = creds.get("secret_key")
+        passphrase = creds.get("passphrase")
+
+        if not api_key:
+            return {"code": "1", "msg": "Missing credentials."}
+
+        endpoint = f"/api/v5/account/trade-fee?instType={inst_type}"
+        timestamp = cls._get_timestamp()
+        signature = cls._sign(timestamp, "GET", endpoint, "", secret_key)
+
+        headers = {
+            "OK-ACCESS-KEY": api_key,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": passphrase,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.get(cls.BASE_URL + endpoint, headers=headers, timeout=10)
+            return response.json()
+        except Exception as e:
+            logging.error(f"API get_trade_fee critical failure: {e}", exc_info=True)
+            return {"code": "500", "msg": str(e)}

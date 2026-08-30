@@ -47,24 +47,24 @@ OS-level credential management.
 ---
 
 ## 3. Modular File Structure
-* `main.py`: Entry point; orchestrates app state, dynamic instrument search parsing, and widget layout.
+* `main.py`: Entry point; combined **Application Orchestrator & Renderer** handling state, parsing, and TUI layout.
 * `api_client.py`: Manages WebSocket connections, public market streams, and instant REST trade snapshots.
 * `okx_private.py`: Handles authenticated REST requests (signing, ordering, balance).
 * `secure_vault.py`: Interacts with `keyring` for encrypted credential persistence.
 * `auth.py`: Handles authentication helper sequences and signature mapping.
-* `renderer.py`: Houses TUI layout formatting and visual widget rendering logic.
 * `secure_store.py`: Low-level wrapper for OS credential storage integrations.
 * `chart_renderer.py`: Fetches historical OHLCV data and renders terminal-grade ASCII candlestick charts using `plotext==5.3.2`.
 * `strategy_engine.py`: Local logic for grid bots/DCA execution.
+* `accountant.py`: Physically decoupled math engine for tracking session PnL and calculating pre-flight trade hurdles.
 
 ---
 
 ## 4. Development Log (Completed)
-* [x] **Modular Structure**: Initialized core project files (`main.py`, `api_client.py`, `okx_private.py`, `secure_vault.py`, `auth.py`, `renderer.py`, `secure_store.py`, `strategy_engine.py`).
+* [x] **Modular Structure**: Initialized core project files (`main.py`, `api_client.py`, `okx_private.py`, `secure_vault.py`, `auth.py`, `secure_store.py`, `strategy_engine.py`, `accountant.py`).
 * [x] **Secure Auth**: Implemented `keyrings.cryptfile` and the `AuthModal` TUI for first-run setup.
 * [x] **API Connectivity**: Wired `us.okx.com` endpoints for account balance and order execution.
 * [x] **TUI Dashboard**: Built reactive layout with Portfolio, Order Book, Last Trades, and Execution Log.
-* [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py` and `renderer.py.
+* [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py`.
 * [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
 * [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
 * [x] **Grid Bot Control Integration**: Integrated a dedicated sidebar panel for automated strategy oversight with live PnL and status hooks. Consolidated with active order tracking.
@@ -98,7 +98,8 @@ OS-level credential management.
 * [x] **Smart Quick Load (25%-100%)**: Implemented a professional-grade percentage selector for order entry that automatically calculates buy/sell quantities based on real-time portfolio balances and market price.
 * [x] **Total USD Cost Estimation**: Integrated a dedicated price estimation field that synchronizes with the Quick Load feature to provide immediate transparency on the total cost of an order.
 * [x] **Exchange-Grade Validation**: Implemented production-grade OKX validation rules for spot grid creation, including price containment, investment thresholds, and grid limits.
-* [ ] **The Money Counter (Session PnL Aggregator)**: Build a high-fidelity USD readout that aggregates every manual trade, grid fill, and DCA action into a single "Session Net" score. [IN EXPLORATION]
+* [/] **Tactical Pre-Flight Calculator**: Integrated a real-time reactive calculator in the Order Entry panel that predicts fees, hurdles, and net outcomes. [IN REFINEMENT]
+* [ ] **The Money Counter (Session PnL Aggregator)**: Build a high-fidelity USD readout that aggregates every manual trade, grid fill, and DCA action into a single "Session Net" score. [CORE MATH MODULE COMPLETED]
 * [ ] **The Flash Trigger (Global Hotkeys)**: Implement keyboard shortcuts (e.g., SHIFT+B/S) for instant market execution on the focus instrument. [IN EXPLORATION]
 * [ ] **The Alert Hub (Deep Value Pings)**: Add a background monitor that triggers visual/log alerts when high-liquidity assets hit the RPI "Star Blue" Dip Zone (<15%). [IN EXPLORATION]
 ---
@@ -195,3 +196,50 @@ self.run_worker(load_task, name="chart_update", exclusive=True)
 **Key Advantages:**
 *   **Zero-Freeze Performance**: By using `exclusive=True`, the application automatically kills any existing background task with the same name before starting a new one. This prevents multiple heavy threads (like ASCII chart builders) from fighting for the same CPU resources.
 *   **Race Condition Mitigation**: Ensures that if a user rapidly clicks through timeframes, the TUI only ever renders the *latest* request, maintaining a snappy and responsive interface regardless of hardware power.
+
+---
+
+## 11. Execution Safety & Risk Management
+Because the OXX Terminal interacts with live API credentials and executes real-world trades, we adhere to a "Safety Gate" architecture to mitigate financial and technical risk.
+
+### The "Dry-Run" Protocol
+All new execution logic (Bots, Hotkeys, DCA) must first be verified in a **Simulation Mode**.
+*   **Implementation**: A global `SIMULATION_MODE` flag in `main.py` intercepts order requests before they reach `okx_private.py`.
+*   **Benefit**: Allows users to stress-test their strategies and the TUI's PnL math without putting capital at risk.
+
+### Separation of Calculation and Execution (Accountant vs. Executioner)
+The **Money Counter (PnL Aggregator)** is strictly a passive **Data Accountant**. 
+*   **Pure Math Layer**: It is physically impossible for the PnL logic to trigger a trade because it has no reference to the API client or the `place_order` functions.
+*   **Ledger Only**: It only receives data about trades that have *already* been confirmed by the exchange or the user.
+*   **Stability**: This decoupling ensures that PnL calculation complexity never interferes with the low-latency execution "hot path."
+
+### API Key Permission Scoping
+Users are encouraged to scope their OKX API keys with the minimum necessary permissions:
+*   **Required**: `Trade` (Spot/Margin), `Read` (Account/Balance).
+*   **Strictly Forbidden**: `Withdrawal`. The OXX Terminal is an execution engine, not a wallet management tool.
+
+---
+
+## 12. Tactical Pre-Flight Calculator & Liquidity-Aware Math [IN REFINEMENT]
+To empower traders with institutional-grade transparency, the OXX Terminal includes a **Tactical Pre-Flight Calculator**. This engine lives in the Order Entry sidebar and reactively calculates the "True Cost" of a trade as the user types.
+
+> [!NOTE]
+> This module is currently in an active refinement phase. While behavior-based fee mapping (TP/SL) is implemented, the system still requires **strict VIP tier integration**. The math is not considered "finished" until the calculator dynamically maps to the user's specific API key to pull live fee schedules and make accurate assumptions. UI presentation and edge-case handling for low-priced assets are also ongoing to meet the "Snowman Standard."
+
+### Liquidity-Aware Fee Mapping
+Most trading tools apply a flat fee estimate. The OXX Terminal is engineered to map fees based on the **liquidity behavior** of specific order types:
+
+1.  **Entry/Market (Taker Fee)**: Assumes a conservative "Taker" execution to build a safety cushion, accounting for cases where the market slams into a limit or a market order is used.
+2.  **Take-Profit (Maker Fee)**: Maps to the VIP **Maker Rate**. Since a TP is a resting limit order sitting on the book, it qualifies for the liquidity provider reward.
+3.  **Stop-Loss (Taker Fee)**: Maps to the VIP **Taker Rate**. During emergency exits (Stop-Market), liquidity is stripped instantly, incurring the higher taker toll.
+
+### The "Hybrid Hurdle" Formula
+The calculator provides a **Hurdle Price**—the exact market price required to clear the fees for both the entry and a successful maker exit.
+
+$$Hurdle = \frac{EntryPrice \times (1 + TakerRate)}{1 - MakerRate}$$
+
+### Real-Time Net Projections
+*   **Net TP**: Displays the cold hard USD profit remaining after both entry (Taker) and exit (Maker) fees are deducted.
+*   **Net SL**: Displays the total capital drawdown, including the cost of the entry fee and the emergency exit toll (Taker).
+
+This module ensures that "Risk vs. Reward" is never a guess—it's a calculated, account-aware certainty.

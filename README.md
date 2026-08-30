@@ -24,7 +24,6 @@ OXX-Terminal is a high-performance Terminal User Interface (TUI) dashboard for O
 - `api_client.py`: Manages public WebSocket streams and REST market data.
 - `okx_private.py`: Handles authenticated REST requests (orders, balance, positions).
 - `auth.py`: Signature mapping and authentication helpers.
-- `renderer.py`: TUI layout formatting and visual widget logic.
 - `chart_renderer.py`: ASCII charting engine for candlesticks.
 - `secure_vault.py` & `secure_store.py`: Secure credential persistence layer.
 - `strategy_engine.py`: Logic for automated trading strategies (Grid/DCA).

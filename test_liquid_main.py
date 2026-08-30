@@ -107,6 +107,7 @@ class OKXTerminalApp(App):
         self.telemetry_data = {} # {instId: {last: str, change: str}}
         self.accountant = PnLAccountant() # Our mathematical co-pilot
         self.simulation_mode = True # SAFETY PIN: Set to False only when ready for real risk
+        self.resize_timer = None # Debounce timer for smooth liquid scaling
 
     CSS = """
     Screen {
@@ -141,7 +142,9 @@ class OKXTerminalApp(App):
     }
 
     #left-column {
-        width: 54; /* Increased from 48 to fix button border distortion */
+        width: 1fr;
+        min-width: 48;
+        max-width: 60;
         height: auto;
     }
 
@@ -185,7 +188,7 @@ class OKXTerminalApp(App):
     }
 
     #right-main {
-        width: 1fr;
+        width: 4fr;
         height: auto;
         border: solid #ffcc00;
     }
@@ -304,7 +307,7 @@ class OKXTerminalApp(App):
     }
 
     .chart-view {
-        width: 135;
+        width: 100%;
         text-wrap: nowrap;
         text-overflow: clip;
         overflow: hidden;
@@ -512,7 +515,7 @@ class OKXTerminalApp(App):
 
                     # 3. Onyx Ticker Board (Live Watchlist)
                     yield Static("[bold #ffcc00]Onyx Ticker Board (Live Market Hub)[/bold #ffcc00]")
-                    with Horizontal(classes="sub-grid"):
+                    with Horizontal(classes="sub-grid", id="hub-master-container"):
                         with Vertical(classes="sub-panel", id="hub-a"):
                             yield Static("[bold cyan]MARKET HUB A[/bold cyan]")
                             yield Static("Asset        Price       24H %    RNG %", classes="telemetry-row")
@@ -524,6 +527,12 @@ class OKXTerminalApp(App):
                             yield Static("Asset        Price       24H %    RNG %", classes="telemetry-row")
                             yield Static("------------------------------------------", classes="telemetry-row")
                             yield Static("Loading Hub B...", id="hub-b-content")
+
+                        with Vertical(classes="sub-panel", id="hub-c"):
+                            yield Static("[bold cyan]MARKET HUB C[/bold cyan]")
+                            yield Static("Asset        Price       24H %    RNG %", classes="telemetry-row")
+                            yield Static("------------------------------------------", classes="telemetry-row")
+                            yield Static("Loading Hub C...", id="hub-c-content")
 
                     # 4. Session Activity Hub
                     yield Static("[bold #3399ff]Session Activity & Execution Hub[/bold #3399ff]")
@@ -544,6 +553,33 @@ class OKXTerminalApp(App):
         """Reactively updates the Tactical Pre-Flight box as the user types."""
         if event.input.id in ["price-input", "amount-input", "tp-input", "sl-input"]:
             self.update_preflight_calculator()
+
+    def on_resize(self, event) -> None:
+        """Handles liquid layout state toggles with debouncing for performance."""
+        # Cancel any pending refresh task
+        if self.resize_timer:
+            self.resize_timer.cancel()
+        
+        # Schedule a new refresh once resizing has 'settled' (300ms)
+        self.resize_timer = self.set_timer(0.3, self.execute_liquid_refresh)
+
+    def execute_liquid_refresh(self) -> None:
+        """The heavy lift logic: only runs after resizing stops."""
+        width = self.size.width
+        try:
+            # 1. Update Hub Layout
+            hub_c = self.query_one("#hub-c")
+            if width > 190:
+                hub_c.styles.display = "block"
+            else:
+                hub_c.styles.display = "none"
+            
+            self.refresh_hubs()
+
+            # 2. Trigger Chart Redraw at the new actual width
+            self.refresh_chart()
+        except Exception as e:
+            logging.debug(f"Liquid refresh error: {e}")
 
     def update_preflight_calculator(self) -> None:
         try:
@@ -889,6 +925,10 @@ class OKXTerminalApp(App):
     def refresh_chart(self) -> None:
         async def load_task():
             try:
+                # Detect the actual width of the chart panel to prevent "Void" space
+                chart_widget = self.query_one("#chart-price", Static)
+                actual_width = chart_widget.content_size.width or 130
+                
                 data = await asyncio.to_thread(
                     OKXChartEngine.fetch_candles,
                     inst_id=self.instrument_id,
@@ -902,15 +942,15 @@ class OKXTerminalApp(App):
 
                 price_str = await asyncio.to_thread(
                     OKXChartEngine.render_price_view,
-                    data, self.instrument_id, self.current_timeframe, 130, 20
+                    data, self.instrument_id, self.current_timeframe, actual_width, 20
                 )
                 trend_str = await asyncio.to_thread(
                     OKXChartEngine.render_trend_view,
-                    data, 130, 10, ema9, ema21
+                    data, actual_width, 10, ema9, ema21
                 )
                 momentum_str = await asyncio.to_thread(
                     OKXChartEngine.render_momentum_view,
-                    data, 130, 8, rsi
+                    data, actual_width, 8, rsi
                 )
 
                 from rich.text import Text
@@ -1317,10 +1357,24 @@ class OKXTerminalApp(App):
             logging.warning(f"Unable To Retrieve RPI Calculation: {e}", exc_info=True)
 
     def refresh_hubs(self):
-        hub_a_pairs = WATCHLIST[:12]
-        hub_b_pairs = WATCHLIST[12:]
-        self.refresh_hub_content(hub_a_pairs, "#hub-a-content")
-        self.refresh_hub_content(hub_b_pairs, "#hub-b-content")
+        width = self.size.width
+        if width > 190:
+            # 3 Columns of 8 pairs each
+            hub_a_pairs = WATCHLIST[:8]
+            hub_b_pairs = WATCHLIST[8:16]
+            hub_c_pairs = WATCHLIST[16:]
+            self.refresh_hub_content(hub_a_pairs, "#hub-a-content")
+            self.refresh_hub_content(hub_b_pairs, "#hub-b-content")
+            self.refresh_hub_content(hub_c_pairs, "#hub-c-content")
+        else:
+            # 2 Columns of 12 pairs each
+            hub_a_pairs = WATCHLIST[:12]
+            hub_b_pairs = WATCHLIST[12:]
+            self.refresh_hub_content(hub_a_pairs, "#hub-a-content")
+            self.refresh_hub_content(hub_b_pairs, "#hub-b-content")
+            # Clear Hub C if visible but unused
+            try: self.query_one("#hub-c-content").update("Unused real estate")
+            except: pass
 
 if __name__ == "__main__":
     app = OKXTerminalApp()
