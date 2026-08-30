@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import sys
+import time
+import math
+import datetime
 if sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 if sys.stderr.encoding.lower() != 'utf-8':
@@ -567,11 +570,21 @@ class OKXTerminalApp(App):
         """The heavy lift logic: only runs after resizing stops."""
         width = self.size.width
         try:
-            # 1. Update Hub Layout
+            hub_container = self.query_one("#hub-master-container")
             hub_c = self.query_one("#hub-c")
+
+            # Adaptive Layout Logic
             if width > 190:
+                # Wide Desktop: 3 Columns
+                hub_container.styles.layout = "horizontal"
                 hub_c.styles.display = "block"
+            elif width > 110:
+                # Standard Desktop: 2 Columns
+                hub_container.styles.layout = "horizontal"
+                hub_c.styles.display = "none"
             else:
+                # Mobile/Termux: Vertical Stack
+                hub_container.styles.layout = "vertical"
                 hub_c.styles.display = "none"
             
             self.refresh_hubs()
