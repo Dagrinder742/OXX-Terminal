@@ -561,7 +561,7 @@ class OKXTerminalApp(App):
         """Handles liquid layout state toggles with debouncing for performance."""
         # Cancel any pending refresh task
         if self.resize_timer:
-            self.resize_timer.cancel()
+            self.resize_timer.stop()
         
         # Schedule a new refresh once resizing has 'settled' (300ms)
         self.resize_timer = self.set_timer(0.3, self.execute_liquid_refresh)
