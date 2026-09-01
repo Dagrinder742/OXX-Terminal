@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 include(FetchContent)
 
-# 1. Fetch FTXUI for the TUI grid layout
+# 1. Fetch FTXUI for the terminal interface components
 FetchContent_Declare(
   ftxui
   GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
@@ -13,7 +13,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ftxui)
 
-# 2. Fetch nlohmann/json for native WebSocket/REST JSON parsing
+# 2. Fetch nlohmann/json for native data parsing in C++
 FetchContent_Declare(
   json
   GIT_REPOSITORY https://github.com/nlohmann/json
@@ -21,11 +21,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(bloomberg_terminal
-  main.cpp
+# Define your main binary target
+add_executable(bloomberg_terminal 
+  main.cpp 
   chart_widget.cpp
 )
 
+# Link your dependencies
 target_link_libraries(bloomberg_terminal
   PRIVATE ftxui::dom
   PRIVATE ftxui::screen

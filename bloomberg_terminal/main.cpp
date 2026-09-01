@@ -1,57 +1,95 @@
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/screen.hpp>
 #include <iostream>
+#include <thread>
+#include <chrono>
+#include "market_state.hpp"
+#include "chart_widget.hpp"
 
 int main() {
-  using namespace ftxui;
+    using namespace ftxui;
 
-  auto ticker_pane = window(text(" Ticker Panel ") | bold,
-                            vbox({
-                                text("BTC/USD: $64,230 (+2.4%)") | color(Color::Green),
-                                text("SOL/USD: $142.10 (-0.8%)") | color(Color::Red),
-                            }));
+    // Initialize screen and market data state
+    auto screen = ScreenInteractive::Fullscreen();
+    MarketState state;
 
-  // Replaced static text with a structured ASCII/Unicode candlestick layout
-  auto chart_pane = window(text(" Chart Panel (1H Candle) ") | bold,
-                           vbox({
-                               text(" $65k +---------------------+") | dim,
-                               text("      |      ██             |"),
-                               text("      |      ██        │    |"),
-                               text("      |  │   ██     [###]   |"),
-                               text("      |[###] ██       ██    |"),
-                               text("      |  │   ██       ██    |"),
-                               text(" $63k +--│---██-------██----+") | dim,
-                               text("      T1   T2   T3   T4   T5"),
-                           }) | center);
+    // Mock initial data injection to verify UI rendering
+    state.current_price = 77705.4;
+    state.high_price = 79859.6;
+    state.low_price = 76889.1;
+    state.volume = 329.56;
+    state.price_history = {50, 52, 51, 55, 60, 58, 62, 65, 63, 67, 70, 68, 72};
 
-  auto order_book = window(text(" Order Book ") | bold,
-                           vbox({
-                               text("Bid: $64,228 (1.5 BTC)") | color(Color::Green),
-                               text("Ask: $64,231 (0.8 BTC)") | color(Color::Red),
-                           }));
+    // Main UI Renderer Loop
+    auto renderer = Renderer([&] {
+        using namespace ftxui;
 
-  auto logs_pane = window(text(" System Logs ") | bold,
-                          vbox({
-                              text("Status: ONLINE") | color(Color::Cyan),
-                              text("Socket: Active"),
-                          }));
+        // 1. Ticker Header Panel
+        auto header_text = hbox({
+            text(" OXX TUI > BTC-USD ") | bold | color(Color::Green),
+            text(" | Price: " + std::to_string(state.current_price)) | color(Color::Yellow),
+            text(" | High: " + std::to_string(state.high_price)),
+            text(" | Low: " + std::to_string(state.low_price)),
+            text(" | Vol: " + std::to_string(state.volume))
+        }) | border | color(Color::Gold1);
 
-  auto layout = vbox({
-      hbox({
-          ticker_pane | flex,
-          chart_pane | flex,
-      }),
-      hbox({
-          order_book | flex,
-          logs_pane | flex,
-      }),
-  });
+        // 2. Chart Panel (Using our modular chart widget)
+        auto chart_panel = TerminalUI::RenderTrendChart(state.price_history);
 
-  auto screen = Screen::Create(Dimension::Full(), Dimension::Fixed(14));
-  Render(screen, layout);
-  screen.Print();
-  std::cout << std::endl;
+        // 3. Order Book & System Logs Subpanel
+        auto order_book = window(text(" Order Book ") | bold,
+            vbox({
+                text("Asks (Sells) [Price / Amt]") | color(Color::Red),
+                text("77715.2   0.0089"),
+                text("77711.5   0.0730"),
+            })
+        );
 
-  return 0;
+        auto system_logs = window(text(" System Logs ") | bold,
+            vbox({
+                text("Status: ONLINE") | color(Color::Cyan),
+                text("Engine: Native C++ Core"),
+            })
+        );
+
+        auto bottom_row = hbox({
+            order_book | flex,
+            system_logs | flex
+        });
+
+        // Master Grid Assembly
+        return vbox({
+            header_text,
+            hbox({
+                // Left Control Sidebar placeholder
+                vbox({
+                    window(text(" Quick Actions ") | bold,
+                        vbox({
+                            text(" [ BUY (LONG) ] ") | color(Color::Blue) | bold,
+                            text(" [ SELL (SHORT) ] ") | color(Color::Red) | bold,
+                        })
+                    )
+                }) | size(WIDTH, EQUAL, 30),
+                // Right Display Panels
+                vbox({
+                    chart_panel | flex,
+                    bottom_row
+                }) | flex
+            }) | flex
+        }) | color(Color::Gold1);
+    });
+
+    // Event handling to let you press 'q' to cleanly exit the terminal
+    auto component = CatchEvent(renderer, [&](Event event) {
+        if (event == Event::Character('q') || event == Event::Character('Q')) {
+            screen.Exit();
+            return true;
+        }
+        return false;
+    });
+
+    // Launch the interactive TUI event loop
+    screen.Loop(component);
+    return 0;
 }
-
