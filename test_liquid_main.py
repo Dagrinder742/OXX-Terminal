@@ -630,8 +630,8 @@ class OKXTerminalApp(App):
             else:
                 self.query_one("#preflight-net-sl", Static).update(f"Net SL:    $0.00")
 
-        except:
-            # Silently fail for partial input strings (like ".")
+        except Exception as e:
+            logging.warning(f"Silently fail for partial input strings (like '.'): {e}", exc_info=True)
             pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -1387,7 +1387,8 @@ class OKXTerminalApp(App):
             self.refresh_hub_content(hub_b_pairs, "#hub-b-content")
             # Clear Hub C if visible but unused
             try: self.query_one("#hub-c-content").update("Unused real estate")
-            except: pass
+            except Exception as e:
+                logging.warning(f"Refresh Failed: {e}")
 
 if __name__ == "__main__":
     app = OKXTerminalApp()

@@ -570,7 +570,7 @@ class OKXTerminalApp(App):
 
             self.query_one("#preflight-fee", Static).update(f"Est. Fee:  [bold #ff3333]${metrics['fee']:.4f}[/bold #ff3333]")
             self.query_one("#preflight-hurdle", Static).update(f"Hurdle:    [bold #3399ff]${metrics['break_even']:,.2f}[/bold #3399ff]")
-            
+
             if metrics['net_tp'] > 0:
                 self.query_one("#preflight-net-tp", Static).update(f"Net TP:    [bold #00ff66]${metrics['net_tp']:,.2f}[/bold #00ff66]")
             else:
@@ -581,9 +581,8 @@ class OKXTerminalApp(App):
             else:
                 self.query_one("#preflight-net-sl", Static).update(f"Net SL:    $0.00")
 
-        except:
-            # Silently fail for partial input strings (like ".")
-            pass
+        except Exception as e:
+            logging.warning(f"Silently fail for partial input strings (like '.') {e}", exc_info=True)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "instrument-search-input":

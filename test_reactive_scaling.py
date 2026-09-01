@@ -148,8 +148,8 @@ class ReactiveScalingApp(App):
                 chart_widget.update(plt.build())
 
             self.update_hub_data()
-        except:
-            pass
+        except Exception as e:
+            logging.warning(f"Refresh Liquid Views Failed: {e}")
 
     def update_hub_data(self):
         width = self.size.width
