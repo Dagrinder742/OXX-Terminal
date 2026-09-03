@@ -99,7 +99,7 @@ OS-level credential management.
 * [x] **Total USD Cost Estimation**: Integrated a dedicated price estimation field that synchronizes with the Quick Load feature to provide immediate transparency on the total cost of an order.
 * [x] **Exchange-Grade Validation**: Implemented production-grade OKX validation rules for spot grid creation, including price containment, investment thresholds, and grid limits.
 * [/] **Tactical Pre-Flight Calculator**: Integrated a real-time reactive calculator in the Order Entry panel that predicts fees, hurdles, and net outcomes. [IN REFINEMENT]
-* [ ] **Liquid Architecture & Scaling**: Successfully prototyped a "Liquid UI" with 300ms debounce throttling to eliminate redraw lag. Optimized for high-resolution desktop (PowerShell) visibility with dynamic chart resolution. [READY FOR DESKTOP MERGE]
+* [/] **Liquid Architecture & Scaling**: Successfully prototyped a bifurcated "Two Happy Sides" architecture. Optimized for high-resolution desktop (PowerShell) and high-efficiency mobile (Termux) via environment-specific debouncing and data density rules. [IN ACTIVE REFINEMENT]
 * [ ] **The Money Counter (Session PnL Aggregator)**: Build a high-fidelity USD readout that aggregates every manual trade, grid fill, and DCA action into a single "Session Net" score. [CORE MATH MODULE COMPLETED]
 * [ ] **The Flash Trigger (Global Hotkeys)**: Implement keyboard shortcuts (e.g., SHIFT+B/S) for instant market execution on the focus instrument. [IN EXPLORATION]
 * [ ] **The Alert Hub (Deep Value Pings)**: Add a background monitor that triggers visual/log alerts when high-liquidity assets hit the RPI "Star Blue" Dip Zone (<15%). [IN EXPLORATION]
@@ -244,3 +244,20 @@ $$Hurdle = \frac{EntryPrice \times (1 + TakerRate)}{1 - MakerRate}$$
 *   **Net SL**: Displays the total capital drawdown, including the cost of the entry fee and the emergency exit toll (Taker).
 
 This module ensures that "Risk vs. Reward" is never a guess—it's a calculated, account-aware certainty.
+
+---
+
+## 13. "Two Happy Sides" Architecture: PowerShell vs. Termux [IN PROGRESS]
+To ensure the OXX Terminal delivers a premium experience across all environments, we have bifurcated our liquid scaling standards into two distinct "Happy Sides."
+
+### The PowerShell Standard (High-Resolution Performance)
+*   **File**: `test_liquid_main.py`
+*   **Goal**: Maximize data visibility on large desktop monitors.
+*   **Specs**: 300ms debounce, 80-candle history, dynamic full-width resolution.
+
+### The Termux Standard (High-Efficiency Mobile)
+*   **File**: `test_termux_happy.py`
+*   **Goal**: Ensure smooth, freeze-free performance on mobile hardware.
+*   **Specs**: 500ms debounce (extra CPU breathing room), 50-candle history (reduced buffer payload), aggressive vertical Hub stacking.
+
+This dual-track development ensures that OXX Terminal remains a lethal tactical tool, whether you are at your command center or moving on the go.
