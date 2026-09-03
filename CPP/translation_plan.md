@@ -20,6 +20,7 @@ This document outlines the architectural mapping for translating the Python TUI 
 *   **Source:** `api_client.py`
     *   **Target:** `OKXPublicClient.hpp` / `OKXPublicClient.cpp`
     *   **Role:** Low-latency WebSocket stream management for Tickers, Books, and Trades.
+    *   **C++ Performance:** Multi-threaded message processing via `IXWebSocket`. [COMPLETED]
 *   **Source:** `secure_vault.py` & `secure_store.py`
     *   **Target:** `Security.hpp` / `Security.cpp`
     *   **Role:** OS-level encrypted credential storage (utilizing `libsecret` or `Windows Data Protection API`).
@@ -103,22 +104,13 @@ When using the Visual Studio compiler, CMake creates a `Debug/` subfolder. Your 
 **Problem:** Warning about `DOWNLOAD_EXTRACT_TIMESTAMP` for external content.
 **Teaching:** CMake uses "Policies" to manage breaking changes between versions. `CMP0135` ensures that downloaded files get a fresh timestamp. We explicitly set this to `NEW` in `CMakeLists.txt` to ensure reliable, ghost-free builds when fetching external libraries like JSON.
 
----
-
-## 6. Bifurcated Python "Happy Sides" Standard [IN PROGRESS]
-Before final consolidation into C++, we have successfully prototyped two distinct Python standards for environment-specific scaling:
-
-### The PowerShell Happy Side (`test_liquid_main.py`)
-*   **Target:** High-resolution desktop monitors.
-*   **Specs:** 300ms debounce, 80-candle history, dynamic full-width matrix resolution.
-
-### The Termux Happy Side (`test_termux_happy.py`)
-*   **Target:** High-efficiency mobile hardware.
-*   **Specs:** 500ms debounce (extra CPU breathing room), 50-candle history (reduced buffer payload), aggressive vertical Hub stacking.
+### 7. Windows Networking "Ignition"
+**Problem:** Connection errors regarding `WSAStartup`.
+**Teaching:** Unlike Linux, Windows requires programs to explicitly initialize the network stack before use. We use `ix::initNetSystem()` and `ix::uninitNetSystem()` to turn the networking "gears" on and off.
 
 ---
 
-## 7. C++ Translation Status: Phase 3 Consolidation
+## 6. C++ Translation Status: Phase 3 Consolidation
 We have successfully ported the core logic modules and are moving toward TUI consolidation in `main.cpp`.
 
 *   **Accountant Module**: Verified Math [COMPLETED]
