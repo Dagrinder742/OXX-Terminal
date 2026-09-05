@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 # Native OKX REST endpoint (matching your api_client.py pattern)
 OKX_REST_HOST = "https://us.okx.com"
 INSTRUMENT_ID = "BTC-USD"
-BAR_TIMEFRAME = "15m"  # Hardcoded to your 15m execution chart
+BAR_TIMEFRAME = "15m"  # Tactical execution chart
+MACRO_TIMEFRAME = "1H"  # Boss / Macro trend filter chart
 LOCAL_TZ = ZoneInfo("America/New_York")
 
 LAST_PROCESSED_TIME = None
@@ -34,13 +35,13 @@ def fetch_live_ticker() -> dict:
         pass
     return {"price": 0.0, "high": 0.0, "low": 0.0, "vol": 0.0}
 
-def fetch_native_candles(limit: int = 250) -> pd.DataFrame:
-    """Fetches raw 15m OHLCV candles directly from OKX V5 REST API."""
+def fetch_native_candles(timeframe: str, limit: int = 250) -> pd.DataFrame:
+    """Fetches raw OHLCV candles directly from OKX V5 REST API for any timeframe."""
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/candles"
         params = {
             "instId": INSTRUMENT_ID,
-            "bar": BAR_TIMEFRAME,
+            "bar": timeframe,
             "limit": limit
         }
         response = requests.get(url, params=params, timeout=5)
@@ -50,59 +51,80 @@ def fetch_native_candles(limit: int = 250) -> pd.DataFrame:
                 raw_data = res_json.get("data", [])
                 if not raw_data:
                     return pd.DataFrame()
-                
+
                 # OKX returns data newest-first. Reverse to chronological order (oldest -> newest)
                 raw_data.reverse()
-                
+
                 # OKX format: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
                 df = pd.DataFrame(raw_data, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm'
                 ])
-                
+
                 # Type conversions
                 df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
                 for col in ['open', 'high', 'low', 'close', 'volume']:
                     df[col] = df[col].astype(float)
-                    
+
                 return df
     except Exception as e:
-        print(f"[ERROR] Failed to fetch REST candles: {e}")
+        print(f"[ERROR] Failed to fetch REST candles for {timeframe}: {e}")
     return pd.DataFrame()
+
+def evaluate_macro_boss() -> bool:
+    """
+    1H Macro Trend Filter (The Boss):
+    Returns True only if the 1-hour macro trend is bullish:
+    - Price > 200 EMA on the 1H chart
+    - 50 EMA > 200 EMA on the 1H chart
+    """
+    df_1h = fetch_native_candles(timeframe=MACRO_TIMEFRAME, limit=250)
+    if df_1h.empty or len(df_1h) < 200:
+        return False  # Fail-safe lock if data is insufficient
+
+    df_1h['ema_50'] = ta.ema(df_1h['close'], length=50)
+    df_1h['ema_200'] = ta.ema(df_1h['close'], length=200)
+
+    # Evaluate the latest closed 1H candle (-2) to avoid repainting
+    last_1h = df_1h.iloc[-2]
+
+    macro_bullish = (last_1h['close'] > last_1h['ema_200']) and (last_1h['ema_50'] > last_1h['ema_200'])
+    return macro_bullish
 
 def analyze_15m_setup():
     global LAST_PROCESSED_TIME
-    
-    # 1. Fetch live ticker for the top header bar[cite: 3]
+
+    # 1. Fetch live ticker for the top header bar
     ticker = fetch_live_ticker()
-    
-    # 2. Fetch candle history for quantitative analysis (extended depth for 200 EMA)
-    df = fetch_native_candles(limit=250)
+
+    # 2. Fetch 15m candle history for tactical quantitative analysis (extended depth for 200 EMA)
+    df = fetch_native_candles(timeframe=BAR_TIMEFRAME, limit=250)
     if df.empty or len(df) < 200:
-        print("[WARNING] Insufficient candle data returned.")
+        print("[WARNING] Insufficient 15m candle data returned.")
         return
 
     # --- QUANTITATIVE TECHNICAL INDICATOR SUITE ---
     df['ema_50'] = ta.ema(df['close'], length=50)
     df['ema_200'] = ta.ema(df['close'], length=200)
-    
+
     # MACD for precise momentum acceleration tracking
     macd_df = ta.macd(df['close'], fast=12, slow=26, signal=9)
     df['macd_hist'] = macd_df['MACDh_12_26_9']
-    
+
     # Volume Moving Average
     df['vol_ma'] = ta.sma(df['volume'], length=20)
-    
+
     # Optional supplementary RSI reference
     df['rsi'] = ta.rsi(df['close'], length=14)
 
-    # Target the latest fully closed 15m candle (-2) to avoid repainting on live ticks[cite: 3]
+    # Target the latest fully closed 15m candle (-2) to avoid repainting on live ticks
     last = df.iloc[-2]
     prev = df.iloc[-3]
+    prev_prev = df.iloc[-4]  # Added for multi-candle persistence lookback
 
-    # Convert UTC candle timestamp to local Georgia time (EDT)[cite: 3]
+    # Convert UTC candle timestamp to local Georgia time (EDT)
     local_candle_time = last['timestamp'].tz_localize('UTC').astimezone(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
-    # Prevent duplicate prints on the same 15m candle boundary[cite: 3]
+    # Prevent duplicate prints on the same 15m candle boundary
     is_new_candle = last['timestamp'] != LAST_PROCESSED_TIME
     if is_new_candle:
         LAST_PROCESSED_TIME = last['timestamp']
@@ -117,23 +139,27 @@ def analyze_15m_setup():
     vol_ma = last['vol_ma']
     macd_hist = last['macd_hist']
     prev_hist = prev['macd_hist']
+    prev_prev_hist = prev_prev['macd_hist']
+
+    # --- HIERARCHICAL GATING: THE 1H BOSS ---
+    macro_approved = evaluate_macro_boss()
 
     # --- SYSTEMATIC QUANTITATIVE CONFLUENCE GATES ---
-    # 1. Structural Trend: Price and Fast EMA both above macro baseline
+    # 1. Structural Trend: Price and Fast EMA both above macro baseline on 15m
     gate_trend = (price > ema_200) and (ema_50 > ema_200)
-    
-    # 2. Momentum Acceleration: MACD histogram is positive and expanding upward
-    gate_momentum = (macd_hist > 0) and (macd_hist > prev_hist)
-    
+
+    # 2. Momentum Persistence (Upgraded): MACD histogram expanding consistently over 2 consecutive candle transitions
+    gate_momentum = (macd_hist > 0) and (macd_hist > prev_hist) and (prev_hist > prev_prev_hist)
+
     # 3. Institutional Volume: Volume exceeds 1.4x of the 20-period average
     gate_volume = vol > (vol_ma * 1.4) if vol_ma > 0 else False
-    
+
     # 4. Bar Close Strength: Candle closed in the upper 60% of its total range (No upper wick distribution traps)
     bar_range = high - low
     close_location = (price - low) / bar_range if bar_range > 0 else 0
     gate_strength = close_location >= 0.60
 
-    score = sum([gate_trend, gate_momentum, gate_volume, gate_strength])
+    tactical_score = sum([gate_trend, gate_momentum, gate_volume, gate_strength])
 
     # --- RENDER TUI-STYLE LIVE HEADER BAR ---
     print("─" * 75)
@@ -141,19 +167,20 @@ def analyze_15m_setup():
     print("─" * 75)
 
     # --- TERMINAL SETUP CARD OUTPUT & FILE LOGGER ---
-    if is_new_candle and score == 4:
-        # Trigger terminal visual bell / screen flash sequence (\a) + max alert card
+    if is_new_candle and macro_approved and tactical_score == 4:
+        # Trigger terminal visual bell / screen flash sequence (\a) + max alert card (Only if 1H Boss approves!)
         flash_alert = "\a\a\a"
         card_text = (
             flash_alert +
             "\n" + "█" * 65 + "\n"
-            f"  [MAX CONFLUENCE 4/4 SETUP] — {INSTRUMENT_ID} ({BAR_TIMEFRAME})\n"
+            f"  [ELITE HIERARCHICAL 4/4 SETUP] — {INSTRUMENT_ID} ({BAR_TIMEFRAME})\n"
             f" Candle Close Time : {local_candle_time} (EDT)\n"
             f" Candle Close Price: ${price:,.2f}\n"
+            f" 1H Macro Gate     : APPROVED (Boss Filter Bullish)\n"
             f" Alignment Status  : 100% QUANTITATIVE LOCK (4/4)\n"
             "-" * 65 + "\n"
             f" • Structural Trend : BULLISH ALIGNED\n"
-            f" • MACD Acceleration: Hist {macd_hist:.2f} (Expanding Fast)\n"
+            f" • Momentum Persist : Hist {macd_hist:.2f} > {prev_hist:.2f} > {prev_prev_hist:.2f} (Accelerating)\n"
             f" • Relative Volume  : {vol:,.0f} vs 20MA {vol_ma:,.0f} (SURGE)\n"
             f" • Bar Close Strength: {close_location*100:.1f}% of range high\n"
             "█" * 65 + "\n"
@@ -162,30 +189,33 @@ def analyze_15m_setup():
         with open("trade_signals_ledger.md", "a", encoding="utf-8") as f:
             f.write(card_text)
 
-    elif is_new_candle and score == 3:
+    elif is_new_candle and tactical_score >= 3:
         card_text = (
             "\n" + "█" * 65 + "\n"
-            f"  [15M QUANTITATIVE SETUP (3/4)] — {INSTRUMENT_ID} ({BAR_TIMEFRAME})\n"
+            f"  [15M QUANTITATIVE SETUP ({tactical_score}/4)] — {INSTRUMENT_ID} ({BAR_TIMEFRAME})\n"
             f" Candle Close Time : {local_candle_time} (EDT)\n"
             f" Candle Close Price: ${price:,.2f}\n"
-            f" Confluence Score  : {score}/4 Vectors Aligned\n"
+            f" 1H Macro Gate     : {'APPROVED' if macro_approved else 'BLOCKED (Bearish 1H)'}\n"
+            f" Confluence Score  : {tactical_score}/4 Vectors Aligned\n"
             "-" * 65 + "\n"
             f" • Structural Trend : {'BULLISH ALIGNED' if gate_trend else 'NEUTRAL/BEARISH'}\n"
-            f" • MACD Acceleration: Hist {macd_hist:.2f} (Expanding)\n"
+            f" • Momentum Persist : Hist {macd_hist:.2f} (Persist Check: {gate_momentum})\n"
             f" • Relative Volume  : {vol:,.0f} vs 20MA {vol_ma:,.0f} ({'SURGE' if gate_volume else 'NORMAL'})\n"
             f" • Bar Close Strength: {close_location*100:.1f}% of range high\n"
             "█" * 65 + "\n"
         )
         print(card_text)
-        with open("trade_signals_ledger.md", "a", encoding="utf-8") as f: #[cite: 3]
+        with open("trade_signals_ledger.md", "a", encoding="utf-8") as f:
             f.write(card_text)
-            
+
     else:
-        print(f"[15M SCAN] Time: {local_candle_time} EDT | Close: ${price:,.2f} | MACD Hist: {macd_hist:.2f} | Score: {score}/4 (Monitoring)")
+        macro_status = "BULL" if macro_approved else "BEAR/CHOP"
+        print(f"[15M SCAN] Time: {local_candle_time} EDT | 1H Macro: {macro_status} | Close: ${price:,.2f} | MACD Hist: {macd_hist:.2f} | Score: {tactical_score}/4 (Monitoring)")
     print("\n")
 
 if __name__ == "__main__":
-    print(f"[*] Starting Quantitative Native 15m OKX Analytics Engine for {INSTRUMENT_ID}...\n")
+    print(f"[*] Starting Hierarchical Quantitative OKX Analytics Engine for {INSTRUMENT_ID}...\n")
+    print(f"[*] Architecture: 1H Macro Gate ('Boss') -> 15m Tactical Engine ('Employee') with Multi-Candle Persistence.\n")
     try:
         while True:
             analyze_15m_setup()
