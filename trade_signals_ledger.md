@@ -11734,3 +11734,720 @@
  • Relative Volume  : 0 vs 20MA 1 (NORMAL)
  • Bar Close Strength: 84.4% of range high
 █
+
+█████████████████████████████████████████████████████████████████
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+  [15M QUANTITATIVE SETUP (3/4)] — BTC-USD (15m)
+ Candle Close Time : 2026-09-05 13:00:00 (EDT)
+ Candle Close Price: $80,144.60
+ 1H Macro Gate     : APPROVED
+ Confluence Score  : 3/4 Vectors Aligned
+-
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█
+ • Structural Trend : NEUTRAL/BEARISH
+ • Momentum Persist : Hist 40.32 (Persist Check: True)
+ • Relative Volume  : 2 vs 20MA 1 (SURGE)
+ • Bar Close Strength: 81.7% of range high
+█

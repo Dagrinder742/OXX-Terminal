@@ -6,7 +6,7 @@ import pandas_ta as ta
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# Native OKX REST endpoint (matching your api_client.py pattern)
+# Native OKX REST endpoint
 OKX_REST_HOST = "https://us.okx.com"
 INSTRUMENT_ID = "BTC-USD"
 BAR_TIMEFRAME = "15m"  # Tactical execution chart
@@ -14,6 +14,7 @@ MACRO_TIMEFRAME = "1H"  # Boss / Macro trend filter chart
 LOCAL_TZ = ZoneInfo("America/New_York")
 
 LAST_PROCESSED_TIME = None
+LAST_PRINTED_CANDLE_TS = None  # Tracks the last unique candle printed to avoid spam
 
 def fetch_live_ticker() -> dict:
     """Fetches real-time ticker stats for the live header bar."""
@@ -51,20 +52,20 @@ def fetch_native_candles(timeframe: str, limit: int = 250) -> pd.DataFrame:
                 raw_data = res_json.get("data", [])
                 if not raw_data:
                     return pd.DataFrame()
-
+                
                 # OKX returns data newest-first. Reverse to chronological order (oldest -> newest)
                 raw_data.reverse()
-
+                
                 # OKX format: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
                 df = pd.DataFrame(raw_data, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm'
                 ])
-
+                
                 # Type conversions
                 df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
                 for col in ['open', 'high', 'low', 'close', 'volume']:
                     df[col] = df[col].astype(float)
-
+                    
                 return df
     except Exception as e:
         print(f"[ERROR] Failed to fetch REST candles for {timeframe}: {e}")
@@ -80,54 +81,57 @@ def evaluate_macro_boss() -> bool:
     df_1h = fetch_native_candles(timeframe=MACRO_TIMEFRAME, limit=250)
     if df_1h.empty or len(df_1h) < 200:
         return False  # Fail-safe lock if data is insufficient
-
+    
     df_1h['ema_50'] = ta.ema(df_1h['close'], length=50)
     df_1h['ema_200'] = ta.ema(df_1h['close'], length=200)
-
+    
     # Evaluate the latest closed 1H candle (-2) to avoid repainting
     last_1h = df_1h.iloc[-2]
-
+    
     macro_bullish = (last_1h['close'] > last_1h['ema_200']) and (last_1h['ema_50'] > last_1h['ema_200'])
     return macro_bullish
 
 def analyze_15m_setup():
-    global LAST_PROCESSED_TIME
-
+    global LAST_PROCESSED_TIME, LAST_PRINTED_CANDLE_TS
+    
     # 1. Fetch live ticker for the top header bar
     ticker = fetch_live_ticker()
-
+    
     # 2. Fetch 15m candle history for tactical quantitative analysis (extended depth for 200 EMA)
     df = fetch_native_candles(timeframe=BAR_TIMEFRAME, limit=250)
     if df.empty or len(df) < 200:
-        print("[WARNING] Insufficient 15m candle data returned.")
         return
 
     # --- QUANTITATIVE TECHNICAL INDICATOR SUITE ---
     df['ema_50'] = ta.ema(df['close'], length=50)
     df['ema_200'] = ta.ema(df['close'], length=200)
-
+    
     # MACD for precise momentum acceleration tracking
     macd_df = ta.macd(df['close'], fast=12, slow=26, signal=9)
     df['macd_hist'] = macd_df['MACDh_12_26_9']
-
+    
     # Volume Moving Average
     df['vol_ma'] = ta.sma(df['volume'], length=20)
-
+    
     # Optional supplementary RSI reference
     df['rsi'] = ta.rsi(df['close'], length=14)
 
     # Target the latest fully closed 15m candle (-2) to avoid repainting on live ticks
     last = df.iloc[-2]
     prev = df.iloc[-3]
-    prev_prev = df.iloc[-4]  # Added for multi-candle persistence lookback
+    prev_prev = df.iloc[-4]
+
+    current_candle_ts = last['timestamp']
+    is_new_candle = current_candle_ts != LAST_PRINTED_CANDLE_TS
+
+    # If it's not a new candle, skip printing entirely to keep the terminal clean
+    if not is_new_candle:
+        return
+
+    LAST_PRINTED_CANDLE_TS = current_candle_ts
 
     # Convert UTC candle timestamp to local Georgia time (EDT)
     local_candle_time = last['timestamp'].tz_localize('UTC').astimezone(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
-
-    # Prevent duplicate prints on the same 15m candle boundary
-    is_new_candle = last['timestamp'] != LAST_PROCESSED_TIME
-    if is_new_candle:
-        LAST_PROCESSED_TIME = last['timestamp']
 
     price = last['close']
     high = last['high']
@@ -145,16 +149,10 @@ def analyze_15m_setup():
     macro_approved = evaluate_macro_boss()
 
     # --- SYSTEMATIC QUANTITATIVE CONFLUENCE GATES ---
-    # 1. Structural Trend: Price and Fast EMA both above macro baseline on 15m
     gate_trend = (price > ema_200) and (ema_50 > ema_200)
-
-    # 2. Momentum Persistence (Upgraded): MACD histogram expanding consistently over 2 consecutive candle transitions
     gate_momentum = (macd_hist > 0) and (macd_hist > prev_hist) and (prev_hist > prev_prev_hist)
-
-    # 3. Institutional Volume: Volume exceeds 1.4x of the 20-period average
     gate_volume = vol > (vol_ma * 1.4) if vol_ma > 0 else False
-
-    # 4. Bar Close Strength: Candle closed in the upper 60% of its total range (No upper wick distribution traps)
+    
     bar_range = high - low
     close_location = (price - low) / bar_range if bar_range > 0 else 0
     gate_strength = close_location >= 0.60
@@ -167,8 +165,7 @@ def analyze_15m_setup():
     print("─" * 75)
 
     # --- TERMINAL SETUP CARD OUTPUT & FILE LOGGER ---
-    if is_new_candle and macro_approved and tactical_score == 4:
-        # Trigger terminal visual bell / screen flash sequence (\a) + max alert card (Only if 1H Boss approves!)
+    if macro_approved and tactical_score == 4:
         flash_alert = "\a\a\a"
         card_text = (
             flash_alert +
@@ -189,7 +186,7 @@ def analyze_15m_setup():
         with open("trade_signals_ledger.md", "a", encoding="utf-8") as f:
             f.write(card_text)
 
-    elif is_new_candle and tactical_score >= 3:
+    elif tactical_score >= 3:
         card_text = (
             "\n" + "█" * 65 + "\n"
             f"  [15M QUANTITATIVE SETUP ({tactical_score}/4)] — {INSTRUMENT_ID} ({BAR_TIMEFRAME})\n"
@@ -207,18 +204,18 @@ def analyze_15m_setup():
         print(card_text)
         with open("trade_signals_ledger.md", "a", encoding="utf-8") as f:
             f.write(card_text)
-
+            
     else:
         macro_status = "BULL" if macro_approved else "BEAR/CHOP"
         print(f"[15M SCAN] Time: {local_candle_time} EDT | 1H Macro: {macro_status} | Close: ${price:,.2f} | MACD Hist: {macd_hist:.2f} | Score: {tactical_score}/4 (Monitoring)")
     print("\n")
 
 if __name__ == "__main__":
-    print(f"[*] Starting Hierarchical Quantitative OKX Analytics Engine for {INSTRUMENT_ID}...\n")
-    print(f"[*] Architecture: 1H Macro Gate ('Boss') -> 15m Tactical Engine ('Employee') with Multi-Candle Persistence.\n")
+    print(f"[*] Starting Clean Hierarchical OKX Analytics Engine for {INSTRUMENT_ID}...")
+    print(f"[*] Output Mode: Prints strictly on new 15m candle closes. Running loop active...\n")
     try:
         while True:
             analyze_15m_setup()
-            time.sleep(60)
+            time.sleep(30)  # Checks every 30 seconds for the new candle boundary cleanly
     except KeyboardInterrupt:
         print("\n[*] Analytics engine gracefully stopped by user. Shutting down cleanly.")
