@@ -40,6 +40,10 @@ class ScratchAgent:
             self.conversation_history.append({"role": "system", "content": f"Tool Execution Result:\n{tool_output}"})
             final_response = self.llm_call(self.conversation_history)
             self.conversation_history.append({"role": "assistant", "content": final_response})
+
+            # If the final response is another JSON block, let's strip it or provide a clean fallback narrative
+            if "tool_name" in final_response:
+                return f"--- Agent Ledger Study ---\n{tool_output}\n--------------------------"
             return final_response
 
         return response
