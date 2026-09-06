@@ -1,7 +1,7 @@
 import json
 import urllib.request
 import subprocess
-import sys
+import os
 from ollama import chat
 
 class ScratchAgent:
@@ -10,7 +10,7 @@ class ScratchAgent:
         self.conversation_history = [
             {"role": "system", "content": (
                 "You are an autonomous Python quantitative trading agent for OXX Terminal. "
-                "OXX Terminal is a custom Python TUI application driven by main.py. "
+                "OXX Terminal is a custom Python TUI application driven by analytics and automated engines. "
                 "You have access to local registered tools. When you need to execute a tool, "
                 "respond ONLY with a valid JSON block using this exact schema:\n"
                 "{\n  \"tool_name\": \"name_of_tool\",\n  \"arguments\": {\"arg_name\": \"value\"}\n}\n"
@@ -35,7 +35,11 @@ class ScratchAgent:
         # Automatically try to execute if it's a tool call
         tool_output = self.execute_tool_call(response)
         if "not valid JSON" not in tool_output and "Error:" not in tool_output:
-            return f"Tool Output: {tool_output}"
+            # Feed the tool output back to the agent for final qualitative reasoning
+            self.conversation_history.append({"role": "system", "content": f"Tool Execution Result:\n{tool_output}"})
+            final_response = self.llm_call(self.conversation_history)
+            self.conversation_history.append({"role": "assistant", "content": final_response})
+            return final_response
         return response
 
     def execute_tool_call(self, response_text):
@@ -65,6 +69,8 @@ class ScratchAgent:
         except Exception as e:
             return f"Inference Error: {str(e)}"
 
+# --- REGISTERED AGENT TOOLS ---
+
 def run_terminal_command(command: str):
     """Executes a safe terminal command and returns output."""
     try:
@@ -73,36 +79,32 @@ def run_terminal_command(command: str):
     except Exception as e:
         return str(e)
 
-def test_direct_ollama():
-    url = "http://localhost:11434/api/chat"
-    payload = {
-        "model": "phi4-mini",
-        "messages": [{"role": "user", "content": "System check: respond with OK."}],
-        "stream": False
-    }
-
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-
-    print("[*] Sending direct POST request to local Ollama server...")
+def read_trade_ledger(lines: int = 30):
+    """Reads the latest entries from the trade signals ledger markdown file."""
+    ledger_path = "trade_signals_ledger.md"
+    if not os.path.exists(ledger_path):
+        return "Ledger file (trade_signals_ledger.md) not found yet. Run analytics engine first."
     try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            print(f"[Direct Success]: {result['message']['content']}")
+        with open(ledger_path, "r", encoding="utf-8") as f:
+            content = f.readlines()
+        # Return the tail end of the ledger for recent context
+        return "".join(content[-lines:])
     except Exception as e:
-        print(f"[-] Direct request failed: {e}")
+        return f"Error reading ledger: {str(e)}"
 
 if __name__ == "__main__":
-    print("[*] Initializing ScratchAgent with phi4-mini...")
+    print("[*] Initializing Upgraded OXX Quantitative Agent with phi4-mini...")
 
     agent = ScratchAgent()
 
-    # Register the system_check tool the model is looking for
-    def system_check():
-        return "OXX Terminal TUI Core: ONLINE | Model: phi4-mini | Environment: Windows PowerShell / WSL"
-
-    agent.register_tool("system_check", system_check, "Performs a quick system status check.")
+    # Register tools
+    agent.register_tool("system_check", lambda: "OXX Terminal TUI Core: ONLINE | Model: phi4-mini", "Performs quick system check.")
     agent.register_tool("run_terminal_command", run_terminal_command, "Executes a shell command.")
+    agent.register_tool("read_trade_ledger", read_trade_ledger, "Reads the recent history of trade signals and telemetry logs from trade_signals_ledger.md.")
 
-    reply = agent.run_step("Give me a quick system check for OXX Terminal.")
-    print(f"\n[Agent Response Final]: {reply}")
+    # Test prompt inviting the agent to read your market history
+    prompt = "Please check our trade signals ledger to see what setups have recently fired and give me a brief narrative study of the market action."
+    print(f"\n[*] Sending Prompt to Agent: {prompt}\n")
+
+    reply = agent.run_step(prompt)
+    print(f"\n[Agent Response Final]:\n{reply}")
