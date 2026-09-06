@@ -2,17 +2,21 @@ import json
 import urllib.request
 import subprocess
 import os
+import requests
 from ollama import chat
+
+OKX_REST_HOST = "https://us.okx.com"
 
 class ScratchAgent:
     def __init__(self, model_name="phi4-mini"):
         self.model_name = model_name
         self.conversation_history = [
             {"role": "system", "content": (
-                "You are an autonomous Python quantitative trading agent for OXX Terminal. "
-                "OXX Terminal is a custom Python TUI application driven by analytics and automated engines. "
-                "You have access to local registered tools. When you need to execute a tool, "
-                "respond ONLY with a valid JSON block using this exact schema:\n"
+                "You are an autonomous Python quantitative trading data analysis agent for OXX Terminal. "
+                "Your role is strictly analytical: you study live OKX V5 telemetry, market mechanics, "
+                "candle structures, and order book behavior to deliver deep structural insights. "
+                "You do not execute live orders; you serve as the analytical reasoning and research layer. "
+                "When you need to fetch data, respond ONLY with a valid JSON block using this exact schema:\n"
                 "{\n  \"tool_name\": \"name_of_tool\",\n  \"arguments\": {\"arg_name\": \"value\"}\n}\n"
                 "Do not include conversational filler or markdown explanations when invoking tools."
             )}
@@ -35,15 +39,13 @@ class ScratchAgent:
         # Try to execute tool call
         tool_output = self.execute_tool_call(response)
 
-        # If a tool was successfully executed, feed the output back to the model for final analysis
         if "Error:" not in tool_output and "not valid JSON" not in tool_output:
             self.conversation_history.append({"role": "system", "content": f"Tool Execution Result:\n{tool_output}"})
             final_response = self.llm_call(self.conversation_history)
             self.conversation_history.append({"role": "assistant", "content": final_response})
 
-            # If the final response is another JSON block, let's strip it or provide a clean fallback narrative
             if "tool_name" in final_response:
-                return f"--- Agent Ledger Study ---\n{tool_output}\n--------------------------"
+                return f"--- Live OKX Analysis ---\n{tool_output}\n--------------------------"
             return final_response
 
         return response
@@ -56,7 +58,7 @@ class ScratchAgent:
             tool_name = data.get("tool_name")
             args = data.get("arguments", {})
 
-            # Flexible mapping if the model short-names the tool
+            # Flexible mapping aliases
             if tool_name == "trade_signals_ledger":
                 tool_name = "read_trade_ledger"
 
@@ -79,41 +81,65 @@ class ScratchAgent:
         except Exception as e:
             return f"Inference Error: {str(e)}"
 
-# --- REGISTERED AGENT TOOLS ---
+# --- REGISTERED LIVE OKX TOOLS ---
 
-def run_terminal_command(command: str):
-    """Executes a safe terminal command and returns output."""
+def fetch_okx_ticker(inst_id: str = "BTC-USD"):
+    """Fetches real-time ticker data directly from OKX V5 REST API."""
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-        return result.stdout if result.returncode == 0 else result.stderr
+        url = f"{OKX_REST_HOST}/api/v5/market/ticker"
+        params = {"instId": inst_id}
+        response = requests.get(url, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json().get("data", [])
+            if data:
+                t = data[0]
+                return json.dumps({
+                    "instrument": inst_id,
+                    "last_price": t.get("last"),
+                    "high_24h": t.get("high24h"),
+                    "low_24h": t.get("low24h"),
+                    "volume_24h": t.get("vol24h"),
+                    "timestamp": t.get("ts")
+                }, indent=2)
+        return f"Error: Failed to fetch ticker for {inst_id}"
     except Exception as e:
-        return str(e)
+        return f"API Exception: {str(e)}"
 
-def read_trade_ledger(lines: int = 30):
+def fetch_okx_candles(inst_id: str = "BTC-USD", bar: str = "15m", limit: int = 10):
+    """Fetches recent OHLCV candlestick data directly from OKX V5 REST API."""
+    try:
+        url = f"{OKX_REST_HOST}/api/v5/market/candles"
+        params = {"instId": inst_id, "bar": bar, "limit": limit}
+        response = requests.get(url, params=params, timeout=5)
+        if response.status_code == 200:
+            res_json = response.json()
+            if res_json.get("code") == "0":
+                return json.dumps(res_json.get("data", []), indent=2)
+        return f"Error: Failed to fetch candles for {inst_id}"
+    except Exception as e:
+        return f"API Exception: {str(e)}"
+
+def read_trade_ledger(lines: int = 15):
     """Reads the latest entries from the trade signals ledger markdown file."""
     ledger_path = "trade_signals_ledger.md"
     if not os.path.exists(ledger_path):
-        return "Ledger file (trade_signals_ledger.md) not found yet. Run analytics engine first."
-    try:
-        with open(ledger_path, "r", encoding="utf-8") as f:
-            content = f.readlines()
-        # Return the tail end of the ledger for recent context
-        return "".join(content[-lines:])
-    except Exception as e:
-        return f"Error reading ledger: {str(e)}"
+        return "Ledger file not found yet."
+    with open(ledger_path, "r", encoding="utf-8") as f:
+        content = f.readlines()
+    return "".join(content[-lines:])
 
 if __name__ == "__main__":
-    print("[*] Initializing Upgraded OXX Quantitative Agent with phi4-mini...")
+    print("[*] Initializing Live OKX-Integrated Agent with phi4-mini...")
 
     agent = ScratchAgent()
 
-    # Register tools
-    agent.register_tool("system_check", lambda: "OXX Terminal TUI Core: ONLINE | Model: phi4-mini", "Performs quick system check.")
-    agent.register_tool("run_terminal_command", run_terminal_command, "Executes a shell command.")
-    agent.register_tool("read_trade_ledger", read_trade_ledger, "Reads the recent history of trade signals and telemetry logs from trade_signals_ledger.md.")
+    # Register live tools
+    agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Fetches real-time ticker stats for an instrument like BTC-USD from OKX.")
+    agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Fetches recent OHLCV candles for an instrument and timeframe from OKX.")
+    agent.register_tool("read_trade_ledger", read_trade_ledger, "Reads recent entries from trade_signals_ledger.md.")
 
-    # Test prompt inviting the agent to read your market history
-    prompt = "Please check our trade signals ledger to see what setups have recently fired and give me a brief narrative study of the market action."
+    # Test prompt requesting live market investigation
+    prompt = "Check the live OKX market ticker for BTC-USD and give me a professional breakdown of its current price position and market state."
     print(f"\n[*] Sending Prompt to Agent: {prompt}\n")
 
     reply = agent.run_step(prompt)
