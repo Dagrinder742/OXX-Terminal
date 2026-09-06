@@ -59,7 +59,7 @@ class ScratchAgent:
             # Flexible mapping aliases for tool names
             if tool_name in ["trade_signals_ledger", "read_ledger"]:
                 tool_name = "read_trade_ledger"
-            elif tool_name in ["getLiveMarketTicker", "fetch_ticker", "get_ticker", "market_ticker"]:
+            elif tool_name in ["getLiveMarketTicker", "fetch_ticker", "get_ticker", "market_ticker", "get_live_ticker"]:
                 tool_name = "fetch_okx_ticker"
             elif tool_name in ["getLiveMarketCandles", "fetch_candles", "market_candles"]:
                 tool_name = "fetch_okx_candles"
