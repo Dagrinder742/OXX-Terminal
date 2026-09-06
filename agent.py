@@ -58,9 +58,17 @@ class ScratchAgent:
             tool_name = data.get("tool_name")
             args = data.get("arguments", {})
 
-            # Flexible mapping aliases
-            if tool_name == "trade_signals_ledger":
+            # Flexible mapping aliases for tool names
+            if tool_name in ["trade_signals_ledger", "read_ledger"]:
                 tool_name = "read_trade_ledger"
+            elif tool_name in ["getLiveMarketTicker", "fetch_ticker", "get_ticker", "market_ticker"]:
+                tool_name = "fetch_okx_ticker"
+            elif tool_name in ["getLiveMarketCandles", "fetch_candles", "market_candles"]:
+                tool_name = "fetch_okx_candles"
+
+            # Flexible mapping aliases for arguments (e.g. symbol -> inst_id)
+            if "symbol" in args and "inst_id" not in args:
+                args["inst_id"] = args.pop("symbol")
 
             if tool_name in self.tools:
                 print(f"[*] Executing tool: {tool_name} with args: {args}")
