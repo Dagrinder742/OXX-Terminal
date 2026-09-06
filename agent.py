@@ -40,12 +40,10 @@ class ScratchAgent:
         tool_output = self.execute_tool_call(response)
 
         if "Error:" not in tool_output and "not valid JSON" not in tool_output:
-            self.conversation_history.append({"role": "system", "content": f"Tool Execution Result:\n{tool_output}"})
+            self.conversation_history.append({"role": "system", "content": f"Here is the live market data retrieved from the tool:\n{tool_output}\nNow, provide a professional qualitative breakdown and market state analysis based on this data without outputting any more tool calls."})
+
             final_response = self.llm_call(self.conversation_history)
             self.conversation_history.append({"role": "assistant", "content": final_response})
-
-            if "tool_name" in final_response:
-                return f"--- Live OKX Analysis ---\n{tool_output}\n--------------------------"
             return final_response
 
         return response
