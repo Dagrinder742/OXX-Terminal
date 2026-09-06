@@ -32,14 +32,16 @@ class ScratchAgent:
         response = self.llm_call(self.conversation_history)
         self.conversation_history.append({"role": "assistant", "content": response})
 
-        # Automatically try to execute if it's a tool call
+        # Try to execute tool call
         tool_output = self.execute_tool_call(response)
-        if "not valid JSON" not in tool_output and "Error:" not in tool_output:
-            # Feed the tool output back to the agent for final qualitative reasoning
+
+        # If a tool was successfully executed, feed the output back to the model for final analysis
+        if "Error:" not in tool_output and "not valid JSON" not in tool_output:
             self.conversation_history.append({"role": "system", "content": f"Tool Execution Result:\n{tool_output}"})
             final_response = self.llm_call(self.conversation_history)
             self.conversation_history.append({"role": "assistant", "content": final_response})
             return final_response
+
         return response
 
     def execute_tool_call(self, response_text):
@@ -49,6 +51,10 @@ class ScratchAgent:
             data = json.loads(clean_json)
             tool_name = data.get("tool_name")
             args = data.get("arguments", {})
+
+            # Flexible mapping if the model short-names the tool
+            if tool_name == "trade_signals_ledger":
+                tool_name = "read_trade_ledger"
 
             if tool_name in self.tools:
                 print(f"[*] Executing tool: {tool_name} with args: {args}")
