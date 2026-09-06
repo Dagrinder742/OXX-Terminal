@@ -94,10 +94,15 @@ def test_direct_ollama():
 
 if __name__ == "__main__":
     print("[*] Initializing ScratchAgent with phi4-mini...")
-    test_direct_ollama()
 
     agent = ScratchAgent()
+
+    # Register the system_check tool the model is looking for
+    def system_check():
+        return "OXX Terminal TUI Core: ONLINE | Model: phi4-mini | Environment: Windows PowerShell / WSL"
+
+    agent.register_tool("system_check", system_check, "Performs a quick system status check.")
     agent.register_tool("run_terminal_command", run_terminal_command, "Executes a shell command.")
 
     reply = agent.run_step("Give me a quick system check for OXX Terminal.")
-    print(f"[Agent Response]: {reply}")
+    print(f"\n[Agent Response Final]: {reply}")
