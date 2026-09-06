@@ -64,9 +64,26 @@ class ScratchAgent:
             elif tool_name in ["getLiveMarketCandles", "fetch_candles", "market_candles"]:
                 tool_name = "fetch_okx_candles"
 
-            # Flexible mapping aliases for arguments (e.g. symbol -> inst_id)
             if "symbol" in args and "inst_id" not in args:
                 args["inst_id"] = args.pop("symbol")
+
+            # --- UNIVERSAL SYMBOL CLEANER ---
+            if "inst_id" in args:
+                raw_inst = str(args["inst_id"]).upper().strip()
+                cleaned = raw_inst.replace("/", "").replace("\\", "").replace(" ", "")
+
+                if "-" not in cleaned:
+                    if cleaned.endswith("USDT"):
+                        args["inst_id"] = cleaned[:-4] + "-USDT"
+                    elif cleaned.endswith("USD"):
+                        args["inst_id"] = cleaned[:-3] + "-USD"
+                    elif cleaned.endswith("BTC"):
+                        args["inst_id"] = cleaned[:-3] + "-BTC"
+                    else:
+                        args["inst_id"] = cleaned
+                else:
+                    args["inst_id"] = cleaned
+            # --------------------------------
 
             if tool_name in self.tools:
                 print(f"[*] Executing tool: {tool_name} with args: {args}")
@@ -111,7 +128,7 @@ def fetch_okx_ticker(inst_id: str = "BTC-USD"):
     except Exception as e:
         return f"API Exception: {str(e)}"
 
-def fetch_okx_candles(inst_id: str = "BTC-USD", bar: str = "15m", limit: int = 10):
+def fetch_okx_candles(inst_id: str = "BTC-USD", bar: str = "1H", limit: int = 10):
     """Fetches recent OHLCV candlestick data directly from OKX V5 REST API."""
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/candles"
