@@ -1,0 +1,26 @@
+{
+  "notes": {},
+  "history": [
+    {
+      "timestamp": "2026-09-07T14:12:37.985499",
+      "instrument": "BTC-USD",
+      "market_state": "Market Ticker: 79218.3",
+      "support": 79000.0,
+      "resistance": 80563.2
+    },
+    {
+      "timestamp": "2026-09-07T10:22:48.598617",
+      "instrument": "BTC-USD",
+      "market_state": "Market Ticker: 79104.9",
+      "support": 79000.0,
+      "resistance": 80563.2
+    },
+    {
+      "timestamp": "2026-09-07T10:49:28.180221",
+      "instrument": "BTC-USD",
+      "market_state": "Market Ticker: 79079.9",
+      "support": 0.0,
+      "resistance": 0.0
+    }
+  ]
+}
