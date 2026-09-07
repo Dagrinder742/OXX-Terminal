@@ -28,6 +28,34 @@
       "market_state": "Market Ticker: 79347.8",
       "support": 0.0,
       "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-07T17:14:13.285706",
+      "instrument": "BTC-USDT",
+      "market_state": "Market Ticker: 79243.5",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-07T17:14:13.485687",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Observation",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-07T17:53:59.287942",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 79203.4",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-07T17:53:59.292485",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
     }
   ]
 }

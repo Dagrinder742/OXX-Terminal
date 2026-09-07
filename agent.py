@@ -55,7 +55,7 @@ class AgentMemory:
 
 OKX_REST_HOST = "https://us.okx.com"
 
-class ScratchAgent:
+class QuantAgentTrinity:
     def __init__(self, model_name="phi4-mini", memory_file="agent_memory.json"):
         self.model_name = model_name
         self.memory = AgentMemory(memory_file)
@@ -63,13 +63,14 @@ class ScratchAgent:
         
         # Base system prompt
         self.system_instructions = (
-            "You are the OXX Quant Agent. Your goal is to analyze OKX market data and provide structural insights.\n\n"
-            "STEP 1: Check the 'RECENT MEMORY' below for historical context.\n"
-            "STEP 2: Use the 'TOOL CATALOG' to fetch fresh market data via JSON.\n"
-            "STEP 3: Once you receive 'OBSERVATION DATA', provide a deep analysis.\n\n"
-            "JSON TOOL SCHEMA:\n"
-            "{\n  \"tool_name\": \"name\",\n  \"arguments\": {\"key\": \"value\"}\n}\n"
-            "Do not talk or explain your reasoning until AFTER you have the observation data."
+            "You are Quant Agent Trinity, a high-fidelity analytical extension of the OXX Terminal. "
+            "Your identity is rooted in technical precision and objective market analysis.\n\n"
+            "OPERATIONAL PROTOCOL:\n"
+            "1. Generate valid JSON objects for tool invocation.\n"
+            "2. Utilize precise technical nomenclature. Maintain objective analytical standards.\n"
+            "3. Omit natural language reasoning during the data retrieval phase.\n\n"
+            "JSON SCHEMA:\n"
+            "{\n  \"tool_name\": \"exact_identifier\",\n  \"arguments\": {\"key\": \"value\"}\n}\n"
         )
 
     def register_tool(self, name, func, description):
@@ -104,30 +105,30 @@ class ScratchAgent:
             {"role": "user", "content": user_input}
         ]
 
-        # 1. Thought & Action phase
-        print(f"[*] Agent Trinity is thinking (Model: {self.model_name})...")
+        # 1. Perception & Action phase
+        print(f"[*] Trinity is processing perception (Model: {self.model_name})...")
         response = self.llm_call(conversation)
         
         # 2. Execution phase
         tool_output = self.execute_tool_call(response)
 
         # 3. Observation & Analysis phase
-        if tool_output and "Error" not in tool_output and "not valid JSON" not in tool_output:
-            # Auto-commit to memory before final analysis
+        if tool_output and "Error" not in tool_output and "No tool calls detected" not in tool_output:
+            # Commit state update to memory
             self.auto_commit_memory(tool_output)
 
-            # Refined analysis prompt to encourage depth
+            # Technical analysis prompt
             analysis_prompt = (
-                f"You have successfully fetched this market data:\n{tool_output}\n\n"
-                "TASK: Provide a professional quantitative analysis. Speak in plain English now. "
-                "Highlight the Verdict, the 1H Boss status, and the tactical score. "
-                "Compare this price to the RECENT MEMORY to identify the trend."
+                f"Retrieved Market Data:\n{tool_output}\n\n"
+                "OBJECTIVE: Conduct a professional quantitative analysis. "
+                "Specify Verdict, 1H Macro Filter alignment, and Confluence Score. "
+                "Identify trend variances relative to RECENT MEMORY."
             )
 
             conversation.append({"role": "assistant", "content": response})
             conversation.append({"role": "user", "content": analysis_prompt})
 
-            print("[*] Agent Trinity is analyzing results (Transitioning to Plain Text)...")
+            print("[*] Trinity is generating technical analysis...")
             final_response = self.llm_call(conversation)
             return final_response
         
@@ -138,57 +139,64 @@ class ScratchAgent:
         """Parse agent output and execute registered tools. Supports multiple JSON blocks."""
         results = []
         try:
-            # 1. Extraction: Look for anything between { and }
+            # 1. Extraction: Look for everything between { and }
             import re
-            json_blocks = re.findall(r'\{.*?\}', response_text, re.DOTALL)
+            # Extract distinct JSON objects
+            json_blocks = []
+            stack = 0
+            start = -1
+            for i, char in enumerate(response_text):
+                if char == '{':
+                    if stack == 0: start = i
+                    stack += 1
+                elif char == '}':
+                    stack -= 1
+                    if stack == 0 and start != -1:
+                        json_blocks.append(response_text[start:i+1])
             
             if not json_blocks:
-                # Fallback for plain text "tool_name: name" format if JSON fails
-                lines = response_text.split("\n")
-                tool_name = None
-                args = {}
-                for line in lines:
-                    if "tool_name:" in line:
-                        tool_name = line.split("tool_name:")[1].strip()
-                    if "arguments:" in line:
-                        try:
-                            arg_str = line.split("arguments:")[1].strip()
-                            args = json.loads(arg_str) if arg_str != "{}" else {}
-                        except: pass
-                if tool_name:
-                    json_blocks = [json.dumps({"tool_name": tool_name, "arguments": args})]
+                # Fallback for plain text or malformed output
+                print("[!] No valid JSON blocks found. Attempting regex extraction...")
+                json_blocks = re.findall(r'\{.*?\}', response_text, re.DOTALL)
 
             if not json_blocks:
+                print("[!] No tool calls detected in agent response.")
                 return "No tool calls detected; treating as plain text."
 
             for block in json_blocks:
                 try:
-                    data = json.loads(block)
+                    # Clean common formatting issues that break json.loads
+                    cleaned_block = block.strip()
+                    # Fix common trailing comma issues in LLM JSON
+                    cleaned_block = re.sub(r',\s*\}', '}', cleaned_block)
+                    cleaned_block = re.sub(r',\s*\]', ']', cleaned_block)
+                    
+                    data = json.loads(cleaned_block)
                     req_name = data.get("tool_name")
                     args = data.get("arguments", {})
 
-                    # Fuzzy matching
                     available_names = list(self.tools.keys())
                     matches = difflib.get_close_matches(req_name, available_names, n=1, cutoff=0.6)
                     
                     if matches:
                         matched_name = matches[0]
-                        # Argument Normalization
                         if "inst_id" not in args:
                             for alt in ["instrument", "symbol", "instId", "pair"]:
                                 if alt in args:
                                     args["inst_id"] = args.pop(alt)
                                     break
                         
-                        print(f"[*] Executing: {matched_name}")
+                        print(f"[*] Executing Tool: {matched_name}")
                         output = self.tools[matched_name]["function"](**args)
                         results.append(f"TOOL: {matched_name}\nOUTPUT:\n{output}")
                     else:
-                        results.append(f"Error: Tool '{req_name}' not found.")
+                        results.append(f"Error: Tool identifier '{req_name}' not found.")
                 except Exception as e:
-                    results.append(f"Error parsing/executing block: {str(e)}")
+                    print(f"[!] Block execution error: {e}")
+                    results.append(f"Error executing block: {str(e)}")
 
-            return "\n\n".join(results)
+            final_output = "\n\n".join(results)
+            return final_output if final_output else "Error: Parser found blocks but execution yielded no results."
                 
         except Exception as e:
             return f"Critical Parser Error: {str(e)}"
@@ -211,9 +219,9 @@ class ScratchAgent:
                     low = float(data.get("low_24h", 0))
                     
                     if inst != "Unknown":
-                        state = f"Market Ticker: {last_price}" if last_price > 0 else "Analysis Observation"
+                        state = f"Market State Delta: {last_price}" if last_price > 0 else "Analysis Delta"
                         self.memory.save_market_memory(inst, state, low, high)
-                        print(f"[*] Memory committed for {inst}.")
+                        print(f"[*] State Committed: {inst}")
             except:
                 continue
 
@@ -287,9 +295,19 @@ def fetch_rpi_index(inst_id: str = "BTC-USDT"):
         last = float(data["last_price"])
         high = float(data["high_24h"])
         low = float(data["low_24h"])
+        
+        # RPI: 0% = 24h Low, 100% = 24h High
         rpi = ((last - low) / (high - low)) * 100 if (high - low) > 0 else 50
+        
         data["rpi_index"] = round(rpi, 2)
-        data["sentiment"] = "Star Blue (Dip)" if rpi < 30 else "Star Red (Chase)" if rpi > 70 else "Neutral"
+        # Technical labels for mean reversion analysis
+        if rpi <= 30:
+            data["rpi_classification"] = "Lower-Range Compression"
+        elif rpi >= 70:
+            data["rpi_classification"] = "Upper-Range Expansion"
+        else:
+            data["rpi_classification"] = "Mid-Range Equilibrium"
+            
         return json.dumps(data, indent=2)
     except Exception as e:
         return f"Error calculating RPI: {str(e)}"
@@ -360,7 +378,7 @@ def fetch_order_book_walls(inst_id: str = "BTC-USDT"):
 def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
     """
     Implements the 'Hierarchical Analytics Engine' logic.
-    Accepts **kwargs to prevent crashes from hallucinated arguments.
+    Evaluates 1H Macro Trend and 15m Tactical Confluence.
     """
     try:
         # 1. Macro Check (1H)
@@ -423,15 +441,15 @@ def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
         return json.dumps({
             "instrument": inst_id,
             "last_price": c[-1],
-            "macro_boss_bullish": macro_bullish,
-            "tactical_score": f"{tactical_score}/4",
+            "macro_filter_bullish": macro_bullish,
+            "tactical_confluence_score": f"{tactical_score}/4",
             "gates": {
-                "trend": "Bullish" if gate_trend else "Neutral/Bearish",
-                "momentum": "Accelerating" if gate_momentum else "Decelerating/Negative",
-                "volume": "Surge" if gate_volume else "Normal",
-                "strength": f"{round(strength*100, 1)}% of range"
+                "structural_trend": "Bullish" if gate_trend else "Neutral/Bearish",
+                "momentum_acceleration": "Active" if gate_momentum else "Decelerating",
+                "volume_surge": "Confirmed" if gate_volume else "Nominal",
+                "price_location": f"{round(strength*100, 1)}% of range"
             },
-            "verdict": "ELITE SETUP" if macro_bullish and tactical_score == 4 else "STRONG CONFLUENCE" if tactical_score >= 3 else "MONITORING"
+            "verdict": "CONFLUENCE_LEVEL_4" if macro_bullish and tactical_score == 4 else "CONFLUENCE_LEVEL_3" if tactical_score >= 3 else "MONITORING"
         }, indent=2)
     except Exception as e:
         return f"Error in Quantitative Engine: {str(e)}"
@@ -481,22 +499,22 @@ def fetch_market_sentiment(inst_id: str = "BTC-USDT", **kwargs):
 # ================================================================================================
 
 if __name__ == "__main__":
-    print("[*] Initializing OXX Quant Agent Trinity(phi4-mini)...")
+    print("[*] Initializing Quant Agent Trinity (phi4-mini)...")
 
-    agent = ScratchAgent()
+    agent = QuantAgentTrinity()
 
-    # Register live tools
-    agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Fetches real-time ticker stats.")
-    agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Fetches recent OHLCV candles.")
-    agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Calculates RPI sentiment (Dip/Chase).")
-    agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "Calculates EMA and RSI.")
-    agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Identifies liquidity walls.")
-    agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Runs the full Hierarchical Analytics Engine (1H Boss + 15m Tactical Gates).")
-    agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Fetches institutional metrics: Funding Rate, Open Interest, and Liquidations.")
+    # Register analytical tools
+    agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Retrieves real-time instrument telemetry.")
+    agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Retrieves historical OHLCV data.")
+    agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Calculates RPI for relative price location analysis.")
+    agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "Calculates EMA and RSI metrics.")
+    agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Identifies institutional liquidity blocks.")
+    agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Evaluates macro trend and tactical confluence.")
+    agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Retrieves institutional leverage and flow metrics.")
 
-    # Test run
-    prompt = "Perform a deep-dive analysis on BTC-USDT. I need the quantitative confluence score AND the institutional market sentiment (funding/OI) to see if we are over-leveraged."
-    print(f"\n[*] User Request: {prompt}\n")
+    # Execute analytical cycle
+    prompt = "Conduct a quantitative analysis of BTC-USDT. Evaluate confluence levels and institutional sentiment metrics."
+    print(f"\n[*] User Input: {prompt}\n")
 
     reply = agent.run_step(prompt)
-    print(f"\n[Agent Final Analysis]:\n{reply}")
+    print(f"\n[Final Technical Analysis]:\n{reply}")

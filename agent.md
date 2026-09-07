@@ -3,30 +3,27 @@
 This document tracks the architecture, workflow, and evolution of the **OXX Quant Agent**, an autonomous analytical layer for the OXX Terminal.
 
 ## 1. Core Philosophy
-The Agent is designed as a **read-only reasoning layer**. It observes market telemetry and historical data to provide tactical insights without the risk of autonomous execution. It adheres to the "Snowman Standard" of high-fidelity data processing and secure memory management.
+The Agent is designed as a **read-only analytical layer**. It observes market telemetry and historical data to provide professional quantitative insights. It follows a high-fidelity engineering standard for data processing and secure memory management.
 
 ## 2. Architectural Components
 
 ### **A. Perception (Tools)**
-The Agent interacts with the outside world (OKX API) through registered Python functions.
-*   `fetch_okx_ticker`: Real-time 24h stats.
+The Agent interacts with the outside world through strictly technical Python functions.
+*   `fetch_okx_ticker`: Real-time instrument statistics.
 *   `fetch_okx_candles`: Historical OHLCV data.
-*   `fetch_rpi_index`: Proprietary Daily Range Position Index (Sentiment).
-*   `fetch_technical_indicators`: Real-time EMA-9, EMA-21, and RSI-14 calculation.
-*   `fetch_order_book_walls`: Liquidity depth analysis (Big Money tracking).
-*   `check_quantitative_confluence`: Hierarchical Analytics Engine (1H Boss + 15m Tactical Gates).
-*   `fetch_market_sentiment`: Institutional metrics (Funding Rates, Open Interest, Liquidations).
-*   `read_internal_signals`: Local quantitative signal history (Ledger).
+*   `fetch_rpi_index`: Relative price location index.
+*   `fetch_technical_indicators`: Real-time EMA and RSI calculation.
+*   `fetch_order_book_walls`: Liquidity depth analysis.
+*   `check_quantitative_confluence`: Hierarchical trend and tactical gate evaluation.
+*   `fetch_market_sentiment`: Institutional leverage and money flow metrics.
 
 ### **B. Reasoning (LLM Loop)**
-*   **Model**: `phi4-mini` (Local Ollama).
-*   **Loop**: Perception -> Tool Call -> Observation -> Analysis.
-*   **Dynamic Tool Selection**: Instead of hardcoded aliases, the Agent is provided with a "Tool Catalog" in its system prompt. It selects the best tool based on the functional description.
+*   **Model**: `phi4-mini`.
+*   **Loop**: Perception -> Tool Call -> Observation -> Quantitative Analysis.
+*   **Objective**: To deliver objective, data-driven market breakdowns.
 
 ### **C. Persistence (Memory)**
-*   **File**: `agent_memory.json`
-*   **Recall**: Before every analytical turn, the Agent reads the last 10 historical events. This allows for **Temporal Awareness** (e.g., comparing current price to the last recorded support level).
-*   **Auto-Commit**: Successful tool observations are automatically distilled and saved to the memory ledger.
+*   **Recall**: The Agent references the last 10 historical state transitions before analyzing new data to identify trend deltas.
 
 ## 3. The "Recall" Workflow
 1.  **Initialize**: Agent loads `agent_memory.json`.
