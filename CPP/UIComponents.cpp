@@ -17,7 +17,7 @@ Element UIComponents::Header(const std::string& inst_id, const std::string& pric
 Element UIComponents::Sidebar(const std::string& balance, const std::map<std::string, std::string>& preflight) {
     auto search_box = vbox({
         text(" Instrument Search ") | dim,
-        text(" BTC-USD ") | border | color(Color::Green)
+        text(" BTC-USDT ") | border | color(Color::Green)
     });
 
     auto portfolio = vbox({
@@ -99,7 +99,7 @@ Element UIComponents::LastTrades(const std::vector<std::vector<std::string>>& tr
     }
     return vbox({
         text(" Last Trades ") | color(SteelersGold),
-        text(" Price (USD)  Amount  Time ") | dim,
+        text(" Price (USDT)  Amount  Time ") | dim,
         separator(),
         vbox(std::move(trade_rows))
     }) | border | flex;

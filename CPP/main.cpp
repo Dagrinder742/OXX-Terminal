@@ -28,7 +28,7 @@ struct TickerData {
 
 struct AppState {
     std::mutex mtx;
-    std::string focus_pair = "BTC-USD";
+    std::string focus_pair = "BTC-USDT";
     std::string current_price = "Connecting...";
     std::string high_24h = "0.0";
     std::string low_24h = "0.0";
@@ -100,8 +100,8 @@ void on_ws_data(const std::string& channel, const nlohmann::json& data) {
 int main() {
     ix::initNetSystem();
 
-    std::vector<std::string> symbols = {"BTC-USD", "ETH-USD", "SOL-USD", "HYPE-USD", "LTC-USD", "NEAR-USD", "XRP-USD"};
-    OKXPublicClient publicClient("BTC-USD", symbols);
+    std::vector<std::string> symbols = {"BTC-USDT", "ETH-USDT", "SOL-USDT", "HYPE-USDT", "LTC-USDT", "NEAR-USDT", "XRP-USDT"};
+    OKXPublicClient publicClient("BTC-USDT", symbols);
     publicClient.set_callback(on_ws_data);
     publicClient.connect();
 
@@ -115,7 +115,7 @@ int main() {
 
         // Sidebar Data
         std::map<std::string, std::string> pf = {{"fee", "$0.00"}, {"hurdle", "$0.00"}, {"net_tp", "$0.00"}};
-        auto sidebar = UIComponents::Sidebar("0.00 USD", pf);
+        auto sidebar = UIComponents::Sidebar("0.00 USDT", pf);
 
         // Center Stack
         auto chart = UIComponents::ChartPlaceholder(app_state.focus_pair, "15m");

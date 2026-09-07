@@ -1,4 +1,4 @@
->>> """ i need a custom ai tool that can plug into python and monitor okx BTC-USD spot pair, i nee
+>>> """ i need a custom ai tool that can plug into python and monitor okx BTC-USDT spot pair, i nee
 ... d it to analyze 1H candles, MACD, RSI, EMA20-200.
 ... """
 Creating an AI-powered trading bot requires careful planning. You will have several

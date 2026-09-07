@@ -7,7 +7,7 @@ from textual.reactive import reactive
 import plotext as plt
 
 # Simplified mock for exploration
-WATCHLIST = [f"TOKEN-{i}-USD" for i in range(24)]
+WATCHLIST = [f"TOKEN-{i}-USDT" for i in range(24)]
 
 class ReactiveScalingApp(App):
     """

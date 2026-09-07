@@ -13,7 +13,7 @@ class OKXChartEngine:
     BASE_URL = "https://us.okx.com"
 
     @classmethod
-    def fetch_candles(cls, inst_id: str = "BTC-USD", bar: str = "15m", limit: int = 40) -> dict:
+    def fetch_candles(cls, inst_id: str = "BTC-USDT", bar: str = "15m", limit: int = 40) -> dict:
         endpoint = f"{cls.BASE_URL}/api/v5/market/candles"
         params = {"instId": inst_id, "bar": bar, "limit": limit}
 

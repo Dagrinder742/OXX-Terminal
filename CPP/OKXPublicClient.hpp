@@ -11,7 +11,7 @@ class OKXPublicClient {
 public:
     using DataCallback = std::function<void(const std::string& channel, const nlohmann::json& data)>;
 
-    OKXPublicClient(const std::string& instrument_id = "BTC-USD",
+    OKXPublicClient(const std::string& instrument_id = "BTC-USDT",
                     const std::vector<std::string>& watchlist = {});
 
     ~OKXPublicClient();

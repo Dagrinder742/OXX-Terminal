@@ -22,11 +22,11 @@ from accountant import PnLAccountant
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 WATCHLIST = [
-    "BTC-USD", "HYPE-USD", "SOL-USD", "ETH-USD", "JUP-USD",
-    "JTO-USD", "APT-USD", "PAXG-USD", "TRX-USD", "SHIB-USD",
-    "RENDER-USD", "OP-USD", "ATOM-USD", "LTC-USD",
-    "NEAR-USD", "UNI-USD", "LINK-USD", "ADA-USD", "AVAX-USD",
-    "XRP-USD", "SUI-USD", "DOGE-USD", "BNB-USD", "USDT-USD"
+    "BTC-USDT", "HYPE-USDT", "SOL-USDT", "ETH-USDT", "JUP-USDT",
+    "JTO-USDT", "APT-USDT", "PAXG-USDT", "TRX-USDT", "SHIB-USDT",
+    "RENDER-USDT", "OP-USDT", "ATOM-USDT", "LTC-USDT",
+    "NEAR-USDT", "UNI-USDT", "LINK-USDT", "ADA-USDT", "AVAX-USDT",
+    "XRP-USDT", "SUI-USDT", "DOGE-USDT", "BNB-USDT", "USDC-USDT"
 ]
 
 class AuthModal(ModalScreen):
@@ -93,7 +93,7 @@ class OKXTerminalApp(App):
 
     def __init__(self):
         super().__init__()
-        self.instrument_id = "BTC-USD"
+        self.instrument_id = "BTC-USDT"
         self.cached_asks = []
         self.cached_bids = []
         self.cached_trades = []
@@ -407,7 +407,7 @@ class OKXTerminalApp(App):
         yield Header()
 
         # Top ticker strip
-        yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USD')} | Loading Ticker Feed...", id="header-bar")
+        yield Static(f" OXX TUI > {getattr(self, 'current_pair', 'BTC-USDT')} | Loading Ticker Feed...", id="header-bar")
 
         # Main viewport with page-level scrolling
         with VerticalScroll(id="page-viewport"):
@@ -419,7 +419,7 @@ class OKXTerminalApp(App):
                     # Sidebar: Portfolio Balance & Order Entry Panel
                     with Vertical(classes="panel", id="left-sidebar"):
                         yield Static("[bold #ffcc00]Instrument Search[/bold #ffcc00]")
-                        yield Input(placeholder="BTC-USD", id="instrument-search-input")
+                        yield Input(placeholder="BTC-USDT", id="instrument-search-input")
 
                         yield Static("[bold #ffcc00]Portfolio Balance[/bold #ffcc00]")
                         yield Static("Loading Balances...", id="portfolio-balance")
@@ -513,7 +513,7 @@ class OKXTerminalApp(App):
 
                         with Vertical(classes="sub-panel", id="last-trades-panel"):
                             yield Static("[bold yellow]Last Trades[/bold yellow]")
-                            yield Static("Price (USD)  Amount  Time\n---------------------------------", id="last-trades-header")
+                            yield Static("Price (USDT)  Amount  Time\n---------------------------------", id="last-trades-header")
                             yield Static("Waiting for trade stream...", id="last-trades-content")
 
                     # 3. Onyx Ticker Board (Live Watchlist)
@@ -644,7 +644,7 @@ class OKXTerminalApp(App):
                 new_inst = new_inst.replace(" ", "-")
 
             if "-" not in new_inst:
-                new_inst = f"{new_inst}-USD"
+                new_inst = f"{new_inst}-USDT"
 
             event.input.value = ""
             self.action_switch_instrument(new_inst)
@@ -1319,7 +1319,7 @@ class OKXTerminalApp(App):
                 color = "green" if t["side"] == "buy" else "red"
                 trade_lines.append(f"[{color}]{t['price']:,.1f} | {t['size']:.4f}[/{color}]")
 
-            trades_text = "Price (USD)  Amount\n" + ("\n".join(trade_lines) if trade_lines else "No Trades")
+            trades_text = "Price (USDT)  Amount\n" + ("\n".join(trade_lines) if trade_lines else "No Trades")
             try:
                 self.query_one("#last-trades-content", Static).update(trades_text)
             except Exception as e:

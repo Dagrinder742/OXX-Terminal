@@ -8,7 +8,7 @@ OXX-Terminal is a high-performance Terminal User Interface (TUI) dashboard for O
 - **Secure Auth**: OS-level encrypted credential storage using `keyring` (AES-128 GCM).
 - **Live Market Data**: Hybrid data pipeline using `asyncio` + WebSockets for live updates and REST for instant hydration.
 - **Order Execution**: Integrated limit and market order entry with stop-loss (SL) and take-profit (TP) support.
-- **Smart Input**: Flexible instrument search (e.g., `btc` -> `BTC-USD`).
+- **Smart Input**: Flexible instrument search (e.g., `btc` -> `BTC-USDT`).
 - **Technical Analysis**: ASCII/Unicode charting engine with support for candlesticks and indicators (EMA/RSI).
 
 ## 🛠️ Architectural Stack

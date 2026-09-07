@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("OKX_Client")
 
 class OKXPublicClient:
-    def __init__(self, instrument_id: str = "BTC-USD", callback: Optional[Callable[[str, dict], None]] = None, watchlist: List[str] = None):
+    def __init__(self, instrument_id: str = "BTC-USDT", callback: Optional[Callable[[str, dict], None]] = None, watchlist: List[str] = None):
         self.instrument_id = instrument_id
         self.watchlist = watchlist or []
         self.uri = OKX_WS_PUBLIC
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     async def test_callback(channel, data):
         print(f"Channel: {channel} | Data count: {len(data)}")
 
-    client = OKXPublicClient("BTC-USD", callback=test_callback)
+    client = OKXPublicClient("BTC-USDT", callback=test_callback)
     try:
         asyncio.run(client.connect_market_streams())
     except KeyboardInterrupt:

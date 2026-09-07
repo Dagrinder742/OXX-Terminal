@@ -135,69 +135,87 @@ class ScratchAgent:
         return response
 
     def execute_tool_call(self, response_text):
-        """Parse agent JSON output and execute the corresponding tool with fuzzy matching."""
+        """Parse agent output and execute registered tools. Supports multiple JSON blocks."""
+        results = []
         try:
-            # Strip markdown if present
-            clean_json = response_text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_json)
+            # 1. Extraction: Look for anything between { and }
+            import re
+            json_blocks = re.findall(r'\{.*?\}', response_text, re.DOTALL)
             
-            req_name = data.get("tool_name")
-            args = data.get("arguments", {})
+            if not json_blocks:
+                # Fallback for plain text "tool_name: name" format if JSON fails
+                lines = response_text.split("\n")
+                tool_name = None
+                args = {}
+                for line in lines:
+                    if "tool_name:" in line:
+                        tool_name = line.split("tool_name:")[1].strip()
+                    if "arguments:" in line:
+                        try:
+                            arg_str = line.split("arguments:")[1].strip()
+                            args = json.loads(arg_str) if arg_str != "{}" else {}
+                        except: pass
+                if tool_name:
+                    json_blocks = [json.dumps({"tool_name": tool_name, "arguments": args})]
 
-            # Fuzzy matching for tool names to combat phi4-mini hallucination
-            available_names = list(self.tools.keys())
-            matches = difflib.get_close_matches(req_name, available_names, n=1, cutoff=0.6)
-            
-            if matches:
-                matched_name = matches[0]
-                if matched_name != req_name:
-                    print(f"[!] Fuzzy matched tool name '{req_name}' to '{matched_name}'")
+            if not json_blocks:
+                return "No tool calls detected; treating as plain text."
+
+            for block in json_blocks:
+                try:
+                    data = json.loads(block)
+                    req_name = data.get("tool_name")
+                    args = data.get("arguments", {})
+
+                    # Fuzzy matching
+                    available_names = list(self.tools.keys())
+                    matches = difflib.get_close_matches(req_name, available_names, n=1, cutoff=0.6)
+                    
+                    if matches:
+                        matched_name = matches[0]
+                        # Argument Normalization
+                        if "inst_id" not in args:
+                            for alt in ["instrument", "symbol", "instId", "pair"]:
+                                if alt in args:
+                                    args["inst_id"] = args.pop(alt)
+                                    break
+                        
+                        print(f"[*] Executing: {matched_name}")
+                        output = self.tools[matched_name]["function"](**args)
+                        results.append(f"TOOL: {matched_name}\nOUTPUT:\n{output}")
+                    else:
+                        results.append(f"Error: Tool '{req_name}' not found.")
+                except Exception as e:
+                    results.append(f"Error parsing/executing block: {str(e)}")
+
+            return "\n\n".join(results)
                 
-                # --- ROBUST ARGUMENT MAPPING ---
-                # Map 'instrument' or 'symbol' to 'inst_id' for market tools
-                if "inst_id" not in args:
-                    for alt in ["instrument", "symbol", "instId", "pair"]:
-                        if alt in args:
-                            args["inst_id"] = args.pop(alt)
-                            break
-                # -------------------------------
-                
-                print(f"[*] Executing tool: {matched_name} with args: {args}")
-                return self.tools[matched_name]["function"](**args)
-            else:
-                return f"Error: Tool '{req_name}' not found in catalog."
-                
-        except json.JSONDecodeError:
-            return "Response was not valid JSON; treating as plain text response."
         except Exception as e:
-            return f"Error executing tool: {str(e)}"
+            return f"Critical Parser Error: {str(e)}"
 
     def auto_commit_memory(self, tool_output):
-        """Distills tool output into the memory engine."""
-        try:
-            data = json.loads(tool_output)
-            # Handle list output (like candles) or dict output (like ticker)
-            if isinstance(data, list) and len(data) > 0:
-                # Assuming candles: [ts, open, high, low, close, vol, volCcy, volCcyQuote, confirm]
-                inst = "Unknown" # Candles API doesn't return ID in data usually
-                last_price = float(data[0][4])
-                high = float(data[0][2])
-                low = float(data[0][3])
-                state = f"Candle Close: {last_price}"
-            else:
-                inst = data.get("instrument", "Unknown")
-                last_price = float(data.get("last_price", 0))
-                high = float(data.get("high_24h", 0))
-                low = float(data.get("low_24h", 0))
-                state = f"Market Ticker: {last_price}"
-
-            if inst != "Unknown":
-                self.memory.save_market_memory(inst, state, low, high)
-                print(f"[*] Memory committed for {inst}.")
-            else:
-                print("[!] Memory commit skipped: Instrument is 'Unknown'.")
-        except Exception as e:
-            print(f"[!] Memory commit error: {str(e)}")
+        """Distills tool output into the memory engine. Handles multi-tool strings."""
+        blocks = tool_output.split("TOOL: ")
+        for block in blocks:
+            if not block.strip(): continue
+            try:
+                # Find the JSON section
+                if "OUTPUT:\n{" in block:
+                    json_str = "{" + block.split("OUTPUT:\n{")[1]
+                    data = json.loads(json_str)
+                    
+                    # Handle dict output (ticker/sentiment)
+                    inst = data.get("instrument", "Unknown")
+                    last_price = float(data.get("last_price", 0))
+                    high = float(data.get("high_24h", 0))
+                    low = float(data.get("low_24h", 0))
+                    
+                    if inst != "Unknown":
+                        state = f"Market Ticker: {last_price}" if last_price > 0 else "Analysis Observation"
+                        self.memory.save_market_memory(inst, state, low, high)
+                        print(f"[*] Memory committed for {inst}.")
+            except:
+                continue
 
     def llm_call(self, messages):
         """Route the conversation history to local Ollama inference."""
@@ -214,7 +232,7 @@ class ScratchAgent:
 # LIVE TOOLS
 # ================================================================================================
 
-def fetch_okx_ticker(inst_id: str = "BTC-USD"):
+def fetch_okx_ticker(inst_id: str = "BTC-USDT"):
     """Fetches real-time ticker data directly from OKX V5 REST API."""
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/ticker"
@@ -236,7 +254,7 @@ def fetch_okx_ticker(inst_id: str = "BTC-USD"):
     except Exception as e:
         return f"API Exception: {str(e)}"
 
-def fetch_okx_candles(inst_id: str = "BTC-USD", bar: str = "1H", limit: int = 10):
+def fetch_okx_candles(inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 10):
     """Fetches recent OHLCV candlestick data directly from OKX V5 REST API."""
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/candles"
@@ -259,7 +277,7 @@ def read_trade_ledger(lines: int = 15):
         content = f.readlines()
     return "".join(content[-lines:])
 
-def fetch_rpi_index(inst_id: str = "BTC-USD"):
+def fetch_rpi_index(inst_id: str = "BTC-USDT"):
     """Calculates the Daily Range Position Index (RPI) for an instrument."""
     ticker_json = fetch_okx_ticker(inst_id)
     if "Error" in ticker_json:
@@ -276,7 +294,7 @@ def fetch_rpi_index(inst_id: str = "BTC-USD"):
     except Exception as e:
         return f"Error calculating RPI: {str(e)}"
 
-def fetch_technical_indicators(inst_id: str = "BTC-USD", bar: str = "1H"):
+def fetch_technical_indicators(inst_id: str = "BTC-USDT", bar: str = "1H"):
     """Calculates EMA-9, EMA-21, and RSI-14 from recent candles."""
     candles_json = fetch_okx_candles(inst_id, bar, limit=50)
     if "Error" in candles_json:
@@ -318,7 +336,7 @@ def fetch_technical_indicators(inst_id: str = "BTC-USD", bar: str = "1H"):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def fetch_order_book_walls(inst_id: str = "BTC-USD"):
+def fetch_order_book_walls(inst_id: str = "BTC-USDT"):
     """Identifies large liquidity walls in the order book."""
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/books"
@@ -339,7 +357,7 @@ def fetch_order_book_walls(inst_id: str = "BTC-USD"):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def fetch_quantitative_setup(inst_id: str = "BTC-USD", **kwargs):
+def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
     """
     Implements the 'Hierarchical Analytics Engine' logic.
     Accepts **kwargs to prevent crashes from hallucinated arguments.
@@ -418,6 +436,46 @@ def fetch_quantitative_setup(inst_id: str = "BTC-USD", **kwargs):
     except Exception as e:
         return f"Error in Quantitative Engine: {str(e)}"
 
+def fetch_market_sentiment(inst_id: str = "BTC-USDT", **kwargs):
+    """
+    Fetches institutional sentiment metrics:
+    1. Funding Rate (Leverage Bias)
+    2. Open Interest (Money Flow)
+    3. 24h Liquidations (Pain Points)
+    Note: Hits global endpoints for sentiment context as US is Spot-only.
+    """
+    sentiment_data = {"instrument": inst_id}
+    global_host = "https://www.okx.com"
+    # Map BTC-USDT to BTC-USDC-SWAP for derivatives sentiment
+    swap_inst = inst_id.split("-")[0] + "-USDC-SWAP"
+
+    try:
+        # 1. Funding Rate
+        f_url = f"{global_host}/api/v5/public/funding-rate"
+        f_resp = requests.get(f_url, params={"instId": swap_inst}, timeout=5).json()
+        if f_resp.get("code") == "0" and f_resp.get("data"):
+            sentiment_data["funding_rate"] = f_resp["data"][0].get("fundingRate")
+            sentiment_data["next_funding_time"] = f_resp["data"][0].get("fundingTime")
+
+        # 2. Open Interest
+        oi_url = f"{global_host}/api/v5/public/open-interest"
+        oi_resp = requests.get(oi_url, params={"instId": swap_inst}, timeout=5).json()
+        if oi_resp.get("code") == "0" and oi_resp.get("data"):
+            sentiment_data["open_interest"] = oi_resp["data"][0].get("oi")
+            sentiment_data["oi_ccy"] = oi_resp["data"][0].get("oiCcy")
+
+        # 3. Liquidations (24h snapshot approximation)
+        liq_url = f"{global_host}/api/v5/public/liquidation-info"
+        liq_params = {"instId": swap_inst, "mgnMode": "cross", "limit": 20}
+        liq_resp = requests.get(liq_url, params=liq_params, timeout=5).json()
+        if liq_resp.get("code") == "0" and liq_resp.get("data"):
+            total_liq = sum(float(x.get("sz", 0)) for x in liq_resp["data"])
+            sentiment_data["recent_liquidations_sz"] = round(total_liq, 2)
+            
+        return json.dumps(sentiment_data, indent=2)
+    except Exception as e:
+        return f"Error fetching sentiment: {str(e)}"
+
 # ================================================================================================
 # MAIN EXECUTION
 # ================================================================================================
@@ -433,10 +491,11 @@ if __name__ == "__main__":
     agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Calculates RPI sentiment (Dip/Chase).")
     agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "Calculates EMA and RSI.")
     agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Identifies liquidity walls.")
-    agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Runs the full Hierarchical Analytics Engine (1H Boss + 15m Tactical Gates) for elite trade setups.")
+    agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Runs the full Hierarchical Analytics Engine (1H Boss + 15m Tactical Gates).")
+    agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Fetches institutional metrics: Funding Rate, Open Interest, and Liquidations.")
 
     # Test run
-    prompt = "Run a full confluence check on BTC-USD. I want to know if the 1H Boss is passing and what the tactical score is."
+    prompt = "Perform a deep-dive analysis on BTC-USDT. I need the quantitative confluence score AND the institutional market sentiment (funding/OI) to see if we are over-leveraged."
     print(f"\n[*] User Request: {prompt}\n")
 
     reply = agent.run_step(prompt)

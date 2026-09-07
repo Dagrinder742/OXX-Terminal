@@ -14,6 +14,8 @@ The Agent interacts with the outside world (OKX API) through registered Python f
 *   `fetch_rpi_index`: Proprietary Daily Range Position Index (Sentiment).
 *   `fetch_technical_indicators`: Real-time EMA-9, EMA-21, and RSI-14 calculation.
 *   `fetch_order_book_walls`: Liquidity depth analysis (Big Money tracking).
+*   `check_quantitative_confluence`: Hierarchical Analytics Engine (1H Boss + 15m Tactical Gates).
+*   `fetch_market_sentiment`: Institutional metrics (Funding Rates, Open Interest, Liquidations).
 *   `read_internal_signals`: Local quantitative signal history (Ledger).
 
 ### **B. Reasoning (LLM Loop)**
