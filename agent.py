@@ -1,9 +1,14 @@
 import json
 import os
+import logging
 import requests
 import difflib
 from ollama import chat
 from datetime import datetime
+
+# Configure professional logging standard
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("QuantAgentTrinity")
 
 # ================================================================================================
 # MEMORY ENGINE (Integrated from memory.py)
@@ -20,12 +25,12 @@ class AgentMemory:
             try:
                 with open(self.memory_file, "r", encoding="utf-8") as f:
                     content = json.load(f)
-                    if "notes" not in content: content["notes"] = {}
+                    if "structural_insights" not in content: content["structural_insights"] = {}
                     if "history" not in content: content["history"] = []
                     return content
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return {"notes": {}, "history": []}
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Memory parse error: {e}", exc_info=True)
+        return {"structural_insights": {}, "history": []}
 
     def save_memory(self):
         with open(self.memory_file, "w", encoding="utf-8") as f:
@@ -40,9 +45,21 @@ class AgentMemory:
             "resistance": resistance_level
         }
         self.data["history"].append(memory_entry)
-        self.data["history"] = self.data["history"][-10:]  # Keep last 10
+        self.data["history"] = self.data["history"][-20:]  # Expanded history capacity
         self.save_memory()
         return f"Successfully committed memory state for {inst_id} to disk."
+
+    def save_structural_insight(self, key: str, value: str):
+        """Saves a permanent structural insight (support/resistance/macro trend)."""
+        self.data["structural_insights"][key] = {
+            "timestamp": datetime.now().isoformat(),
+            "data": value
+        }
+        self.save_memory()
+        return f"Structural insight '{key}' committed to long-term memory."
+
+    def get_all_structural_insights(self):
+        return json.dumps(self.data["structural_insights"], indent=2)
 
     def get_recent_history_string(self):
         if not self.data["history"]:
@@ -66,9 +83,10 @@ class QuantAgentTrinity:
             "You are Quant Agent Trinity, a high-fidelity analytical extension of the OXX Terminal. "
             "Your identity is rooted in technical precision and objective market analysis.\n\n"
             "OPERATIONAL PROTOCOL:\n"
-            "1. Generate valid JSON objects for tool invocation.\n"
-            "2. Utilize precise technical nomenclature. Maintain objective analytical standards.\n"
-            "3. Omit natural language reasoning during the data retrieval phase.\n\n"
+            "1. Perception Phase: Use multiple tools from the catalog to gather all required data for a comprehensive answer.\n"
+            "2. Generate valid JSON objects for each tool invocation. You may output multiple separate JSON blocks.\n"
+            "3. Maintain strict technical nomenclature. Utilize precise quantitative terminology.\n"
+            "4. Omit reasoning or conversational filler during the perception phase.\n\n"
             "JSON SCHEMA:\n"
             "{\n  \"tool_name\": \"exact_identifier\",\n  \"arguments\": {\"key\": \"value\"}\n}\n"
         )
@@ -90,13 +108,15 @@ class QuantAgentTrinity:
     def run_step(self, user_input):
         """Single turn perception -> reasoning -> action loop with memory recall."""
         
-        # Build the dynamic prompt with Memory and Tools
-        recent_memory = self.memory.get_recent_history_string()
+        # Build the dynamic prompt with Memory, Structural Insights, and Tools
+        recent_history = self.memory.get_recent_history_string()
+        structural_insights = self.memory.get_all_structural_insights()
         tool_catalog = self.get_tool_catalog()
         
         dynamic_system_prompt = (
             f"{self.system_instructions}\n\n"
-            f"--- RECENT MEMORY ---\n{recent_memory}\n\n"
+            f"--- LONG-TERM STRUCTURAL INSIGHTS ---\n{structural_insights}\n\n"
+            f"--- RECENT MARKET HISTORY (Last 20) ---\n{recent_history}\n\n"
             f"--- TOOL CATALOG ---\n{tool_catalog}"
         )
 
@@ -120,9 +140,11 @@ class QuantAgentTrinity:
             # Technical analysis prompt
             analysis_prompt = (
                 f"Retrieved Market Data:\n{tool_output}\n\n"
-                "OBJECTIVE: Conduct a professional quantitative analysis. "
-                "Specify Verdict, 1H Macro Filter alignment, and Confluence Score. "
-                "Identify trend variances relative to RECENT MEMORY."
+                "OBJECTIVE: Provide a professional quantitative analysis in PLAIN TEXT. "
+                "Do NOT use JSON, markdown code blocks, or braces {} in your response. "
+                "Structure your answer as a readable report for a human user. "
+                "Explicitly detail the Verdict, the 1H Macro Filter alignment, and the Confluence Score. "
+                "Identify trend variances relative to RECENT MEMORY using technical descriptions."
             )
 
             conversation.append({"role": "assistant", "content": response})
@@ -221,8 +243,9 @@ class QuantAgentTrinity:
                     if inst != "Unknown":
                         state = f"Market State Delta: {last_price}" if last_price > 0 else "Analysis Delta"
                         self.memory.save_market_memory(inst, state, low, high)
-                        print(f"[*] State Committed: {inst}")
-            except:
+                        logger.info(f"State Committed: {inst}")
+            except Exception as e:
+                logger.debug(f"Auto-commit skip: {e}")
                 continue
 
     def llm_call(self, messages):
@@ -460,46 +483,175 @@ def fetch_market_sentiment(inst_id: str = "BTC-USDT", **kwargs):
     1. Funding Rate (Leverage Bias)
     2. Open Interest (Money Flow)
     3. 24h Liquidations (Pain Points)
-    Note: Hits global endpoints for sentiment context as US is Spot-only.
+    Note: Iterates through USDT and USDC swaps for maximum data depth.
     """
     sentiment_data = {"instrument": inst_id}
     global_host = "https://www.okx.com"
-    # Map BTC-USDT to BTC-USDC-SWAP for derivatives sentiment
-    swap_inst = inst_id.split("-")[0] + "-USDC-SWAP"
+    
+    # Priority: USDT-SWAP (highest liquidity) then USDC-SWAP
+    asset = inst_id.split("-")[0]
+    swap_candidates = [f"{asset}-USDT-SWAP", f"{asset}-USDC-SWAP"]
+    
+    for swap_inst in swap_candidates:
+        try:
+            # 1. Funding Rate
+            f_url = f"{global_host}/api/v5/public/funding-rate"
+            f_resp = requests.get(f_url, params={"instId": swap_inst}, timeout=5).json()
+            if f_resp.get("code") == "0" and f_resp.get("data"):
+                sentiment_data["active_swap_instrument"] = swap_inst
+                sentiment_data["funding_rate"] = f_resp["data"][0].get("fundingRate")
+                
+                # 2. Open Interest
+                oi_url = f"{global_host}/api/v5/public/open-interest"
+                oi_resp = requests.get(oi_url, params={"instId": swap_inst}, timeout=5).json()
+                if oi_resp.get("code") == "0" and oi_resp.get("data"):
+                    sentiment_data["open_interest"] = oi_resp["data"][0].get("oi")
+                    sentiment_data["oi_ccy"] = oi_resp["data"][0].get("oiCcy")
 
-    try:
-        # 1. Funding Rate
-        f_url = f"{global_host}/api/v5/public/funding-rate"
-        f_resp = requests.get(f_url, params={"instId": swap_inst}, timeout=5).json()
-        if f_resp.get("code") == "0" and f_resp.get("data"):
-            sentiment_data["funding_rate"] = f_resp["data"][0].get("fundingRate")
-            sentiment_data["next_funding_time"] = f_resp["data"][0].get("fundingTime")
-
-        # 2. Open Interest
-        oi_url = f"{global_host}/api/v5/public/open-interest"
-        oi_resp = requests.get(oi_url, params={"instId": swap_inst}, timeout=5).json()
-        if oi_resp.get("code") == "0" and oi_resp.get("data"):
-            sentiment_data["open_interest"] = oi_resp["data"][0].get("oi")
-            sentiment_data["oi_ccy"] = oi_resp["data"][0].get("oiCcy")
-
-        # 3. Liquidations (24h snapshot approximation)
-        liq_url = f"{global_host}/api/v5/public/liquidation-info"
-        liq_params = {"instId": swap_inst, "mgnMode": "cross", "limit": 20}
-        liq_resp = requests.get(liq_url, params=liq_params, timeout=5).json()
-        if liq_resp.get("code") == "0" and liq_resp.get("data"):
-            total_liq = sum(float(x.get("sz", 0)) for x in liq_resp["data"])
-            sentiment_data["recent_liquidations_sz"] = round(total_liq, 2)
+                # 3. Liquidations (24h snapshot)
+                liq_url = f"{global_host}/api/v5/public/liquidation-info"
+                liq_params = {"instId": swap_inst, "mgnMode": "cross", "limit": 20}
+                liq_resp = requests.get(liq_url, params=liq_params, timeout=5).json()
+                if liq_resp.get("code") == "0" and liq_resp.get("data"):
+                    total_liq = sum(float(x.get("sz", 0)) for x in liq_resp["data"])
+                    sentiment_data["recent_liquidations_sz"] = round(total_liq, 2)
+                
+                # If we found data for the primary candidate, break
+                if sentiment_data.get("funding_rate"):
+                    break
+        except Exception as e:
+            logger.warning(f"Sentiment candidate {swap_inst} failed: {e}")
+            continue
             
-        return json.dumps(sentiment_data, indent=2)
+    return json.dumps(sentiment_data, indent=2)
+
+def fetch_global_market_status(**kwargs):
+    """
+    Fetches 24h performance for a basket of major assets to provide market-wide context.
+    Assets: BTC, ETH, SOL, OKB (Exchange Token), and USDT-USDC (Liquidity).
+    """
+    watchlist = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "OKB-USDT", "USDC-USDT"]
+    results = {}
+    try:
+        for inst in watchlist:
+            ticker_json = fetch_okx_ticker(inst)
+            data = json.loads(ticker_json)
+            last = float(data.get("last_price", 0))
+            results[inst] = {
+                "price": last,
+                "24h_high": data.get("high_24h"),
+                "24h_low": data.get("low_24h")
+            }
+        return json.dumps(results, indent=2)
     except Exception as e:
-        return f"Error fetching sentiment: {str(e)}"
+        return f"Error fetching global status: {str(e)}"
+
+def fetch_volatility_metrics(inst_id: str = "BTC-USDT"):
+    """
+    Calculates Volatility Metrics:
+    1. ATR (Average True Range) - Last 14 periods.
+    2. Realized Volatility proxy.
+    """
+    try:
+        candles_json = fetch_okx_candles(inst_id, bar="1H", limit=30)
+        candles = json.loads(candles_json)
+        
+        # ATR Calculation
+        true_ranges = []
+        for i in range(1, len(candles)):
+            # [ts, o, h, l, c, vol, ...]
+            h = float(candles[i][2])
+            l = float(candles[i][3])
+            prev_c = float(candles[i-1][4])
+            
+            tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+            true_ranges.append(tr)
+            
+        atr = sum(true_ranges[-14:]) / 14 if len(true_ranges) >= 14 else 0
+        
+        return json.dumps({
+            "instrument": inst_id,
+            "hourly_atr": round(atr, 2),
+            "volatility_ratio": round(atr / float(candles[-1][4]) * 100, 4) if candles else 0
+        }, indent=2)
+    except Exception as e:
+        return f"Error calculating volatility: {str(e)}"
+
+def record_structural_insight(key: str, value: str):
+    """
+    Saves a persistent technical insight to long-term memory.
+    Use for major support/resistance levels or macro trend shifts.
+    """
+    global agent # Access global agent instance
+    try:
+        return agent.memory.save_structural_insight(key, value)
+    except Exception as e:
+        return f"Insight commit error: {str(e)}"
+
+def fetch_historical_lookback(inst_id: str = "BTC-USDT", days: int = 7):
+    """
+    Calculates statistical lookback over a multi-day period.
+    Returns: Average Volume, Max/Min range, and Day-over-Day delta.
+    """
+    try:
+        limit = days * 24 # 1H candles
+        candles_json = fetch_okx_candles(inst_id, bar="1H", limit=limit)
+        candles = json.loads(candles_json)
+        
+        closes = [float(x[4]) for x in candles]
+        vols = [float(x[5]) for x in candles]
+        
+        avg_vol = sum(vols) / len(vols)
+        max_px = max(closes)
+        min_px = min(closes)
+        delta_pct = ((closes[-1] - closes[0]) / closes[0]) * 100
+        
+        return json.dumps({
+            "instrument": inst_id,
+            "lookback_period_days": days,
+            "high": max_px,
+            "low": min_px,
+            "avg_hourly_volume": round(avg_vol, 2),
+            "period_performance": f"{delta_pct:+.2f}%"
+        }, indent=2)
+    except Exception as e:
+        return f"Error during lookback: {str(e)}"
 
 # ================================================================================================
 # MAIN EXECUTION
 # ================================================================================================
 
+async def run_autonomous_loop(agent_instance):
+    """
+    Continuous monitoring loop for Quant Agent Trinity.
+    Executes analytical cycle every 15 minutes (aligned with tactical candle closes).
+    """
+    logger.info("Autonomous Monitoring Active. Trinity is now operational.")
+    
+    while True:
+        try:
+            # Objective prompt for autonomous reporting
+            prompt = (
+                "Execute autonomous analytical cycle for BTC-USDT. "
+                "Assess macro filter alignment, tactical confluence, and institutional sentiment. "
+                "Cross-reference RECENT MEMORY for trend deltas."
+            )
+            
+            print(f"\n[!] TRINITY AUTONOMOUS CYCLE: {datetime.now().strftime('%H:%M:%S')}")
+            reply = agent_instance.run_step(prompt)
+            print(f"\n[Autonomous Report]:\n{reply}\n")
+            print("-" * 80)
+            
+            # Wait for next 15m boundary (900 seconds)
+            await asyncio.sleep(900)
+            
+        except Exception as e:
+            logger.error(f"Loop error: {e}", exc_info=True)
+            await asyncio.sleep(60)
+
 if __name__ == "__main__":
-    print("[*] Initializing Quant Agent Trinity (phi4-mini)...")
+    import asyncio
+    print("[*] Initializing Quant Agent Trinity (Autonomous Mode)...")
 
     agent = QuantAgentTrinity()
 
@@ -510,11 +662,14 @@ if __name__ == "__main__":
     agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "Calculates EMA and RSI metrics.")
     agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Identifies institutional liquidity blocks.")
     agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Evaluates macro trend and tactical confluence.")
-    agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Retrieves institutional leverage and flow metrics.")
+    agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Retrieves institutional leverage and flow metrics (Funding, OI, Liquidations).")
+    agent.register_tool("fetch_global_market_status", fetch_global_market_status, "Scans major assets (BTC, ETH, SOL) for market-wide context.")
+    agent.register_tool("fetch_volatility_metrics", fetch_volatility_metrics, "Calculates ATR and volatility ratios for breakout assessment.")
+    agent.register_tool("record_structural_insight", record_structural_insight, "Records a permanent technical observation into long-term structural memory.")
+    agent.register_tool("fetch_historical_lookback", fetch_historical_lookback, "Performs a multi-day statistical lookback (High/Low/Avg Vol/Performance).")
 
-    # Execute analytical cycle
-    prompt = "Conduct a quantitative analysis of BTC-USDT. Evaluate confluence levels and institutional sentiment metrics."
-    print(f"\n[*] User Input: {prompt}\n")
-
-    reply = agent.run_step(prompt)
-    print(f"\n[Final Technical Analysis]:\n{reply}")
+    # Start the continuous loop
+    try:
+        asyncio.run(run_autonomous_loop(agent))
+    except KeyboardInterrupt:
+        print("\n[*] Trinity successfully deactivated by user.")

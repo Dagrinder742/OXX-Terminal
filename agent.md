@@ -2,28 +2,35 @@
 
 This document tracks the architecture, workflow, and evolution of the **OXX Quant Agent**, an autonomous analytical layer for the OXX Terminal.
 
-## 1. Core Philosophy
-The Agent is designed as a **read-only analytical layer**. It observes market telemetry and historical data to provide professional quantitative insights. It follows a high-fidelity engineering standard for data processing and secure memory management.
+## 1. Core Philosophy: The Trinity Quantitative Protocol
+Agent Trinity is engineered as a **strictly technical analytical layer**. It prioritizes data deltas and objective telemetry over narrative interpretation. It utilizes a bifurcated perception/analysis cycle to maintain high-fidelity quantitative standards.
 
 ## 2. Architectural Components
 
-### **A. Perception (Tools)**
-The Agent interacts with the outside world through strictly technical Python functions.
+### **A. Perception (Technical Tools)**
+The Agent utilizes Python-based calculators to process raw OKX telemetry.
 *   `fetch_okx_ticker`: Real-time instrument statistics.
-*   `fetch_okx_candles`: Historical OHLCV data.
-*   `fetch_rpi_index`: Relative price location index.
-*   `fetch_technical_indicators`: Real-time EMA and RSI calculation.
-*   `fetch_order_book_walls`: Liquidity depth analysis.
-*   `check_quantitative_confluence`: Hierarchical trend and tactical gate evaluation.
-*   `fetch_market_sentiment`: Institutional leverage and money flow metrics.
+*   `fetch_okx_candles`: Historical OHLCV data retrieval.
+*   `fetch_rpi_index`: Relative Range Position Index (Mean Reversion).
+*   `fetch_technical_indicators`: Recursive EMA and RSI calculation.
+*   `fetch_order_book_walls`: Institutional liquidity block identification.
+*   `check_quantitative_confluence`: Hierarchical 1H Macro and 15m Tactical gate evaluation.
+*   `fetch_market_sentiment`: Multi-asset swap funding, Open Interest, and Liquidations.
+*   `fetch_global_market_status`: Correlated basket scan (BTC, ETH, SOL, OKB).
+*   `fetch_volatility_metrics`: ATR-based volatility and breakout assessment.
+*   `record_structural_insight`: Persistent storage of institutional floors and macro shifts.
+*   `fetch_historical_lookback`: Multi-day statistical analysis (Range/Volume/Performance).
 
 ### **B. Reasoning (LLM Loop)**
 *   **Model**: `phi4-mini`.
 *   **Loop**: Perception -> Tool Call -> Observation -> Quantitative Analysis.
 *   **Objective**: To deliver objective, data-driven market breakdowns.
 
-### **C. Persistence (Memory)**
-*   **Recall**: The Agent references the last 10 historical state transitions before analyzing new data to identify trend deltas.
+### **C. Persistence (Memory Architecture)**
+Trinity utilizes a bifurcated memory system:
+*   **Long-Term (Structural)**: Permanent technical insights that do not expire.
+*   **Short-Term (Tactical)**: Last 20 historical state transitions for trend delta detection.
+*   **File**: `agent_memory.json`.
 
 ## 3. The "Recall" Workflow
 1.  **Initialize**: Agent loads `agent_memory.json`.
@@ -33,7 +40,13 @@ The Agent interacts with the outside world through strictly technical Python fun
 5.  **Execution**: Agent calls the tool, receives data, and saves the new state to memory.
 6.  **Analysis**: Agent provides a breakdown based on *Current Data* + *Memory*.
 
-## 4. Current Build Status
+## 4. Autonomous Monitoring Mode
+Trinity has been upgraded to a **continuous monitoring system**.
+*   **Bifurcated Loop**: The agent operates in an asynchronous loop, triggering a full quantitative deep-dive every **15 minutes** (synchronized with tactical candle closes).
+*   **Dedicated Reporting**: Insights are streamed to a dedicated terminal, providing real-time strategic awareness alongside the main execution TUI.
+*   **Resiliency**: The system handles network transients and inference timeouts with automatic re-alignment protocols.
+
+## 5. Current Build Status
 *   [x] Integrated `AgentMemory` into `agent.py`.
 *   [x] Implemented Dynamic Tool Catalog injection.
 *   [x] Enabled "Recall" (Memory-to-Prompt) context.

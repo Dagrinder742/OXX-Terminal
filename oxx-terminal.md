@@ -40,6 +40,7 @@ OS-level credential management.
 
 ## 2. Architectural Stack
 * **UI Framework**: `Textual` (for event-driven TUI) and `Rich` (for formatting).
+* **Intelligence Layer**: **Quant Agent Trinity** powered by local `phi4-mini` (Ollama).
 * **Data Layer**: `asyncio` + `websockets` for low-latency public/private feeds.
 * **Security**: `keyrings.cryptfile` backend for OS-level encrypted credential storage (AES-128 GCM).
 * **Endpoints**: Routing strictly to `us.okx.com` for US-based access.
@@ -48,6 +49,7 @@ OS-level credential management.
 
 ## 3. Modular File Structure
 * `main.py`: Entry point; combined **Application Orchestrator & Renderer** handling state, parsing, and TUI layout.
+* `agent.py`: **Quant Agent Trinity**; autonomous analytical layer providing objective quantitative breakdowns.
 * `api_client.py`: Manages WebSocket connections, public market streams, and instant REST trade snapshots.
 * `okx_private.py`: Handles authenticated REST requests (signing, ordering, balance).
 * `secure_vault.py`: Interacts with `keyring` for encrypted credential persistence.
@@ -60,23 +62,23 @@ OS-level credential management.
 ---
 
 ## 4. Development Log (Completed)
-* [x] **Modular Structure**: Initialized core project files (`main.py`, `api_client.py`, `okx_private.py`, `secure_vault.py`, `auth.py`, `secure_store.py`, `strategy_engine.py`, `accountant.py`).
-* [x] **Secure Auth**: Implemented `keyrings.cryptfile` and the `AuthModal` TUI for first-run setup.
-* [x] **API Connectivity**: Wired `us.okx.com` endpoints for account balance and order execution.
-* [x] **TUI Dashboard**: Built reactive layout with Portfolio, Order Book, Last Trades, and Execution Log.
-* [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding across `main.py`.
-* [x] **Smart Input Normalization**: Added flexible search parsing supporting space-to-hyphen translation and defaulting bare tickers strictly to USD quotes.
-* [x] **Instant Last Trades Hydration**: Implemented a hybrid REST snapshot fetch (`/api/v5/market/trades`) on pair switch for immediate browser-grade trade feed loading before live WebSockets take over.
-* [x] **Grid Bot Control Integration**: Integrated a dedicated sidebar panel for automated strategy oversight with live PnL and status hooks. Consolidated with active order tracking.
-* [x] **Session Order History & Fills**: Implemented real-time tracking of executed manual and bot trades with a dedicated history pane.
-* [x] **Steelers "Star" UI Theme**: Rebranded the entire TUI with a Deep Black and Steelers Gold palette, accented by Star Blue (Buy) and Star Red (Sell/Stop) highlights.
-* [x] **Open Orders & Positions Tracking**: Integrated periodic background polling for resting limit/stop orders and active trading positions with live color-coded PnL readouts.
-* [x] **Browser-Style Page Scrolling**: Implemented a vertical scrollable viewport (`VerticalScroll`) allowing panels to expand naturally beyond the terminal window height.
-* [x] **Terminal Candlestick Engine**: Integrated `plotext` and `Rich` to render live, auto-refreshing ASCII price charts with clickable timeframe selectors.
-* [x] **TUI Rendering Polish**: Resolved ASCII "ghosting" and duplication artifacts through precise coordinate locking, ANSI sequence cleaning, and disabling text wrapping on chart widgets.
-* [x] **Minimalist UI**: Hidden the visual scrollbar and refined notification borders to eliminate layout "eye sores" while maintaining full navigation functionality.
-* [x] **Flattened Bot UI Architecture**: Resolved layout "bottoming out" issues by flattening nested horizontal rows into a linear vertical sequence for reliable border rendering.
-* [x] **Cross-Platform Compatibility**: Implemented environment detection and adaptive rendering to support stable, synchronized charts on both Windows (PowerShell) and Linux (Termux/mobile). Standardized on `plotext==5.3.2` for cross-platform API stability.
+* [x] **Modular Structure**: Initialized core project files.
+* [x] **Secure Auth**: Implemented `keyrings.cryptfile` and `AuthModal`.
+* [x] **API Connectivity**: Wired `us.okx.com` endpoints for balance and orders.
+* [x] **TUI Dashboard**: Built reactive layout with Portfolio, Book, Trades, and Logs.
+* [x] **OXX Terminal Rebranding**: Updated dynamic header UI strings and layout branding.
+* [x] **Smart Input Normalization**: Added flexible search parsing (USDT defaults).
+* [x] **Instant Last Trades Hydration**: Hybrid REST/WS trade feed loading.
+* [x] **Grid Bot Control Integration**: Sidebar panel for automated strategy oversight.
+* [x] **Session Order History & Fills**: Real-time tracking of executed manual and bot trades.
+* [x] **Steelers "Star" UI Theme**: Professional Deep Black and Steelers Gold palette.
+* [x] **Open Orders & Positions Tracking**: Background polling for resting orders and positions.
+* [x] **Terminal Candlestick Engine**: Integrated `plotext` for auto-refreshing ASCII charts.
+* [x] **Quant Agent Trinity (V1)**: Integrated a local LLM analytical layer with multi-tool perception.
+* [x] **Temporal Memory (Recall)**: Persistent state-tracking for trend delta identification.
+* [x] **Hierarchical Analytics Engine**: Internalized 1H Macro Filter and 15m Tactical Gate logic.
+* [x] **Institutional Sentiment Tool**: Global bridge for Funding Rates, OI, and Liquidations.
+* [x] **Global USDT Migration**: Transitioned all instrument logic and memory from USD to USDT.
 
 ---
 
