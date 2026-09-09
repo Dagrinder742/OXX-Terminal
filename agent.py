@@ -11,6 +11,9 @@ import xml.etree.ElementTree as ET
 from llama_cpp import Llama
 from datetime import datetime
 
+# Import the renamed News Engine
+from news_engine import background_news_poller
+
 # Configure professional logging standard
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("QuantAgentTrinity")
@@ -100,22 +103,18 @@ class QuantAgentTrinity:
         self.system_instructions = (
             "You are Quant Agent Trinity, the analytical brain of the OXX Terminal.\n\n"
             "PHILOSOPHY:\n"
-            "Identify professional spot trade setups based on technical probabilities. "
-            "You MUST account for trading costs (0.2% fee per side, 0.4% total) to ensure setups are 'Trade-Ready'.\n\n"
+            "You do not predict the market. You perform real-time autonomous pattern scanning and risk management "
+            "to identify professional spot trade setups based on technical probabilities.\n\n"
             "STRATEGY PRESETS:\n"
-            "1. MOMENTUM: Confluence >= 3/4, accelerating MACD. Setup MUST target >= 1.5% profit to cover fees and risk.\n"
-            "2. BALANCED: Mean reversion from compression (RPI <= 30) near support. Setup MUST target >= 1.5% profit.\n\n"
+            "1. MOMENTUM: Focus on technical confluence >= 3/4, accelerating MACD, and breakout patterns. "
+            "Setup MUST target >= 1.5% profit to cover fees and maintain a healthy Risk/Reward ratio.\n"
+            "2. BALANCED: Focus on mean reversion from compression zones (RPI <= 30) near identified support. "
+            "Setup MUST target >= 1.5% profit.\n\n"
             "OPERATIONAL PROTOCOL (STRICT TURNS):\n"
-            "TURN 1 (PERCEPTION): Call tools (ai_chart_analyzer, etc.). Output ONLY JSON.\n"
-            "TURN 2 (ANALYSIS): Generate a NOTIFICATION CARD only if a 'Trade-Ready' setup exists.\n"
-            "   --- SETUP NOTIFICATION CARD ---\n"
-            "   ASSET: BTC-USDT\n"
-            "   STRATEGY: [MOMENTUM/BALANCED]\n"
-            "   PROPOSED ENTRY: [Price from Live Data]\n"
-            "   STOP LOSS: [Calculated: Price - 0.75%]\n"
-            "   PROFIT TARGET: [Calculated: Price + 1.5% minimum]\n"
-            "   EXPLANATION: [Technical justification + Fee-Adjusted logic]\n"
-            "   --------------------------------\n"
+            "TURN 1 (PERCEPTION): You MUST use tools (e.g., ai_chart_analyzer, fetch_smart_patterns) to gather live telemetry. "
+            "Your output must consist ONLY of valid JSON tool calls. Do not include analysis or notification cards in this turn.\n\n"
+            "JSON SCHEMA:\n"
+            "{\n  \"tool_name\": \"exact_identifier\",\n  \"arguments\": {\"key\": \"value\"}\n}\n"
         )
 
     def register_tool(self, name, func, description):
@@ -127,14 +126,27 @@ class QuantAgentTrinity:
             catalog += f"- {name}: {info['description']}\n"
         return catalog
 
+    def get_news_memory(self):
+        """Reads the news cache from articles.json."""
+        cache_path = "articles.json"
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
     def run_step(self, user_input):
         recent_history = self.memory.get_recent_history_string()
         structural_insights = self.memory.get_all_structural_insights()
+        news_memory = json.dumps(self.get_news_memory()[:3], indent=2) # Top 3 headlines
         tool_catalog = self.get_tool_catalog()
         
         dynamic_system_prompt = (
             f"{self.system_instructions}\n\n"
             f"--- LONG-TERM STRUCTURAL INSIGHTS ---\n{structural_insights}\n\n"
+            f"--- LIVE NEWS MEMORY ---\n{news_memory}\n\n"
             f"--- RECENT MARKET HISTORY ---\n{recent_history}\n\n"
             f"--- TOOL CATALOG ---\n{tool_catalog}"
         )
@@ -538,11 +550,20 @@ async def run_autonomous_loop(agent_instance):
             await asyncio.sleep(900)
         except Exception as e: logger.error(f"Loop error: {e}", exc_info=True); await asyncio.sleep(60)
 
+async def start_trinity_subsystems(agent_instance):
+    """Orchestrates all asynchronous background tasks and the main agent loop."""
+    # Launch News Engine poller (Core 2)
+    asyncio.create_task(background_news_poller(interval=600))
+    
+    # Launch Autonomous Agent Loop (Core 1)
+    await run_autonomous_loop(agent_instance)
+
 if __name__ == "__main__":
     print("[*] Initializing Quant Agent Trinity (GGUF Mode)...")
     gguf_path = "C:/ai_models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
     try:
         agent = QuantAgentTrinity(model_path=gguf_path)
+        # Register tools...
         agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Real-time telemetry.")
         agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Historical OHLCV.")
         agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Relative price location (RPI).")
@@ -558,6 +579,10 @@ if __name__ == "__main__":
         agent.register_tool("fetch_smart_patterns", fetch_smart_patterns, "Identify chart structures and probabilities.")
         agent.register_tool("ai_mentor", ai_mentor_lookup, "Explain market terminology in plain language.")
         agent.register_tool("fetch_news_wire", fetch_news_wire, "Scans live crypto news feeds for market-moving keywords.")
-        asyncio.run(run_autonomous_loop(agent))
+        
+        # Execute the unified async entry point
+        asyncio.run(start_trinity_subsystems(agent))
+    except (KeyboardInterrupt, SystemExit): print("\n[*] Trinity deactivated.")
+    except Exception as e: print(f"[!] Launch Failure: {e}"); sys.exit(1)
     except (KeyboardInterrupt, SystemExit): print("\n[*] Trinity deactivated.")
     except Exception as e: print(f"[!] Launch Failure: {e}"); sys.exit(1)
