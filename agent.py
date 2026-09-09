@@ -6,6 +6,8 @@ import requests
 import difflib
 import asyncio
 import re
+import urllib.request
+import xml.etree.ElementTree as ET
 from llama_cpp import Llama
 from datetime import datetime
 
@@ -430,14 +432,79 @@ def ai_mentor_lookup(term: str = "RSI", **kwargs):
     if matches: return json.dumps({"term": matches[0], "explanation": glossary[matches[0]]}, indent=2)
     return f"Term '{term}' not found."
 
+def fetch_news_wire(keywords: str = "bitcoin,btc,sec,liquidation,etf,solana", max_items: int = 5, **kwargs):
+    """
+    FETCH_NEWS_WIRE:
+    Scans live crypto news wire feeds for market-moving keywords using zero-dependency XML parsing.
+    """
+    feed_url = "https://cointelegraph.com/rss"
+    target_keywords = [kw.strip().lower() for kw in keywords.split(",")]
+    
+    try:
+        req = urllib.request.Request(
+            feed_url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            xml_data = response.read()
+            
+        root = ET.fromstring(xml_data)
+        channel = root.find('channel')
+        if channel is None:
+            return json.dumps({"error": "Invalid RSS structure"})
+            
+        items = []
+        for item in channel.findall('item'):
+            title = item.find('title')
+            description = item.find('description')
+            
+            title_text = title.text if title is not None else ""
+            desc_text = description.text if description is not None else ""
+            
+            # Check text relevance
+            combined_text = f"{title_text} {desc_text}".lower()
+            matched = any(kw in combined_text for kw in target_keywords)
+            
+            if matched or not target_keywords:
+                items.append({
+                    "title": title_text.strip(),
+                    "published": item.find('pubDate').text.strip() if item.find('pubDate') is not None else "",
+                    "snippet": desc_text[:140].strip() + "..." if len(desc_text) > 140 else desc_text.strip()
+                })
+                
+            if len(items) >= max_items:
+                break
+                
+        return json.dumps({
+            "wire_source": feed_url,
+            "matched_articles_count": len(items),
+            "articles": items
+        }, indent=2)
+        
+    except Exception as e:
+        return json.dumps({"error": f"Failed to fetch news wire: {str(e)}"})
+
 def ai_chart_analyzer(inst_id: str = "BTC-USDT", **kwargs):
-    """Aggregated analysis: Price, Volatility, and Indicators."""
+    """
+    AI_CHART_ANALYZER:
+    Aggregated analysis tool: Price Action, Volatility, Indicators, and News Wire.
+    """
     try:
         ticker = json.loads(fetch_okx_ticker(inst_id))
         volatility = json.loads(fetch_volatility_metrics(inst_id))
         indicators = json.loads(fetch_technical_indicators(inst_id))
-        return json.dumps({"instrument": inst_id, "price_action": ticker, "volatility": volatility, "indicators": indicators}, indent=2)
-    except Exception as e: return f"Error in aggregated analyzer: {str(e)}"
+        news = json.loads(fetch_news_wire()) # Default keywords for general context
+        
+        return json.dumps({
+            "instrument": inst_id,
+            "price_action": ticker,
+            "volatility": volatility,
+            "indicators": indicators,
+            "recent_news_wire": news
+        }, indent=2)
+    except Exception as e:
+        return f"Error in aggregated analyzer: {str(e)}"
 
 async def run_autonomous_loop(agent_instance):
     logger.info("Autonomous Strategy Scanning Active.")
@@ -472,9 +539,10 @@ if __name__ == "__main__":
         agent.register_tool("fetch_volatility_metrics", fetch_volatility_metrics, "ATR/Volatility ratios.")
         agent.register_tool("record_structural_insight", record_structural_insight, "Save permanent technical insights.")
         agent.register_tool("fetch_historical_lookback", fetch_historical_lookback, "Multi-day statistical analysis.")
-        agent.register_tool("ai_chart_analyzer", ai_chart_analyzer, "Aggregated Price/Volatility/Indicator analysis.")
+        agent.register_tool("ai_chart_analyzer", ai_chart_analyzer, "Aggregated analysis: price action, volatility, indicators, and news wire.")
         agent.register_tool("fetch_smart_patterns", fetch_smart_patterns, "Identify chart structures and probabilities.")
         agent.register_tool("ai_mentor", ai_mentor_lookup, "Explain market terminology in plain language.")
+        agent.register_tool("fetch_news_wire", fetch_news_wire, "Scans live crypto news feeds for market-moving keywords.")
         asyncio.run(run_autonomous_loop(agent))
     except (KeyboardInterrupt, SystemExit): print("\n[*] Trinity deactivated.")
     except Exception as e: print(f"[!] Launch Failure: {e}"); sys.exit(1)
