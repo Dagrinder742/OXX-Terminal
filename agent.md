@@ -8,24 +8,19 @@ Agent Trinity is engineered as a **strictly technical analytical layer**. It pri
 ## 2. Architectural Components
 
 ### **A. Perception (Technical Tools)**
-The Agent utilizes Python-based calculators to process raw OKX telemetry.
-*   `fetch_okx_ticker`: Real-time instrument statistics.
-*   `fetch_okx_candles`: Historical OHLCV data retrieval.
-*   `fetch_rpi_index`: Relative Range Position Index (Mean Reversion).
-*   `fetch_technical_indicators`: Recursive EMA and RSI calculation.
-*   `fetch_order_book_walls`: Institutional liquidity block identification.
-*   `check_quantitative_confluence`: Hierarchical 1H Macro and 15m Tactical gate evaluation.
-*   `fetch_market_sentiment`: Multi-asset swap funding, Open Interest, and Liquidations.
-*   `fetch_global_market_status`: Correlated basket scan (BTC, ETH, SOL, OKB).
-*   `fetch_volatility_metrics`: ATR-based volatility and breakout assessment.
-*   `record_structural_insight`: Persistent storage of institutional floors and macro shifts.
-*   `fetch_historical_lookback`: Multi-day statistical analysis (Range/Volume/Performance).
+*   `ai_chart_analyzer`: Aggregated analysis of Price, Volatility, and Indicators.
+*   `fetch_smart_patterns`: Structural identification of Channels and Volatility Compression.
+*   `ai_mentor`: Real-time quantitative tutor for market nomenclature.
+*   `fetch_market_sentiment`: Institutional money flow (Funding/OI/Liquidations).
+*   `check_quantitative_confluence`: 4-Gate tactical setup evaluation.
 
-### **B. Reasoning (LLM Engine)**
-*   **Model Backend**: `llama-cpp-python` (Direct GGUF inference).
-*   **Execution Strategy**: Forced CPU inference (`-ngl 0`) with a optimized **2048 token** context window (`-c 2048`) for high-efficiency on 8GB RAM hardware.
-*   **Loop**: Perception -> Tool Call -> Observation -> Quantitative Analysis.
-*   **Objective**: To deliver objective, data-driven market breakdowns.
+### **B. Reasoning (Strategy & Education)**
+*   **MOMENTUM**: Focused on breakout confluence and trend acceleration.
+*   **BALANCED**: Focused on mean reversion from compression zones near support.
+*   **Notification Cards**: Standardized alerts with Entry, SL, and Target specifications.
+*   **AI Mentor**: Trinity acts as a tutor, explaining the 'Why' behind every setup match in plain language.
+
+
 
 ### **C. Persistence (Memory Architecture)**
 Trinity utilizes a bifurcated memory system:

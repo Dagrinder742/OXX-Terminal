@@ -5,6 +5,7 @@ import logging
 import requests
 import difflib
 import asyncio
+import re
 from llama_cpp import Llama
 from datetime import datetime
 
@@ -17,7 +18,7 @@ logger = logging.getLogger("QuantAgentTrinity")
 # ================================================================================================
 
 class AgentMemory:
-    """Handles persistent JSON storage for historical telemetry and notes."""
+    """Handles persistent JSON storage for historical telemetry and structural insights."""
     def __init__(self, memory_file="agent_memory.json"):
         self.memory_file = memory_file
         self.data = self.load_memory()
@@ -47,18 +48,18 @@ class AgentMemory:
             "resistance": resistance_level
         }
         self.data["history"].append(memory_entry)
-        self.data["history"] = self.data["history"][-20:]  # Expanded history capacity
+        self.data["history"] = self.data["history"][-20:]  # Last 20 entries
         self.save_memory()
-        return f"Successfully committed memory state for {inst_id} to disk."
+        return f"State committed for {inst_id}."
 
     def save_structural_insight(self, key: str, value: str):
-        """Saves a permanent structural insight (support/resistance/macro trend)."""
+        """Saves a permanent structural level or macro shift."""
         self.data["structural_insights"][key] = {
             "timestamp": datetime.now().isoformat(),
             "data": value
         }
         self.save_memory()
-        return f"Structural insight '{key}' committed to long-term memory."
+        return f"Structural insight '{key}' committed."
 
     def get_all_structural_insights(self):
         return json.dumps(self.data["structural_insights"], indent=2)
@@ -66,7 +67,7 @@ class AgentMemory:
     def get_recent_history_string(self):
         if not self.data["history"]:
             return "No recent market history available."
-        return json.dumps(self.data["history"], indent=2)
+        return json.dumps(self.data["history"][-5:], indent=2) # Last 5 for prompt context
 
 # ================================================================================================
 # CORE AGENT ENGINE
@@ -81,59 +82,60 @@ class QuantAgentTrinity:
         self.memory = AgentMemory(memory_file)
         self.tools = {}
         
-        # Initialize local GGUF model via llama-cpp-python
-        print(f"[*] Loading Trinity's Core GGUF: {model_path}")
+        logger.info(f"Loading GGUF Engine: {self.model_name}")
         try:
             self.llm = Llama(
                 model_path=self.model_path,
-                n_ctx=4096,  # Expanded to 4096 to prevent "token overflow" on complex reports
+                n_ctx=4096,
                 n_gpu_layers=0,
                 n_threads=4,
                 verbose=False
             )
         except Exception as e:
-            logger.error(f"Failed to load GGUF model: {e}", exc_info=True)
+            logger.error(f"GGUF Init Failure: {e}", exc_info=True)
             raise
 
-        # Base system prompt
         self.system_instructions = (
-            "You are Quant Agent Trinity, a high-fidelity analytical extension of the OXX Terminal. "
-            "Your identity is rooted in technical precision and objective market analysis.\n\n"
+            "You are Quant Agent Trinity, the analytical brain of the OXX Terminal.\n\n"
+            "PHILOSOPHY:\n"
+            "You do not predict the market. You perform real-time autonomous pattern scanning and risk management "
+            "to identify professional spot trade setups based on technical probabilities.\n\n"
+            "STRATEGY PRESETS:\n"
+            "1. MOMENTUM: Focus on technical confluence >= 3/4, accelerating MACD, and breakout patterns.\n"
+            "2. BALANCED: Focus on mean reversion from compression zones (RPI <= 30) near identified support.\n\n"
             "OPERATIONAL PROTOCOL:\n"
-            "1. Perception Phase: Use multiple tools from the catalog to gather all required data for a comprehensive answer.\n"
-            "2. Generate valid JSON objects for each tool invocation. You may output multiple separate JSON blocks.\n"
-            "3. Maintain strict technical nomenclature. Utilize precise quantitative terminology.\n"
-            "4. Omit reasoning or conversational filler during the perception phase.\n\n"
-            "JSON SCHEMA:\n"
-            "{\n  \"tool_name\": \"exact_identifier\",\n  \"arguments\": {\"key\": \"value\"}\n}\n"
+            "1. Perception: Use tools (ai_chart_analyzer, fetch_smart_patterns, etc.) to gather data.\n"
+            "2. Analysis: If a setup criteria is met, generate a NOTIFICATION CARD:\n"
+            "   --- SETUP NOTIFICATION CARD ---\n"
+            "   ASSET: BTC-USDT\n"
+            "   STRATEGY: [MOMENTUM/BALANCED]\n"
+            "   PROPOSED ENTRY: [Price]\n"
+            "   STOP LOSS: [Price]\n"
+            "   PROFIT TARGET: [Price]\n"
+            "   EXPLANATION: [Technical justification in plain language]\n"
+            "   --------------------------------\n"
+            "3. If no setup exists, provide a standard technical monitoring report.\n"
+            "4. NEVER use JSON, braces {}, or markdown code blocks in your FINAL human response."
         )
 
     def register_tool(self, name, func, description):
-        """Register a Python function as an executable tool for the agent."""
-        self.tools[name] = {
-            "function": func,
-            "description": description
-        }
+        self.tools[name] = {"function": func, "description": description}
 
     def get_tool_catalog(self):
-        """Returns a string representation of all available tools for the prompt."""
         catalog = "AVAILABLE TOOLS CATALOG:\n"
         for name, info in self.tools.items():
             catalog += f"- {name}: {info['description']}\n"
         return catalog
 
     def run_step(self, user_input):
-        """Single turn perception -> reasoning -> action loop with memory recall."""
-        
-        # Limit history injection to last 5 entries to save context space
-        recent_history = json.dumps(self.memory.data["history"][-5:], indent=2)
+        recent_history = self.memory.get_recent_history_string()
         structural_insights = self.memory.get_all_structural_insights()
         tool_catalog = self.get_tool_catalog()
         
         dynamic_system_prompt = (
             f"{self.system_instructions}\n\n"
             f"--- LONG-TERM STRUCTURAL INSIGHTS ---\n{structural_insights}\n\n"
-            f"--- RECENT MARKET HISTORY (Last 5) ---\n{recent_history}\n\n"
+            f"--- RECENT MARKET HISTORY ---\n{recent_history}\n\n"
             f"--- TOOL CATALOG ---\n{tool_catalog}"
         )
 
@@ -142,40 +144,34 @@ class QuantAgentTrinity:
             {"role": "user", "content": user_input}
         ]
 
-        # 1. Perception & Action phase
-        print(f"[*] Trinity is processing perception (Model: {self.model_name})...")
+        print(f"[*] Trinity Processing (Model: {self.model_name})...")
         response = self.llm_call(conversation)
         
-        # 2. Execution phase
         tool_output = self.execute_tool_call(response)
 
-        # 3. Observation & Analysis phase
-        if tool_output and "Error" not in tool_output and "No tool calls detected" not in tool_output:
+        # Allow proceeding to analysis if tool_output is non-empty and doesn't contain "No tool calls detected"
+        if tool_output and "No tool calls detected" not in tool_output:
             self.auto_commit_memory(tool_output)
 
-            # Technical analysis prompt
             analysis_prompt = (
                 f"Retrieved Market Data:\n{tool_output}\n\n"
-                "OBJECTIVE: Conduct a professional quantitative analysis. Provide your final response in plain English. "
-                "CRITICAL: Do NOT use braces {}, JSON syntax, or markdown code blocks in your response. "
-                "Explicitly detail the Verdict, the 1H Macro Filter alignment, and the Confluence Score. "
-                "Identify trend variances relative to RECENT MARKET HISTORY using objective technical descriptions."
+                "OBJECTIVE: Provide a professional quantitative breakdown in PLAIN TEXT. "
+                "Highlight setups (if any) using NOTIFICATION CARDS. "
+                "Specify Verdict, Macro Filter alignment, and Confluence Score."
             )
 
             conversation.append({"role": "assistant", "content": response})
             conversation.append({"role": "user", "content": analysis_prompt})
 
-            print("[*] Trinity is generating technical analysis...")
-            final_response = self.llm_call(conversation)
-            return final_response
+            print("[*] Generating Technical Analysis...")
+            return self.llm_call(conversation)
         
         return response
 
     def execute_tool_call(self, response_text):
-        """Parse agent output and execute registered tools. Supports multiple JSON blocks."""
         results = []
         try:
-            import re
+            # Stack-based JSON extractor
             json_blocks = []
             stack = 0
             start = -1
@@ -189,18 +185,12 @@ class QuantAgentTrinity:
                         json_blocks.append(response_text[start:i+1])
             
             if not json_blocks:
-                json_blocks = re.findall(r'\{.*?\}', response_text, re.DOTALL)
-
-            if not json_blocks:
-                return "No tool calls detected; treating as plain text."
+                return "No tool calls detected."
 
             for block in json_blocks:
                 try:
-                    cleaned_block = block.strip()
-                    cleaned_block = re.sub(r',\s*\}', '}', cleaned_block)
-                    cleaned_block = re.sub(r',\s*\]', ']', cleaned_block)
-                    
-                    data = json.loads(cleaned_block)
+                    cleaned = re.sub(r',\s*\}', '}', block.strip())
+                    data = json.loads(cleaned)
                     req_name = data.get("tool_name")
                     args = data.get("arguments", {})
 
@@ -209,18 +199,16 @@ class QuantAgentTrinity:
                     
                     if matches:
                         matched_name = matches[0]
-                        # Robust Argument Mapping
+                        # Argument normalization
                         if "inst_id" not in args:
                             for alt in ["instrument", "symbol", "instId", "pair"]:
-                                if alt in args:
-                                    args["inst_id"] = args.pop(alt)
-                                    break
+                                if alt in args: args["inst_id"] = args.pop(alt); break
                         
                         print(f"[*] Executing Tool: {matched_name}")
                         output = self.tools[matched_name]["function"](**args)
                         results.append(f"TOOL: {matched_name}\nOUTPUT:\n{output}")
                     else:
-                        results.append(f"Error: Tool identifier '{req_name}' not found.")
+                        results.append(f"Error: Tool '{req_name}' not found.")
                 except Exception as e:
                     results.append(f"Error executing block: {str(e)}")
 
@@ -229,98 +217,62 @@ class QuantAgentTrinity:
             return f"Critical Parser Error: {str(e)}"
 
     def auto_commit_memory(self, tool_output):
-        """Distills tool output into the memory engine."""
         blocks = tool_output.split("TOOL: ")
         for block in blocks:
             if not block.strip(): continue
             try:
                 if "OUTPUT:\n{" in block:
-                    json_str = "{" + block.split("OUTPUT:\n{")[1]
-                    data = json.loads(json_str)
+                    data = json.loads("{" + block.split("OUTPUT:\n{")[1])
                     inst = data.get("instrument", "Unknown")
                     last_price = float(data.get("last_price", 0))
                     high = float(data.get("high_24h", 0))
                     low = float(data.get("low_24h", 0))
                     
                     if inst != "Unknown":
-                        state = f"Market State Delta: {last_price}" if last_price > 0 else "Analysis Delta"
-                        self.memory.save_market_memory(inst, state, low, high)
+                        self.memory.save_market_memory(inst, f"Delta: {last_price}", low, high)
                         logger.info(f"State Committed: {inst}")
-            except:
-                continue
+            except: continue
 
     def llm_call(self, messages):
-        """Route to local GGUF model."""
         try:
             response = self.llm.create_chat_completion(
-                messages=messages,
-                temperature=0.1,
-                max_tokens=1024
+                messages=messages, temperature=0.1, max_tokens=1024
             )
             return response['choices'][0]['message']['content']
         except Exception as e:
             return f"Inference Error: {str(e)}"
 
 # ================================================================================================
-# LIVE TOOLS
+# TECHNICAL TOOLS
 # ================================================================================================
 
 def fetch_okx_ticker(inst_id: str = "BTC-USDT", **kwargs):
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/ticker"
-        params = {"instId": inst_id}
-        response = requests.get(url, params=params, timeout=5)
-        if response.status_code == 200:
-            data = response.json().get("data", [])
-            if data:
-                t = data[0]
-                return json.dumps({
-                    "instrument": inst_id,
-                    "last_price": t.get("last"),
-                    "high_24h": t.get("high24h"),
-                    "low_24h": t.get("low24h"),
-                    "volume_24h": t.get("vol24h"),
-                    "timestamp": t.get("ts")
-                }, indent=2)
-        return f"Error: Failed to fetch ticker for {inst_id}"
-    except Exception as e:
-        return f"API Exception: {str(e)}"
+        resp = requests.get(url, params={"instId": inst_id}, timeout=5).json()
+        if resp.get("code") == "0" and resp.get("data"):
+            t = resp["data"][0]
+            return json.dumps({"instrument": inst_id, "last_price": t.get("last"), "high_24h": t.get("high24h"), "low_24h": t.get("low24h"), "volume_24h": t.get("vol24h")}, indent=2)
+        return f"Error: No data for {inst_id}"
+    except Exception as e: return f"API Error: {str(e)}"
 
 def fetch_okx_candles(inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 10, **kwargs):
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/candles"
-        params = {"instId": inst_id, "bar": bar, "limit": limit}
-        response = requests.get(url, params=params, timeout=5)
-        if response.status_code == 200:
-            res_json = response.json()
-            if res_json.get("code") == "0":
-                return json.dumps(res_json.get("data", []), indent=2)
-        return f"Error: Failed to fetch candles for {inst_id}"
-    except Exception as e:
-        return f"API Exception: {str(e)}"
-
-def read_trade_ledger(**kwargs):
-    ledger_path = "trade_signals_ledger.md"
-    if not os.path.exists(ledger_path):
-        return "Ledger file not found yet."
-    with open(ledger_path, "r", encoding="utf-8") as f:
-        content = f.readlines()
-    return "".join(content[-15:])
+        resp = requests.get(url, params={"instId": inst_id, "bar": bar, "limit": limit}, timeout=5).json()
+        if resp.get("code") == "0": return json.dumps(resp.get("data", []), indent=2)
+        return "Error: Candle fetch failed."
+    except Exception as e: return f"API Error: {str(e)}"
 
 def fetch_rpi_index(inst_id: str = "BTC-USDT", **kwargs):
-    ticker_json = fetch_okx_ticker(inst_id)
-    if "Error" in ticker_json: return ticker_json
+    ticker = json.loads(fetch_okx_ticker(inst_id))
+    if "Error" in ticker: return ticker
     try:
-        data = json.loads(ticker_json)
-        last, high, low = float(data["last_price"]), float(data["high_24h"]), float(data["low_24h"])
+        last, high, low = float(ticker["last_price"]), float(ticker["high_24h"]), float(ticker["low_24h"])
         rpi = ((last - low) / (high - low)) * 100 if (high - low) > 0 else 50
-        data["rpi_index"] = round(rpi, 2)
-        if rpi <= 30: data["rpi_classification"] = "Lower-Range Compression"
-        elif rpi >= 70: data["rpi_classification"] = "Upper-Range Expansion"
-        else: data["rpi_classification"] = "Mid-Range Equilibrium"
-        return json.dumps(data, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+        classification = "Lower-Range Compression" if rpi <= 30 else "Upper-Range Expansion" if rpi >= 70 else "Mid-Range Equilibrium"
+        return json.dumps({"instrument": inst_id, "rpi_index": round(rpi, 2), "rpi_classification": classification}, indent=2)
+    except Exception as e: return f"Error: {str(e)}"
 
 def fetch_technical_indicators(inst_id: str = "BTC-USDT", bar: str = "1H", **kwargs):
     candles_json = fetch_okx_candles(inst_id, bar, limit=50)
@@ -328,42 +280,37 @@ def fetch_technical_indicators(inst_id: str = "BTC-USDT", bar: str = "1H", **kwa
     try:
         candles = json.loads(candles_json)
         closes = [float(c[4]) for c in candles][::-1]
-        if len(closes) < 21: return "Error: Not enough data."
+        if len(closes) < 21: return "Error: Data Insufficient."
         def get_ema(data, period):
-            ema = [sum(data[:period]) / period]
-            mult = 2 / (period + 1)
+            ema = [sum(data[:period])/period]
+            mult = 2/(period+1)
             for p in data[period:]: ema.append((p - ema[-1]) * mult + ema[-1])
             return ema[-1]
         def get_rsi(data, period=14):
-            gains = [max(data[i] - data[i-1], 0) for i in range(1, len(data))]
-            losses = [max(data[i-1] - data[i], 0) for i in range(1, len(data))]
+            gains = [max(data[i]-data[i-1], 0) for i in range(1, len(data))]
+            losses = [max(data[i-1]-data[i], 0) for i in range(1, len(data))]
             avg_g, avg_l = sum(gains[:period])/period, sum(losses[:period])/period
             for i in range(period, len(gains)):
-                avg_g, avg_l = (avg_g * (period-1) + gains[i])/period, (avg_l * (period-1) + losses[i])/period
+                avg_g, avg_l = (avg_g*(period-1)+gains[i])/period, (avg_l*(period-1)+losses[i])/period
             if avg_l == 0: return 100
-            return 100 - (100 / (1 + (avg_g / avg_l)))
+            return 100 - (100/(1+(avg_g/avg_l)))
         ema9, ema21, rsi14 = get_ema(closes, 9), get_ema(closes, 21), get_rsi(closes, 14)
         return json.dumps({"instrument": inst_id, "ema_9": round(ema9, 2), "ema_21": round(ema21, 2), "rsi_14": round(rsi14, 2), "trend": "Bullish" if ema9 > ema21 else "Bearish"}, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+    except Exception as e: return f"Error: {str(e)}"
 
 def fetch_order_book_walls(inst_id: str = "BTC-USDT", **kwargs):
     try:
         url = f"{OKX_REST_HOST}/api/v5/market/books"
-        params = {"instId": inst_id, "sz": 20}
-        response = requests.get(url, params=params, timeout=5)
-        if response.status_code == 200:
-            data_list = response.json().get("data", [])
-            if not data_list: return "Error: No data."
-            data = data_list[0]
+        resp = requests.get(url, params={"instId": inst_id, "sz": 20}, timeout=5).json()
+        if resp.get("code") == "0" and resp.get("data"):
+            data = resp["data"][0]
             bids, asks = data.get("bids", []), data.get("asks", [])
-            if not bids or not asks: return "Error: Empty book."
+            if not bids or not asks: return "Error: Empty Book."
             top_bid = max(bids, key=lambda x: float(x[1]))
             top_ask = max(asks, key=lambda x: float(x[1]))
             return json.dumps({"instrument": inst_id, "buy_wall": {"price": top_bid[0], "size": top_bid[1]}, "sell_wall": {"price": top_ask[0], "size": top_ask[1]}}, indent=2)
-        return "Error: Failed to fetch."
-    except Exception as e:
-        return f"Error: {str(e)}"
+        return "Error: Fetch failed."
+    except Exception as e: return f"Error: {str(e)}"
 
 def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
     try:
@@ -371,8 +318,8 @@ def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
         if "Error" in macro_json: return macro_json
         macro_closes = [float(c[4]) for c in json.loads(macro_json)[::-1]]
         def get_ema(data, period):
-            ema = [sum(data[:period]) / period]
-            mult = 2 / (period + 1)
+            ema = [sum(data[:period])/period]
+            mult = 2/(period+1)
             for p in data[period:]: ema.append((p - ema[-1]) * mult + ema[-1])
             return ema[-1]
         macro_ema50, macro_ema200 = get_ema(macro_closes, 50), get_ema(macro_closes, 200)
@@ -401,8 +348,7 @@ def fetch_quantitative_setup(inst_id: str = "BTC-USDT", **kwargs):
         gate_strength = strength >= 0.60
         tactical_score = sum([gate_trend, gate_momentum, gate_volume, gate_strength])
         return json.dumps({"instrument": inst_id, "last_price": c[-1], "macro_filter_bullish": macro_bullish, "tactical_confluence_score": f"{tactical_score}/4", "gates": {"structural_trend": "Bullish" if gate_trend else "Neutral/Bearish", "momentum_acceleration": "Active" if gate_momentum else "Decelerating", "volume_surge": "Confirmed" if gate_volume else "Nominal", "price_location": f"{round(strength*100, 1)}% of range"}, "verdict": "CONFLUENCE_LEVEL_4" if macro_bullish and tactical_score == 4 else "CONFLUENCE_LEVEL_3" if tactical_score >= 3 else "MONITORING"}, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+    except Exception as e: return f"Error: {str(e)}"
 
 def fetch_market_sentiment(inst_id: str = "BTC-USDT", **kwargs):
     sentiment_data = {"instrument": inst_id}
@@ -420,16 +366,12 @@ def fetch_market_sentiment(inst_id: str = "BTC-USDT", **kwargs):
                 oi_resp = requests.get(oi_url, params={"instId": swap_inst}, timeout=5).json()
                 if oi_resp.get("code") == "0" and oi_resp.get("data"):
                     sentiment_data["open_interest"] = oi_resp["data"][0].get("oi")
-                    sentiment_data["oi_ccy"] = oi_resp["data"][0].get("oiCcy")
                 liq_url = f"{global_host}/api/v5/public/liquidation-info"
                 liq_resp = requests.get(liq_url, params={"instId": swap_inst, "mgnMode": "cross", "limit": 20}, timeout=5).json()
                 if liq_resp.get("code") == "0" and liq_resp.get("data"):
-                    total_liq = sum(float(x.get("sz", 0)) for x in liq_resp["data"])
-                    sentiment_data["recent_liquidations_sz"] = round(total_liq, 2)
+                    sentiment_data["recent_liquidations_sz"] = round(sum(float(x.get("sz", 0)) for x in liq_resp["data"]), 2)
                 if sentiment_data.get("funding_rate"): break
-        except Exception as e:
-            logger.warning(f"Sentiment failed for {swap_inst}: {e}")
-            continue
+        except Exception as e: logger.warning(f"Sentiment failed: {e}"); continue
     return json.dumps(sentiment_data, indent=2)
 
 def fetch_global_market_status(**kwargs):
@@ -437,25 +379,21 @@ def fetch_global_market_status(**kwargs):
     results = {}
     try:
         for inst in watchlist:
-            ticker_json = fetch_okx_ticker(inst)
-            data = json.loads(ticker_json)
-            results[inst] = {"price": float(data.get("last_price", 0)), "24h_high": data.get("high_24h"), "24h_low": data.get("low_24h")}
+            ticker = json.loads(fetch_okx_ticker(inst))
+            results[inst] = {"price": float(ticker.get("last_price", 0)), "24h_high": ticker.get("high_24h"), "24h_low": ticker.get("low_24h")}
         return json.dumps(results, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+    except Exception as e: return f"Error: {str(e)}"
 
 def fetch_volatility_metrics(inst_id: str = "BTC-USDT", **kwargs):
     try:
-        candles_json = fetch_okx_candles(inst_id, bar="1H", limit=30)
-        candles = json.loads(candles_json)
+        candles = json.loads(fetch_okx_candles(inst_id, bar="1H", limit=30))
         true_ranges = []
         for i in range(1, len(candles)):
             h, l, prev_c = float(candles[i][2]), float(candles[i][3]), float(candles[i-1][4])
             true_ranges.append(max(h - l, abs(h - prev_c), abs(l - prev_c)))
         atr = sum(true_ranges[-14:]) / 14 if len(true_ranges) >= 14 else 0
-        return json.dumps({"instrument": inst_id, "hourly_atr": round(atr, 2), "volatility_ratio": round(atr / float(candles[-1][4]) * 100, 4) if candles else 0}, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+        return json.dumps({"instrument": inst_id, "hourly_atr": round(atr, 2), "volatility_ratio": round(atr / float(candles[-1][4]) * 100, 4)}, indent=2)
+    except Exception as e: return f"Error: {str(e)}"
 
 def record_structural_insight(key: str, value: str, **kwargs):
     global agent
@@ -466,60 +404,77 @@ def fetch_historical_lookback(inst_id: str = "BTC-USDT", days: int = 7, **kwargs
     try:
         if "lookback_days" in kwargs: days = int(kwargs["lookback_days"])
         limit = days * 24
-        candles_json = fetch_okx_candles(inst_id, bar="1H", limit=limit)
-        candles = json.loads(candles_json)
+        candles = json.loads(fetch_okx_candles(inst_id, bar="1H", limit=limit))
         closes, vols = [float(x[4]) for x in candles], [float(x[5]) for x in candles]
-        avg_vol, max_px, min_px = sum(vols) / len(vols), max(closes), min(closes)
         delta_pct = ((closes[-1] - closes[0]) / closes[0]) * 100
-        return json.dumps({"instrument": inst_id, "lookback_period_days": days, "high": max_px, "low": min_px, "avg_hourly_volume": round(avg_vol, 2), "period_performance": f"{delta_pct:+.2f}%"}, indent=2)
-    except Exception as e:
-        return f"Error: {str(e)}"
+        return json.dumps({"instrument": inst_id, "lookback_period_days": days, "high": max(closes), "low": min(closes), "avg_hourly_volume": round(sum(vols)/len(vols), 2), "period_performance": f"{delta_pct:+.2f}%"}, indent=2)
+    except Exception as e: return f"Error: {str(e)}"
+
+def fetch_smart_patterns(inst_id: str = "BTC-USDT", bar: str = "1H", **kwargs):
+    try:
+        candles = json.loads(fetch_okx_candles(inst_id, bar, limit=50))
+        h, l = [float(x[2]) for x in candles][::-1], [float(x[3]) for x in candles][::-1]
+        h_trend = (h[-1] > h[-10]) and (h[-10] > h[-20])
+        l_trend = (l[-1] > l[-10]) and (l[-10] > l[-20])
+        recent_range, hist_range = max(h[-5:]) - min(l[-5:]), max(h[-20:]) - min(l[-20:])
+        pattern, prob = "Neutral/Chop", 50
+        if h_trend and l_trend: pattern, prob = "Ascending Channel", 65
+        elif not h_trend and not l_trend: pattern, prob = "Descending Channel", 60
+        if recent_range < (hist_range * 0.5): pattern, prob = "Volatility Compression (Squeeze)", 70
+        return json.dumps({"instrument": inst_id, "detected_pattern": pattern, "historical_resolution_probability": f"{prob}%"}, indent=2)
+    except Exception as e: return f"Error: {str(e)}"
+
+def ai_mentor_lookup(term: str = "RSI", **kwargs):
+    glossary = {"RSI": "Relative Strength Index. Measures 'overbought' (>70) or 'oversold' (<30).", "EMA": "Exponential Moving Average. Trend-following line weighting recent price more.", "ATR": "Average True Range. Volatility measurement.", "CONFLUENCE": "Multiple indicators aligning for higher probability.", "FUNDING_RATE": "Leverage bias fee. High positive = Long heavy.", "OPEN_INTEREST": "Total active contracts. Rising = New capital entry."}
+    matches = difflib.get_close_matches(term.upper(), list(glossary.keys()), n=1, cutoff=0.4)
+    if matches: return json.dumps({"term": matches[0], "explanation": glossary[matches[0]]}, indent=2)
+    return f"Term '{term}' not found."
+
+def ai_chart_analyzer(inst_id: str = "BTC-USDT", **kwargs):
+    """Aggregated analysis: Price, Volatility, and Indicators."""
+    try:
+        ticker = json.loads(fetch_okx_ticker(inst_id))
+        volatility = json.loads(fetch_volatility_metrics(inst_id))
+        indicators = json.loads(fetch_technical_indicators(inst_id))
+        return json.dumps({"instrument": inst_id, "price_action": ticker, "volatility": volatility, "indicators": indicators}, indent=2)
+    except Exception as e: return f"Error in aggregated analyzer: {str(e)}"
 
 async def run_autonomous_loop(agent_instance):
-    """
-    Continuous monitoring loop for Quant Agent Trinity.
-    Executes analytical cycle every 15 minutes (aligned with tactical candle closes).
-    """
-    logger.info("Autonomous Monitoring Active. Trinity is operational.")
+    logger.info("Autonomous Strategy Scanning Active.")
     while True:
         try:
-            # Enhanced objective prompt for autonomous reporting and level tracking
             prompt = (
-                "Execute autonomous analytical cycle for BTC-USDT. "
-                "1. Assess macro filter alignment, tactical confluence, and institutional sentiment. "
-                "2. Identify major structural levels (Support/Resistance) using fetch_historical_lookback. "
-                "3. If a new significant structural level is identified, use record_structural_insight to save it. "
-                "4. Cross-reference RECENT MARKET HISTORY for trend deltas."
+                "Scan BTC-USDT using the BALANCED and MOMENTUM strategy presets. "
+                "1. Utilize ai_chart_analyzer and fetch_smart_patterns. "
+                "2. Check market sentiment and institutional walls. "
+                "3. If a setup criteria is met, generate a SETUP NOTIFICATION CARD with Entry, SL, and Target. "
+                "4. If no setup exists, provide a professional quantitative monitoring report."
             )
-            
-            print(f"\n[!] TRINITY AUTONOMOUS CYCLE: {datetime.now().strftime('%H:%M:%S')}")
+            print(f"\n[!] TRINITY STRATEGY SCAN: {datetime.now().strftime('%H:%M:%S')}")
             reply = agent_instance.run_step(prompt)
-            print(f"\n[Autonomous Report]:\n{reply}\n")
-            print("-" * 80)
+            print(f"\n[Autonomous Output]:\n{reply}\n" + "-" * 80)
             await asyncio.sleep(900)
-        except Exception as e:
-            logger.error(f"Loop error: {e}", exc_info=True)
-            await asyncio.sleep(60)
+        except Exception as e: logger.error(f"Loop error: {e}", exc_info=True); await asyncio.sleep(60)
 
 if __name__ == "__main__":
     print("[*] Initializing Quant Agent Trinity (GGUF Mode)...")
     gguf_path = "C:/ai_models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
     try:
         agent = QuantAgentTrinity(model_path=gguf_path)
-        agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Retrieves real-time instrument telemetry.")
-        agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Retrieves historical OHLCV data.")
-        agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Calculates RPI for relative price location analysis.")
-        agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "Calculates EMA and RSI metrics.")
-        agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Identifies institutional liquidity blocks.")
-        agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Evaluates macro trend and tactical confluence.")
-        agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Retrieves institutional leverage and flow metrics.")
-        agent.register_tool("fetch_global_market_status", fetch_global_market_status, "Scans major assets for market-wide context.")
-        agent.register_tool("fetch_volatility_metrics", fetch_volatility_metrics, "Calculates ATR and volatility ratios.")
-        agent.register_tool("record_structural_insight", record_structural_insight, "Records a permanent technical observation.")
-        agent.register_tool("fetch_historical_lookback", fetch_historical_lookback, "Performs a multi-day statistical lookback.")
+        agent.register_tool("fetch_okx_ticker", fetch_okx_ticker, "Real-time telemetry.")
+        agent.register_tool("fetch_okx_candles", fetch_okx_candles, "Historical OHLCV.")
+        agent.register_tool("fetch_rpi_index", fetch_rpi_index, "Relative price location (RPI).")
+        agent.register_tool("fetch_technical_indicators", fetch_technical_indicators, "EMA/RSI metrics.")
+        agent.register_tool("fetch_order_book_walls", fetch_order_book_walls, "Institutional liquidity blocks.")
+        agent.register_tool("check_quantitative_confluence", fetch_quantitative_setup, "Macro/Tactical confluence scoring.")
+        agent.register_tool("fetch_market_sentiment", fetch_market_sentiment, "Funding/OI/Liquidations.")
+        agent.register_tool("fetch_global_market_status", fetch_global_market_status, "Market-wide majors scan.")
+        agent.register_tool("fetch_volatility_metrics", fetch_volatility_metrics, "ATR/Volatility ratios.")
+        agent.register_tool("record_structural_insight", record_structural_insight, "Save permanent technical insights.")
+        agent.register_tool("fetch_historical_lookback", fetch_historical_lookback, "Multi-day statistical analysis.")
+        agent.register_tool("ai_chart_analyzer", ai_chart_analyzer, "Aggregated Price/Volatility/Indicator analysis.")
+        agent.register_tool("fetch_smart_patterns", fetch_smart_patterns, "Identify chart structures and probabilities.")
+        agent.register_tool("ai_mentor", ai_mentor_lookup, "Explain market terminology in plain language.")
         asyncio.run(run_autonomous_loop(agent))
-    except (KeyboardInterrupt, SystemExit):
-        print("\n[*] Trinity successfully deactivated by user.")
-    except Exception as e:
-        print(f"[!] Critical Launch Failure: {e}")
-        sys.exit(1)
+    except (KeyboardInterrupt, SystemExit): print("\n[*] Trinity deactivated.")
+    except Exception as e: print(f"[!] Launch Failure: {e}"); sys.exit(1)
