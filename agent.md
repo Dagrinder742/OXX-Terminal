@@ -21,8 +21,9 @@ The Agent utilizes Python-based calculators to process raw OKX telemetry.
 *   `record_structural_insight`: Persistent storage of institutional floors and macro shifts.
 *   `fetch_historical_lookback`: Multi-day statistical analysis (Range/Volume/Performance).
 
-### **B. Reasoning (LLM Loop)**
-*   **Model**: `phi4-mini`.
+### **B. Reasoning (LLM Engine)**
+*   **Model Backend**: `llama-cpp-python` (Direct GGUF inference).
+*   **Execution Strategy**: Forced CPU inference (`-ngl 0`) with a optimized **2048 token** context window (`-c 2048`) for high-efficiency on 8GB RAM hardware.
 *   **Loop**: Perception -> Tool Call -> Observation -> Quantitative Analysis.
 *   **Objective**: To deliver objective, data-driven market breakdowns.
 
@@ -41,10 +42,13 @@ Trinity utilizes a bifurcated memory system:
 6.  **Analysis**: Agent provides a breakdown based on *Current Data* + *Memory*.
 
 ## 4. Autonomous Monitoring Mode
-Trinity has been upgraded to a **continuous monitoring system**.
+Trinity has been upgraded to a **standalone, persistent monitoring system**.
+*   **GGUF Native**: Trinity runs directly via `llama-cpp-python`, eliminating the need for an external Ollama server.
 *   **Bifurcated Loop**: The agent operates in an asynchronous loop, triggering a full quantitative deep-dive every **15 minutes** (synchronized with tactical candle closes).
+*   **Autonomous Scribing**: The loop now explicitly instructs Trinity to identify and record significant structural support and resistance levels into her long-term memory.
 *   **Dedicated Reporting**: Insights are streamed to a dedicated terminal, providing real-time strategic awareness alongside the main execution TUI.
 *   **Resiliency**: The system handles network transients and inference timeouts with automatic re-alignment protocols.
+
 
 ## 5. Current Build Status
 *   [x] Integrated `AgentMemory` into `agent.py`.

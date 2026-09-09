@@ -2,55 +2,6 @@
   "notes": {},
   "history": [
     {
-      "timestamp": "2026-09-07T18:26:10.919280",
-      "instrument": "BTC-USDT",
-      "market_state": "Market State Delta: 79165.4",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-07T18:26:10.924326",
-      "instrument": "BTC-USDT",
-      "market_state": "Analysis Delta",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-08T12:32:19.009402",
-      "instrument": "BTC-USDT",
-      "market_state": "Market State Delta: 78660.0",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-08T12:32:19.017684",
-      "instrument": "BTC-USDT",
-      "market_state": "Analysis Delta",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-08T14:07:06.344287",
-      "instrument": "BTC-USDT",
-      "market_state": "Market State Delta: 78621.6",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-08T14:24:46.230279",
-      "instrument": "BTC-USDT",
-      "market_state": "Market State Delta: 78797.9",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-08T14:35:49.252504",
-      "instrument": "BTC-USDT",
-      "market_state": "Analysis Delta",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
       "timestamp": "2026-09-08T14:35:49.302971",
       "instrument": "BTC-USDT",
       "market_state": "Market State Delta: 78675.0",
@@ -70,6 +21,126 @@
       "market_state": "Market State Delta: 78366.5",
       "support": 0.0,
       "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T15:21:02.772051",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T15:21:02.784630",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78442.1",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T15:21:02.787254",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78442.1",
+      "support": 77624.6,
+      "resistance": 79485.9
+    },
+    {
+      "timestamp": "2026-09-08T15:51:36.852276",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T15:51:36.867350",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T15:51:36.870527",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78329.9",
+      "support": 77624.6,
+      "resistance": 79485.9
+    },
+    {
+      "timestamp": "2026-09-08T15:51:36.872133",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78324.3",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T16:22:37.181213",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T16:22:37.193603",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78512.7",
+      "support": 77624.6,
+      "resistance": 79485.9
+    },
+    {
+      "timestamp": "2026-09-08T16:22:37.195528",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T16:22:37.197755",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:16:20.228373",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78485.5",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:16:20.253756",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:16:20.268252",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:46:33.141293",
+      "instrument": "BTC-USDT",
+      "market_state": "Market State Delta: 78433.3",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:46:33.150852",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
+    },
+    {
+      "timestamp": "2026-09-08T19:46:33.153210",
+      "instrument": "BTC-USDT",
+      "market_state": "Analysis Delta",
+      "support": 0.0,
+      "resistance": 0.0
     }
-  ]
+  ],
+  "structural_insights": {}
 }
