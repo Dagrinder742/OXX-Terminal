@@ -100,24 +100,22 @@ class QuantAgentTrinity:
         self.system_instructions = (
             "You are Quant Agent Trinity, the analytical brain of the OXX Terminal.\n\n"
             "PHILOSOPHY:\n"
-            "You do not predict the market. You perform real-time autonomous pattern scanning and risk management "
-            "to identify professional spot trade setups based on technical probabilities.\n\n"
+            "Identify professional spot trade setups based on technical probabilities. "
+            "You MUST account for trading costs (0.2% fee per side, 0.4% total) to ensure setups are 'Trade-Ready'.\n\n"
             "STRATEGY PRESETS:\n"
-            "1. MOMENTUM: Focus on technical confluence >= 3/4, accelerating MACD, and breakout patterns.\n"
-            "2. BALANCED: Focus on mean reversion from compression zones (RPI <= 30) near identified support.\n\n"
-            "OPERATIONAL PROTOCOL:\n"
-            "1. Perception: Use tools (ai_chart_analyzer, fetch_smart_patterns, etc.) to gather data.\n"
-            "2. Analysis: If a setup criteria is met, generate a NOTIFICATION CARD:\n"
+            "1. MOMENTUM: Confluence >= 3/4, accelerating MACD. Setup MUST target >= 1.5% profit to cover fees and risk.\n"
+            "2. BALANCED: Mean reversion from compression (RPI <= 30) near support. Setup MUST target >= 1.5% profit.\n\n"
+            "OPERATIONAL PROTOCOL (STRICT TURNS):\n"
+            "TURN 1 (PERCEPTION): Call tools (ai_chart_analyzer, etc.). Output ONLY JSON.\n"
+            "TURN 2 (ANALYSIS): Generate a NOTIFICATION CARD only if a 'Trade-Ready' setup exists.\n"
             "   --- SETUP NOTIFICATION CARD ---\n"
             "   ASSET: BTC-USDT\n"
             "   STRATEGY: [MOMENTUM/BALANCED]\n"
-            "   PROPOSED ENTRY: [Price]\n"
-            "   STOP LOSS: [Price]\n"
-            "   PROFIT TARGET: [Price]\n"
-            "   EXPLANATION: [Technical justification in plain language]\n"
+            "   PROPOSED ENTRY: [Price from Live Data]\n"
+            "   STOP LOSS: [Calculated: Price - 0.75%]\n"
+            "   PROFIT TARGET: [Calculated: Price + 1.5% minimum]\n"
+            "   EXPLANATION: [Technical justification + Fee-Adjusted logic]\n"
             "   --------------------------------\n"
-            "3. If no setup exists, provide a standard technical monitoring report.\n"
-            "4. NEVER use JSON, braces {}, or markdown code blocks in your FINAL human response."
         )
 
     def register_tool(self, name, func, description):
@@ -151,15 +149,25 @@ class QuantAgentTrinity:
         
         tool_output = self.execute_tool_call(response)
 
-        # Allow proceeding to analysis if tool_output is non-empty and doesn't contain "No tool calls detected"
+        # 3. Observation & Analysis phase
         if tool_output and "No tool calls detected" not in tool_output:
             self.auto_commit_memory(tool_output)
 
             analysis_prompt = (
-                f"Retrieved Market Data:\n{tool_output}\n\n"
-                "OBJECTIVE: Provide a professional quantitative breakdown in PLAIN TEXT. "
-                "Highlight setups (if any) using NOTIFICATION CARDS. "
-                "Specify Verdict, Macro Filter alignment, and Confluence Score."
+                f"LIVE MARKET OBSERVATION DATA:\n{tool_output}\n\n"
+                "OBJECTIVE: Conduct a professional quantitative analysis. "
+                "CRITICAL: A trade is only valid if the profit target is at least 1.5% away from entry to cover the 0.4% round-trip fee.\n\n"
+                "REPORTING FORMAT:\n"
+                "If a Trade-Ready setup exists, generate a NOTIFICATION CARD:\n"
+                "   --- SETUP NOTIFICATION CARD ---\n"
+                "   ASSET: BTC-USDT\n"
+                "   STRATEGY: [MOMENTUM/BALANCED]\n"
+                "   PROPOSED ENTRY: [Current Price]\n"
+                "   STOP LOSS: [Entry - 0.75% (Min)]\n"
+                "   PROFIT TARGET: [Entry + 1.5% (Min)]\n"
+                "   EXPLANATION: [Justify why this setup overcomes the 0.4% fee hurdle]\n"
+                "   --------------------------------\n"
+                "If no setup meets the 1.5% hurdle, provide a MONITORING report explaining that volatility is too low for a fee-efficient trade."
             )
 
             conversation.append({"role": "assistant", "content": response})
@@ -168,6 +176,13 @@ class QuantAgentTrinity:
             print("[*] Generating Technical Analysis...")
             return self.llm_call(conversation)
         
+        # ERROR HANDLING: If the model failed to call tools, force a re-prompt
+        if "No tool calls detected" in tool_output:
+            logger.warning("Agent failed to initiate Perception Phase. Retrying with strict enforcement.")
+            retry_prompt = "You failed to call any tools. You MUST use 'ai_chart_analyzer' to see the actual market price before talking."
+            conversation.append({"role": "user", "content": retry_prompt})
+            return self.llm_call(conversation)
+            
         return response
 
     def execute_tool_call(self, response_text):

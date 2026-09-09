@@ -15,10 +15,11 @@ Agent Trinity is engineered as a **strictly technical analytical layer**. It pri
 *   `check_quantitative_confluence`: 4-Gate tactical setup evaluation.
 
 ### **B. Reasoning (Strategy & Education)**
-*   **MOMENTUM**: Focused on breakout confluence and trend acceleration.
-*   **BALANCED**: Focused on mean reversion from compression zones near support.
-*   **Notification Cards**: Standardized alerts with Entry, SL, and Target specifications.
-*   **AI Mentor**: Trinity acts as a tutor, explaining the 'Why' behind every setup match in plain language.
+*   **MOMENTUM**: Breakout confluence targeting >= 1.5% expansion.
+*   **BALANCED**: Mean reversion targeting >= 1.5% recovery.
+*   **Fee-Aware Logic**: Trinity is programmed to account for a 0.4% round-trip OKX fee. Setups that do not overcome this "Hurdle" are discarded as noise.
+*   **Notification Cards**: Standardized alerts with Entry, SL, and Target specifications, hardware-hardened for fee-adjusted precision.
+
 
 
 
