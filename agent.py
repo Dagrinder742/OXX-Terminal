@@ -83,7 +83,7 @@ class QuantAgentTrinity:
         self.model_name = os.path.basename(model_path)
         self.memory = AgentMemory(memory_file)
         self.tools = {}
-        
+
         logger.info(f"Loading GGUF Engine: {self.model_name}")
         try:
             self.llm = Llama(
