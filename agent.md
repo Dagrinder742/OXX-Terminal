@@ -1,57 +1,47 @@
 # OXX-Terminal Quant Agent: Technical Documentation
 
-This document tracks the architecture, workflow, and evolution of the **OXX Quant Agent**, an autonomous analytical layer for the OXX Terminal.
+This document tracks the architecture, workflow, and evolution of **Agent Trinity**, an autonomous analytical layer for the OXX Terminal.
 
 ## 1. Core Philosophy: The Trinity Quantitative Protocol
-Agent Trinity is engineered as a **strictly technical analytical layer**. It prioritizes data deltas and objective telemetry over narrative interpretation. It utilizes a bifurcated perception/analysis cycle to maintain high-fidelity quantitative standards.
+Agent Trinity is a **strictly technical spot-only analytical unit**. She is engineered for US-compliant trading (Buy Low / Sell High) and prioritizes deterministic data over narrative interpretation. She utilizes a **Pipeline Architecture** to ensure mathematical precision and logical grounding.
 
 ## 2. Architectural Components
 
-### **A. Perception (Technical Tools)**
-*   `ai_chart_analyzer`: Aggregated analysis of Price, Volatility, and Indicators.
-*   `fetch_smart_patterns`: Structural identification of Channels and Volatility Compression.
-*   `ai_mentor`: Real-time quantitative tutor for market nomenclature.
-*   `fetch_market_sentiment`: Institutional money flow (Funding/OI/Liquidations).
-*   `check_quantitative_confluence`: 4-Gate tactical setup evaluation.
+### **A. Pre-Inference Pipeline (Python Engine)**
+Unlike standard agents that "guess" how to use tools, Trinity uses a hard-coded Python pre-processor to gather a high-fidelity **Market Snapshot** before reasoning begins:
+*   **Deterministic Perception**: Automatically fetches Ticker data, calculates EMA (9/21), and scans News Wire sentiment.
+*   **Hard-Coded Math**: Pre-computes **SPOT_ACCUMULATION** levels (Entry, SL, TP) using strict risk parameters (0.75% Stop-Loss, 1.5% net profit hurdle + 0.4% OKX fees).
+*   **US Endpoint Lock**: All telemetry is routed through `us.okx.com`.
 
-### **B. Reasoning (Strategy & Education)**
-*   **MOMENTUM**: Breakout confluence targeting >= 1.5% expansion.
-*   **BALANCED**: Mean reversion targeting >= 1.5% recovery.
-*   **Fee-Aware Logic**: Trinity is programmed to account for a 0.4% round-trip OKX fee. Setups that do not overcome this "Hurdle" are discarded as noise.
-*   **Notification Cards**: Standardized alerts with Entry, SL, and Target specifications, hardware-hardened for fee-adjusted precision.
+### **B. Strategic Reasoning (LLM Engine)**
+*   **Chain of Thought (CoT)**: Trinity is programmed with an "Internal Voice." Every response begins with a `<thinking>` block to deliberate on technical trend vs. news sentiment.
+*   **Spot-Only Logic**: Restricted to US Spot mechanics. No mention of shorting, margin, or leverage.
+*   **Single-Shot Verdict**: Evaluates the pre-computed snapshot to provide a professional Strategic Verdict and Notification Card.
+*   **Hardware Profile**: Optimized for 8GB RAM using `llama-cpp-python` with a **16,384 token** context window.
 
+### **C. Persistence & Intelligence**
+*   **News Engine**: A bifurcated async background poller (`news_engine.py`) that synchronizes the Cointelegraph RSS wire and performs VADER sentiment scoring every 10 minutes.
+*   **Memory Architecture**: Bifurcated system in `agent_memory.json` tracking **Long-Term Structural Insights** and **Short-Term Tactical History** (Last 20 entries).
 
-
-
-### **C. Persistence (Memory Architecture)**
-Trinity utilizes a bifurcated memory system:
-*   **Long-Term (Structural)**: Permanent technical insights that do not expire.
-*   **Short-Term (Tactical)**: Last 20 historical state transitions for trend delta detection.
-*   **File**: `agent_memory.json`.
-
-## 3. The "Recall" Workflow
-1.  **Initialize**: Agent loads `agent_memory.json`.
-2.  **Prompt**: User asks a question.
-3.  **Context Injection**: Agent prepends the last 10 memory entries to the prompt.
-4.  **Tool Catalog**: Agent sees all available tools and their descriptions.
-5.  **Execution**: Agent calls the tool, receives data, and saves the new state to memory.
-6.  **Analysis**: Agent provides a breakdown based on *Current Data* + *Memory*.
+## 3. The "Pipeline" Workflow
+1.  **Pulse**: Python gathers live telemetry and news sentiment.
+2.  **Snapshot**: Python calculates fee-aware SL/TP levels.
+3.  **Inference**: The LLM evaluates the snapshot through a single-shot prompt.
+4.  **Verdict**: Trinity provides a plain-text breakdown and Notification Card.
+5.  **Commit**: The final state is committed to historical memory.
 
 ## 4. Autonomous Monitoring Mode
-Trinity has been upgraded to a **standalone, persistent monitoring system**.
-*   **GGUF Native**: Trinity runs directly via `llama-cpp-python`, eliminating the need for an external Ollama server.
-*   **Bifurcated Loop**: The agent operates in an asynchronous loop, triggering a full quantitative deep-dive every **15 minutes** (synchronized with tactical candle closes).
-*   **Autonomous Scribing**: The loop now explicitly instructs Trinity to identify and record significant structural support and resistance levels into her long-term memory.
-*   **Dedicated Reporting**: Insights are streamed to a dedicated terminal, providing real-time strategic awareness alongside the main execution TUI.
-*   **Resiliency**: The system handles network transients and inference timeouts with automatic re-alignment protocols.
-
+Trinity operates as a **standalone, persistent monitoring system** requiring no external servers.
+*   **Dual-Engine Sync**: Main agent and News Engine run concurrently via `asyncio`.
+*   **15-Minute Cycles**: Full quantitative deep-dives synchronized with tactical candle closes.
+*   **Setup Hunting**: Specifically looks for high-probability Spot Accumulation zones that overcome the 0.4% round-trip fee hurdle.
 
 ## 5. Current Build Status
-*   [x] Integrated `AgentMemory` into `agent.py`.
-*   [x] Implemented Dynamic Tool Catalog injection.
-*   [x] Enabled "Recall" (Memory-to-Prompt) context.
-*   [ ] Integration of Technical Indicator tools (RSI/EMA).
-*   [ ] Long-term "Key Levels" persistence.
+*   [x] Transitioned to **Spot-Only US Architecture**.
+*   [x] Implemented **Single-Shot Pipeline** logic (Eliminated loop slippage).
+*   [x] Integrated **Async News Engine** with Sentiment Scoring.
+*   [x] Expanded context window to **16k tokens**.
+*   [x] Locked **Chain of Thought** internal reasoning.
 
 ---
-*Note: This agent is powered by `phi4-mini`. To mitigate hallucinations, we use strict JSON schemas for tool output and comprehensive system instructions.*
+*Note: Trinity is powered by `phi4-mini`. We use deterministic Python pre-processing to eliminate hallucinations and ground the model in real-time technical reality.*

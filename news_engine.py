@@ -1,4 +1,4 @@
-import urllib.request
+import requests
 import xml.etree.ElementTree as ET
 import json
 import re
@@ -14,8 +14,9 @@ logger = logging.getLogger("NewsEngine")
 try:
     nltk.download('punkt', quiet=True)
     nltk.download('vader_lexicon', quiet=True)
-except Exception:
-    pass
+    logger.info("NLTK prerequisites verified successfully.")
+except Exception as e:
+    logger.error(f"Failed to download NLTK prerequisites: {e}")
 
 sia = SentimentIntensityAnalyzer()
 
@@ -32,20 +33,28 @@ class NewsEngine:
 
     def fetch_and_process(self):
         try:
-            req = urllib.request.Request(self.feed_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                xml_data = response.read()
+            # Use requests with a standard browser user-agent to bypass basic bot filters
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            response = requests.get(self.feed_url, headers=headers, timeout=10)
 
-            root = ET.fromstring(xml_data)
+            if response.status_code != 200:
+                logger.error(f"NewsEngine HTTP Error: Status code {response.status_code}")
+                return False
+
+            root = ET.fromstring(response.content)
             channel = root.find('channel')
-            if channel is None: return False
+            if channel is None: 
+                logger.error("NewsEngine Error: Invalid RSS structure (no channel found)")
+                return False
 
             articles = []
             for item in channel.findall('item'):
                 title = item.find('title').text.strip() if item.find('title') is not None else ""
                 desc = clean_html(item.find('description').text if item.find('description') is not None else "")
                 combined = f"{title} {desc}".lower()
-                
+
                 if any(kw in combined for kw in self.keywords):
                     sentiment = sia.polarity_scores(desc)
                     compound = sentiment['compound']
@@ -53,24 +62,35 @@ class NewsEngine:
                         "title": title,
                         "timestamp": item.find('pubDate').text.strip() if item.find('pubDate') is not None else "",
                         "classification": "Bullish" if compound >= 0.05 else "Bearish" if compound <= -0.05 else "Neutral",
-                        "sentiment_score": compound,
+                        "sentiment_score": round(compound, 4),
                         "snippet": desc[:200] + "..." if len(desc) > 200 else desc
                     })
 
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump(articles[:15], f, indent=2)
-            return True
+            if articles:
+                with open(self.cache_file, 'w', encoding='utf-8') as f:
+                    json.dump(articles[:15], f, indent=2)
+                logger.info(f"NewsEngine: Successfully cached {len(articles[:15])} fresh articles.")
+                return True
+            else:
+                logger.warning("NewsEngine: Parsed feed, but zero articles matched keywords.")
+                return False
+
+        except ET.ParseError as pe:
+            logger.error(f"NewsEngine XML Parse Error (Possible Cloudflare block): {pe}")
+            return False
         except Exception as e:
             logger.error(f"NewsEngine Cycle Error: {e}")
             return False
 
 async def background_news_poller(interval=600):
     engine = NewsEngine()
+    # Run once immediately on startup so articles.json updates right away
+    await asyncio.to_thread(engine.fetch_and_process)
+
     while True:
         try:
             logger.info("NewsEngine: Synchronizing RSS Wire...")
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, engine.fetch_and_process)
+            await asyncio.to_thread(engine.fetch_and_process)
         except Exception as e:
             logger.error(f"NewsEngine Loop Failure: {e}")
         await asyncio.sleep(interval)
