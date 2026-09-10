@@ -2,27 +2,6 @@
   "notes": {},
   "history": [
     {
-      "timestamp": "2026-09-09T19:30:39.840135",
-      "instrument": "BTC-USDT",
-      "market_state": "Delta: 0.0",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-09T19:30:39.844969",
-      "instrument": "BTC-USDT",
-      "market_state": "Delta: 0.0",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
-      "timestamp": "2026-09-09T19:30:39.847593",
-      "instrument": "BTC-USDT",
-      "market_state": "Delta: 0.0",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
       "timestamp": "2026-09-09T20:00:51.614313",
       "instrument": "BTC-USDT",
       "market_state": "Delta: 0.0",
@@ -140,6 +119,27 @@
       "market_state": "Pulse: 77156.7 (Bearish)",
       "support": 76578.02,
       "resistance": 78622.68
+    },
+    {
+      "timestamp": "2026-09-10T18:28:47.665310",
+      "instrument": "BTC-USDT",
+      "market_state": "Pulse: 77204.3 (Bearish)",
+      "support": 76625.27,
+      "resistance": 78671.18
+    },
+    {
+      "timestamp": "2026-09-10T18:52:24.522008",
+      "instrument": "BTC-USDT",
+      "market_state": "Pulse: 76868.4 (Bearish)",
+      "support": 76291.89,
+      "resistance": 78328.9
+    },
+    {
+      "timestamp": "2026-09-10T19:14:08.549226",
+      "instrument": "BTC-USDT",
+      "market_state": "Pulse: 76771.6 (Bearish)",
+      "support": 76195.81,
+      "resistance": 78230.26
     }
   ],
   "structural_insights": {}
