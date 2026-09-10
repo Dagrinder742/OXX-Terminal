@@ -90,15 +90,15 @@ def calculate_spot_setup(price: float) -> dict:
     fee_hurdle = 0.004   # 0.4% round-trip maker fee
     min_gain = 0.015     # 1.5% target net expansion
     stop_loss_pct = 0.0075 # 0.75% max risk
-    
+
     # Spot math: Stop loss is always below entry, take profit is always above entry
     sl = price * (1.0 - stop_loss_pct)
     tp = price * (1.0 + min_gain + fee_hurdle)
-        
+
     risk = price - sl
     reward = tp - price
     rr_ratio = reward / risk if risk > 0 else 0
-    
+
     return {
         "strategy": "SPOT_ACCUMULATION",
         "entry": round(price, 2),
@@ -115,18 +115,18 @@ def get_market_snapshot(inst_id: str = "BTC-USDT"):
         t_resp = requests.get(f"{OKX_REST_HOST}/api/v5/market/ticker?instId={inst_id}", timeout=5).json()
         ticker = t_resp["data"][0] if t_resp.get("code") == "0" else {}
         last_px = float(ticker.get("last", 0))
-        
+
         # 2. Fetch Technicals (EMA 9/21)
         c_resp = requests.get(f"{OKX_REST_HOST}/api/v5/market/candles?instId={inst_id}&bar=1H&limit=50", timeout=5).json()
         candles = c_resp.get("data", [])
         closes = [float(c[4]) for c in candles][::-1]
-        
+
         def ema(data, p):
             if len(data) < p: return 0
             m = 2/(p+1); e = [sum(data[:p])/p]
             for x in data[p:]: e.append((x-e[-1])*m + e[-1])
             return e[-1]
-        
+
         ema9, ema21 = ema(closes, 9), ema(closes, 21)
         trend = "Bullish" if last_px > ema21 and ema9 > ema21 else "Bearish" if last_px < ema21 else "Neutral"
 
@@ -156,7 +156,7 @@ class QuantAgentTrinity:
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
         self.memory = AgentMemory(memory_file)
-        
+
         logger.info(f"Trinity Pipeline Booting: {self.model_name}")
         self.llm = Llama(model_path=self.model_path, n_ctx=16384, n_gpu_layers=0, n_threads=4, verbose=False)
 
@@ -179,28 +179,33 @@ class QuantAgentTrinity:
         )
 
     def run_cycle(self):
-        """Unified Pipeline: Data -> Logic -> Inference -> Memory."""
+        """Unified Pipeline: Data -> Memory Context -> Logic -> Inference -> State Commit."""
         print(f"[*] Starting Autonomous Pipeline Pulse...")
-        
+
         # 1. Programmatic Perception
         snapshot = get_market_snapshot("BTC-USDT")
         if not snapshot or snapshot["price"] == 0:
             return "Pipeline Error: Market data retrieval failed."
 
-        # 2. Context Injection
+        # 2. Retrieve Recent Memory Context for Continuity
+        recent_history = self.memory.get_recent_history_string()
+
+        # 3. Context Injection (Including short-term history)
         prompt = f"""
         [MARKET SNAPSHOT: SPOT TRADING ONLY (US REGION)]
         Asset: {snapshot['asset']} | Current Price: ${snapshot['price']}
         Trend: {snapshot['trend']} (EMA9: {snapshot['indicators']['ema9']} / EMA21: {snapshot['indicators']['ema21']})
-        
+
+        [RECENT AGENT MEMORY LOGS]
+        {recent_history}
+
         [LIVE NEWS CONTEXT]
         {json.dumps(snapshot['news_sentiment'], indent=2)}
-        
+
         [PRE-COMPUTED SPOT SETUP]
         {snapshot['spot_setup']}
-        
-        TASK: Deliberate in a <thinking> block, then provide the strategic verdict.
-        Strictly enforce Spot-Only parameters (Buy Low / Sell High).
+
+        TASK: Deliberate inside <thinking>...</thinking> tags. Then output ONLY the SETUP NOTIFICATION CARD. Do not include raw tags outside your thinking block.
         """
 
         conversation = [
@@ -208,18 +213,23 @@ class QuantAgentTrinity:
             {"role": "user", "content": prompt}
         ]
 
-        # 3. Single-Shot Inference
+        # 4. Single-Shot Inference
         print("[*] Trinity Reasoning Phase...")
         try:
-            response = self.llm.create_chat_completion(messages=conversation, temperature=0.1, max_tokens=4096)
+            response = self.llm.create_chat_completion(
+                messages=conversation, 
+                temperature=0.1, 
+                max_tokens=4096,
+                stop=["</thought>", "</s>"]
+            )
             reply = response['choices'][0]['message']['content']
-            
-            # 4. Extract and print the internal voice (Thinking Block)
+
+            # 5. Extract and print the internal voice cleanly
             thought_match = re.search(r'<thinking>(.*?)</thinking>', reply, re.DOTALL)
             if thought_match:
-                print(f"\n[Trinity Thought]: {thought_match.group(1).strip()}")
-            
-            # 5. Commit state to memory
+                print(f"\n[Trinity Thought]: {thought_match.group(1).strip().replace(chr(10), ' ')}")
+
+            # 6. Commit state to memory
             self.memory.save_market_memory(
                 snapshot['asset'], 
                 f"Pulse: {snapshot['price']} ({snapshot['trend']})",
@@ -227,8 +237,12 @@ class QuantAgentTrinity:
                 snapshot['spot_setup']['take_profit']
             )
 
-            # Return cleaned verdict for the UI
-            return re.sub(r'<thinking>.*?</thinking>', '', reply, flags=re.DOTALL).strip()
+            # 7. Strip thinking blocks entirely from the final output card
+            clean_verdict = re.sub(r'<thinking>.*?</thinking>', '', reply, flags=re.DOTALL).strip()
+            # Safety catch if model forgets closing tag or outputs trailing tags
+            clean_verdict = re.sub(r'</?thinking>', '', clean_verdict).strip()
+
+            return clean_verdict
         except Exception as e:
             return f"Inference Error: {e}"
 
