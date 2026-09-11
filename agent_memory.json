@@ -2,13 +2,6 @@
   "notes": {},
   "history": [
     {
-      "timestamp": "2026-09-09T20:00:51.633493",
-      "instrument": "BTC-USDT",
-      "market_state": "Delta: 0.0",
-      "support": 0.0,
-      "resistance": 0.0
-    },
-    {
       "timestamp": "2026-09-09T20:00:51.642802",
       "instrument": "BTC-USDT",
       "market_state": "Delta: 0.0",
@@ -140,6 +133,13 @@
       "market_state": "Pulse: 76780.0 (Bearish)",
       "support": 76204.15,
       "resistance": 78238.82
+    },
+    {
+      "timestamp": "2026-09-10T19:47:56.766034",
+      "instrument": "BTC-USDT",
+      "market_state": "Pulse: 76771.1 (Bearish)",
+      "support": 76195.32,
+      "resistance": 78229.75
     }
   ],
   "structural_insights": {}
