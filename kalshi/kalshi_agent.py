@@ -14,8 +14,12 @@ import re
 from llama_cpp import Llama
 from datetime import datetime
 
+# Setup basic logging configuration
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("KalshiTrinity")
+
 # ================================================================================================
-# TRADE EXECUTION AUTHORITY
+# TRADE EXECUTION, PORTFOLIO & SETTLEMENT AUTHORITY
 # ================================================================================================
 
 import base64
@@ -23,59 +27,102 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.serialization import load_pem_private_key
 
-# Configure your API credentials here or via environment variables
 KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "837934ae-214d-4a46-86ff-dbfb21619e49")
 KALSHI_PRIVATE_KEY_PATH = os.getenv("KALSHI_PRIVATE_KEY_PATH", r"C:\Users\krayz\AndroidStudioProjects\OXXTerminal\app\src\main\Python\kalshi\main.txt")
+KALSHI_REST_HOST = "https://api.elections.kalshi.com/trade-api/v2"
 
-def execute_kalshi_trade(ticker: str, side: str, count: int = 1, price_cents: int = 50):
-    """Signs and submits a live order to the Kalshi REST API."""
-    endpoint = "/trade-api/v2/portfolio/orders"
-    url = f"{KALSHI_REST_HOST.replace('/trade-api/v2', '')}{endpoint}"
-
+def _generate_kalshi_headers(method: str, endpoint: str) -> dict:
+    """Generates the required RSA signed headers for Kalshi REST endpoints."""
     timestamp = str(int(datetime.now().timestamp() * 1000))
-    method = "POST"
-
-    # 1. Build the message string required by Kalshi: timestamp + method + endpoint path
-    # (Note: Kalshi path should match the exact endpoint route excluding host)
-    msg_string = timestamp + method + endpoint
+    msg_string = timestamp + method.upper() + endpoint
 
     signature_str = ""
     try:
-        # 2. Load the RSA private key from your specified text/PEM file
         if os.path.exists(KALSHI_PRIVATE_KEY_PATH):
             with open(KALSHI_PRIVATE_KEY_PATH, "rb") as key_file:
                 private_key = load_pem_private_key(key_file.read(), password=None)
 
-            # 3. Sign using RSA-PKCS1v15 and SHA256 as required by Kalshi
             signature = private_key.sign(
                 msg_string.encode('utf-8'),
                 padding.PKCS1v15(),
                 hashes.SHA256()
             )
-            # 4. Base64 encode the resulting signature bytes for the HTTP header string
             signature_str = base64.b64encode(signature).decode('utf-8')
         else:
             logger.error(f"Private key file not found at path: {KALSHI_PRIVATE_KEY_PATH}")
-            return False
     except Exception as e:
         logger.error(f"RSA Signature Generation Failure: {e}")
-        return False
 
-    payload = {
-        "ticker": ticker,
-        "action": "buy",
-        "type": "limit",
-        "side": side.lower(), # "yes" or "no"
-        "count": count,
-        "yes_price" if side.lower() == "yes" else "no_price": price_cents
-    }
-
-    headers = {
+    return {
         "Content-Type": "application/json",
         "KALSHI-ACCESS-KEY": KALSHI_API_KEY_ID,
         "KALSHI-ACCESS-TIMESTAMP": timestamp,
         "KALSHI-ACCESS-SIGNATURE": signature_str
     }
+
+def get_kalshi_balance():
+    """Queries the Kalshi portfolio balance endpoint to retrieve available capital."""
+    endpoint = "/trade-api/v2/portfolio/balance"
+    url = f"https://api.elections.kalshi.com{endpoint}"
+    headers = _generate_kalshi_headers("GET", endpoint)
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            balance_cents = data.get("balance", 0)
+            if isinstance(balance_cents, str):
+                balance_cents = int(float(balance_cents) * 100)
+            elif balance_cents < 1000 and isinstance(balance_cents, float):
+                balance_cents = int(balance_cents * 100)
+
+            return {
+                "balance_cents": balance_cents,
+                "balance_dollars": round(balance_cents / 100.0, 2),
+                "portfolio_value": data.get("portfolio_value", 0)
+            }
+        else:
+            logger.error(f"Failed to fetch portfolio balance [{response.status_code}]: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Balance Query Transport Error: {e}")
+        return None
+
+def get_kalshi_settlements():
+    """Fetches resolved market outcomes and cash settlements for performance grading."""
+    endpoint = "/trade-api/v2/portfolio/settlements"
+    url = f"https://api.elections.kalshi.com{endpoint}"
+    headers = _generate_kalshi_headers("GET", endpoint)
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("settlements", [])
+        else:
+            logger.error(f"Failed to fetch settlements [{response.status_code}]: {response.text}")
+            return []
+    except Exception as e:
+        logger.error(f"Settlements Query Transport Error: {e}")
+        return []
+
+def execute_kalshi_trade(ticker: str, side: str, count: int = 1, price_cents: int = 50):
+    """Signs and submits a live order to the Kalshi REST API."""
+    endpoint = "/trade-api/v2/portfolio/orders"
+    url = f"{KALSHI_REST_HOST.replace('/trade-api/v2', '')}{endpoint}"
+    headers = _generate_kalshi_headers("POST", endpoint)
+
+    payload = {
+        "ticker": ticker,
+        "action": "buy",
+        "type": "limit",
+        "side": side.lower(),
+        "count": count,
+    }
+
+    if side.lower() == "yes":
+        payload["yes_price"] = price_cents
+    else:
+        payload["no_price"] = price_cents
 
     try:
         logger.info(f"Dispatching live order to Kalshi: {side} on {ticker} ({count} contract @ {price_cents}¢)")
@@ -91,11 +138,11 @@ def execute_kalshi_trade(ticker: str, side: str, count: int = 1, price_cents: in
         return False
 
 # ================================================================================================
-# MEMORY ENGINE
+# EXPANDED PERFORMANCE MEMORY ENGINE
 # ================================================================================================
 
 class AgentMemory:
-    """Handles persistent JSON storage for historical telemetry and structural insights."""
+    """Handles persistent JSON storage for market history, trade audits, and success tracking."""
     def __init__(self, memory_file="kalshi_agent_memory.json"):
         self.memory_file = memory_file
         self.data = self.load_memory()
@@ -105,12 +152,12 @@ class AgentMemory:
             try:
                 with open(self.memory_file, "r", encoding="utf-8") as f:
                     content = json.load(f)
-                    if "structural_insights" not in content: content["structural_insights"] = {}
+                    if "trade_audit_log" not in content: content["trade_audit_log"] = []
                     if "history" not in content: content["history"] = []
                     return content
             except Exception as e:
                 logger.error(f"Memory load error: {e}")
-        return {"structural_insights": {}, "history": []}
+        return {"trade_audit_log": [], "history": []}
 
     def save_memory(self):
         try:
@@ -119,35 +166,78 @@ class AgentMemory:
         except Exception as e:
             logger.error(f"Memory save failure: {e}")
 
-    def save_market_memory(self, ticker: str, market_state: str, yes_bid: float = 0.0, no_bid: float = 0.0):
+    def log_trade_decision(self, ticker: str, recommended_side: str, price_cents: int, status: str):
+        """
+        Logs a recommendation and its initial handling status.
+        status options: 'PENDING_USER_APPROVAL', 'APPROVED_EXECUTED', 'DENIED_BY_USER'
+        """
         entry = {
             "timestamp": datetime.now().isoformat(),
             "ticker": ticker,
-            "market_state": market_state,
-            "yes_bid": yes_bid,
-            "no_bid": no_bid
+            "recommended_side": recommended_side,
+            "entry_cost_cents": price_cents,
+            "status": status,
+            "outcome": "PENDING_SETTLEMENT",
+            "profit_loss_cents": 0
         }
-        self.data["history"].append(entry)
-        self.data["history"] = self.data["history"][-20:] # Keep last 20 records
+        self.data["trade_audit_log"].append(entry)
         self.save_memory()
-        return f"Memory Committed: {ticker}"
+        return entry
 
-    def get_recent_history_string(self):
-        if not self.data["history"]: return "No recent market history available."
-        return json.dumps(self.data["history"][-5:], indent=2)
+    def update_latest_trade_status(self, ticker: str, new_status: str):
+        """Updates the status of the most recent audit entry for a given ticker."""
+        for entry in reversed(self.data["trade_audit_log"]):
+            if entry["ticker"] == ticker and entry["status"] == "PENDING_USER_APPROVAL":
+                entry["status"] = new_status
+                self.save_memory()
+                break
+
+    def reconcile_outcomes(self, settlements):
+        """Cross-references audit logs with real exchange settlements to compute win rates."""
+        updated = False
+        for entry in self.data["trade_audit_log"]:
+            if entry["outcome"] == "PENDING_SETTLEMENT" and entry["status"] == "APPROVED_EXECUTED":
+                # Find matching settlement by ticker
+                for stl in settlements:
+                    if stl.get("ticker") == entry["ticker"]:
+                        market_result = stl.get("market_result", "").upper() # 'yes' or 'no'
+                        revenue = stl.get("revenue", 0) # payout in cents
+                        cost = entry["entry_cost_cents"] * stl.get("count", 1)
+
+                        if market_result == entry["recommended_side"]:
+                            entry["outcome"] = "WIN"
+                            entry["profit_loss_cents"] = revenue - cost
+                        else:
+                            entry["outcome"] = "LOSS"
+                            entry["profit_loss_cents"] = -cost
+                        updated = True
+        if updated:
+            self.save_memory()
+
+    def get_performance_summary(self):
+        """Calculates win rate and performance metrics for the agent prompt."""
+        logs = self.data["trade_audit_log"]
+        completed = [l for l in logs if l["outcome"] in ["WIN", "LOSS"]]
+        if not completed:
+            return "No settled trade outcomes recorded yet."
+
+        wins = len([l for l in completed if l["outcome"] == "WIN"])
+        total = len(completed)
+        win_rate = round((wins / total) * 100, 1)
+        total_pnl = sum([l["profit_loss_cents"] for l in completed])
+
+        return f"Total Settled: {total} | Wins: {wins} | Win Rate: {win_rate}% | Net P&L: {total_pnl:+d}¢"
+
+    def get_audit_history_string(self):
+        if not self.data["trade_audit_log"]: return "No trade audit history available."
+        return json.dumps(self.data["trade_audit_log"][-5:], indent=2)
 
 # ================================================================================================
-# DETERMINISTIC KALSHI QUANT LOGIC (Binary Option Pricing)
+# DETERMINISTIC KALSHI QUANT LOGIC
 # ================================================================================================
-
-KALSHI_REST_HOST = "https://api.elections.kalshi.com/trade-api/v2"
 
 def calculate_kalshi_setup(yes_price: int, no_price: int) -> dict:
-    """Evaluates binary contract value, implied probability, and risk-reward structure."""
-    # Kalshi contracts settle at 100 cents ($1.00) or 0 cents ($0.00)
     max_payout = 100
-
-    # Simple expected value / risk-reward boundary check
     implied_yes_prob = yes_price / 100.0
 
     return {
@@ -157,26 +247,21 @@ def calculate_kalshi_setup(yes_price: int, no_price: int) -> dict:
         "implied_probability": round(implied_yes_prob * 100, 1),
         "max_risk_cents": yes_price,
         "max_reward_cents": max_payout - yes_price,
-        "valid_setup": yes_price > 0 and yes_price < 95 # Avoid dead markets
+        "valid_setup": yes_price > 0 and yes_price < 95
     }
 
 def get_kalshi_market_snapshot(ticker: str = "KXBTC15M-26SEP112215-15"):
-    """Programmatic data gathering pipeline for Kalshi 15M / Event tickers."""
     try:
-        # Fetch Market Orderbook / Details via Kalshi Public API
         resp = requests.get(f"{KALSHI_REST_HOST}/markets/{ticker}", timeout=5)
         if resp.status_code != 200:
             logger.error(f"Kalshi API error: {resp.status_code}")
             return None
 
         data = resp.json().get("market", {})
-        yes_bid = data.get("yes_bid", 50)
         yes_ask = data.get("yes_ask", 50)
-        no_bid = data.get("no_bid", 50)
         no_ask = data.get("no_ask", 50)
         last_price = data.get("last_price", 50)
 
-        # Fetch News Memory if available
         news = []
         if os.path.exists("articles.json"):
             with open("articles.json", "r") as f: news = json.load(f)[:3]
@@ -184,7 +269,7 @@ def get_kalshi_market_snapshot(ticker: str = "KXBTC15M-26SEP112215-15"):
         return {
             "ticker": ticker,
             "title": data.get("title", "Unknown Contract"),
-            "yes_price": yes_ask, # Using ask as entry reference
+            "yes_price": yes_ask,
             "no_price": no_ask,
             "last_price": last_price,
             "news_sentiment": news,
@@ -211,9 +296,8 @@ class QuantAgentKalshiTrinity:
             "You are Quant Agent Trinity, the analytical brain of the Kalshi Terminal.\n\n"
             "OPERATIONAL PROTOCOL:\n"
             "1. INTERNAL VOICE: You MUST start every response with a <thinking> block detailing your strategic deliberation.\n"
-            "2. TRADING REGION: US (BINARY EVENT CONTRACTS - YES/NO SETTLEMENTS AT $1.00).\n"
-            "3. OBJECTIVE: Evaluate the [KALSHI MARKET SNAPSHOT] against news sentiment and pre-computed contract probabilities.\n"
-            "4. CRITICAL: Use the exact contract pricing from [PRE-COMPUTED CONTRACT SETUP]. Do NOT calculate your own.\n\n"
+            "2. OBJECTIVE: Evaluate the [KALSHI MARKET SNAPSHOT], [ACCOUNT PORTFOLIO STATUS], and [HISTORICAL PERFORMANCE TRACK RECORD].\n"
+            "3. CRITICAL: Learn from your past win/loss history to refine edge calibration. Use exact pre-computed setup pricing.\n\n"
             "NOTIFICATION CARD FORMAT:\n"
             "--- KALSHI SETUP NOTIFICATION CARD ---\n"
             "TICKER: [Contract Ticker]\n"
@@ -222,30 +306,45 @@ class QuantAgentKalshiTrinity:
             "ENTRY COST (CENTS): [Exact Pre-computed Entry Price]\n"
             "MAX PAYOUT (CENTS): 100\n"
             "IMPLIED PROBABILITY: [Pre-computed %]\n"
-            "EXPLANATION: [Mentor-style justification of why the event outcome favors this side]\n"
+            "EXPLANATION: [Mentor-style justification factoring in performance history and current edge]\n"
             "---------------------------------------"
         )
 
     def run_cycle(self, target_ticker="KXBTC15M-26SEP112215-15"):
-        """Unified Pipeline: Data -> Memory Context -> Logic -> Inference -> State Commit."""
         print(f"[*] Starting Kalshi Autonomous Pipeline Pulse for {target_ticker}...")
+
+        # 0. Background Reconcile Settlements & Balance
+        settlements = get_kalshi_settlements()
+        if settlements:
+            self.memory.reconcile_outcomes(settlements)
+
+        portfolio_balance = get_kalshi_balance()
+        balance_str = f"${portfolio_balance['balance_dollars']} (Available)" if portfolio_balance else "Balance Unavailable"
+        performance_summary = self.memory.get_performance_summary()
+
+        print(f"[*] Portfolio Status -> Buying Power: {balance_str} | Performance: {performance_summary}")
 
         # 1. Programmatic Perception
         snapshot = get_kalshi_market_snapshot(target_ticker)
         if not snapshot:
             return "Pipeline Error: Kalshi market data retrieval failed."
 
-        # 2. Retrieve Recent Memory Context for Continuity
-        recent_history = self.memory.get_recent_history_string()
+        # 2. Retrieve Audit History & Stats
+        audit_history = self.memory.get_audit_history_string()
 
         # 3. Context Injection
         prompt = f"""
+        [ACCOUNT PORTFOLIO STATUS]
+        Available Balance: {balance_str}
+
+        [AGENT PERFORMANCE TRACK RECORD]
+        Metrics: {performance_summary}
+        Recent Audit History:
+        {audit_history}
+
         [KALSHI MARKET SNAPSHOT: BINARY CONTRACTS]
         Ticker: {snapshot['ticker']} | Title: {snapshot['title']}
         Current Yes Ask: {snapshot['yes_price']}¢ | Current No Ask: {snapshot['no_price']}¢ | Last: {snapshot['last_price']}¢
-
-        [RECENT AGENT MEMORY LOGS]
-        {recent_history}
 
         [LIVE NEWS CONTEXT]
         {json.dumps(snapshot['news_sentiment'], indent=2)}
@@ -253,7 +352,7 @@ class QuantAgentKalshiTrinity:
         [PRE-COMPUTED CONTRACT SETUP]
         {snapshot['contract_setup']}
 
-        TASK: Deliberate inside <thinking>...</thinking> tags. Then output ONLY the KALSHI SETUP NOTIFICATION CARD. Do not include raw tags outside your thinking block.
+        TASK: Deliberate inside <thinking>...</thinking> tags, factoring in past performance success rates and capital limits. Output ONLY the KALSHI SETUP NOTIFICATION CARD.
         """
 
         conversation = [
@@ -265,8 +364,8 @@ class QuantAgentKalshiTrinity:
         print("[*] Kalshi Trinity Reasoning Phase...")
         try:
             response = self.llm.create_chat_completion(
-                messages=conversation, 
-                temperature=0.1, 
+                messages=conversation,
+                temperature=0.1,
                 max_tokens=4096,
                 stop=["</thought>", "</s>"]
             )
@@ -277,17 +376,20 @@ class QuantAgentKalshiTrinity:
             if thought_match:
                 print(f"\n[Trinity Thought]: {thought_match.group(1).strip().replace(chr(10), ' ')}")
 
-            # 6. Commit state to memory
-            self.memory.save_market_memory(
-                snapshot['ticker'], 
-                f"Pulse: Yes@{snapshot['yes_price']}¢ / No@{snapshot['no_price']}¢",
-                snapshot['yes_price'],
-                snapshot['no_price']
-            )
-
-            # 7. Strip thinking blocks from final output card
+            # 6. Clean verdict extraction
             clean_verdict = re.sub(r'<thinking>.*?</thinking>', '', reply, flags=re.DOTALL).strip()
             clean_verdict = re.sub(r'</?thinking>', '', clean_verdict).strip()
+
+            # 7. Initial Log Entry (Pending User Approval)
+            side_match = re.search(r'RECOMMENDED SIDE:\s*(YES|NO)', clean_verdict, re.IGNORECASE)
+            price_match = re.search(r'ENTRY COST \(CENTS\):\s*(\d+)', clean_verdict)
+            if side_match and price_match:
+                self.memory.log_trade_decision(
+                    ticker=snapshot['ticker'],
+                    recommended_side=side_match.group(1).upper(),
+                    price_cents=int(price_match.group(1)),
+                    status="PENDING_USER_APPROVAL"
+                )
 
             return clean_verdict
         except Exception as e:
@@ -298,7 +400,7 @@ class QuantAgentKalshiTrinity:
 # ================================================================================================
 
 async def run_autonomous_pipeline(agent_instance):
-    logger.info("Kalshi Autonomous Pipeline Engine Active (Execution Mode Ready).")
+    logger.info("Kalshi Autonomous Pipeline Engine Active (Performance Tracking Enabled).")
     active_ticker = "KXBTC15M-26SEP112215-15"
     while True:
         try:
@@ -307,20 +409,29 @@ async def run_autonomous_pipeline(agent_instance):
             print(f"\n[Autonomous Output]:\n{verdict}\n" + "-" * 80)
 
             # --- INTERACTIVE EXECUTION GATE ---
-            # Parse the side recommended by Trinity from her output card
             match = re.search(r'RECOMMENDED SIDE:\s*(YES|NO)', verdict, re.IGNORECASE)
             if match:
                 recommended_side = match.group(1).upper()
                 if recommended_side in ["YES", "NO"]:
                     choice = input(f"\n[?] Trinity recommends taking a **{recommended_side}** position. Execute order? (y/n): ").strip().lower()
                     if choice == 'y':
-                        # Extract entry price or default safely
                         price_match = re.search(r'ENTRY COST \(CENTS\):\s*(\d+)', verdict)
                         price_cents = int(price_match.group(1)) if price_match else 50
 
-                        execute_kalshi_trade(active_ticker, recommended_side, count=1, price_cents=price_cents)
+                        current_bal = get_kalshi_balance()
+                        if current_bal and current_bal["balance_cents"] >= price_cents:
+                            success = execute_kalshi_trade(active_ticker, recommended_side, count=1, price_cents=price_cents)
+                            if success:
+                                agent_instance.memory.update_latest_trade_status(active_ticker, "APPROVED_EXECUTED")
+                            else:
+                                agent_instance.memory.update_latest_trade_status(active_ticker, "EXECUTION_FAILED")
+                        else:
+                            logger.error("Trade aborted: Insufficient available funds in Kalshi balance.")
+                            print("[!] Order blocked locally due to insufficient capital balance.")
+                            agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_INSUFFICIENT_FUNDS")
                     else:
                         print("[*] Trade execution skipped by user.")
+                        agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_BY_USER")
 
             await asyncio.sleep(900)
         except Exception as e:
@@ -331,7 +442,6 @@ async def main():
     gguf_path = "C:/ai_models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
     try:
         agent = QuantAgentKalshiTrinity(model_path=gguf_path)
-        asyncio.create_task(background_news_poller(interval=600))
         await run_autonomous_pipeline(agent)
     except (KeyboardInterrupt, SystemExit):
         print("\n[*] Kalshi Trinity successfully deactivated.")
