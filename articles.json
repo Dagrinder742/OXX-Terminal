@@ -1,17 +1,87 @@
 [
   {
+    "title": "Here\u2019s what happened in crypto today",
+    "timestamp": "Fri, 11 Sep 2026 21:30:00 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Need to know what happened in crypto today? Here is the latest news on daily trends and events impacting Bitcoin price, blockchain, DeFi, Web3 and crypto regulation."
+  },
+  {
+    "title": "Bitcoin Suisse to shift up to half of Swiss jobs abroad",
+    "timestamp": "Fri, 11 Sep 2026 19:46:24 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.7269,
+    "snippet": "The Swiss crypto financial services firm plans to move back-office functions to lower-cost international hubs as it expands its global wealth and asset management business, according to Finews."
+  },
+  {
+    "title": "Anchorage Digital adds institutional access to Frgmnt\u2019s fUSD stablecoin",
+    "timestamp": "Fri, 11 Sep 2026 16:05:15 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.2263,
+    "snippet": "The US federally chartered crypto bank will allow institutional clients to hold, mint, redeem and stake Frgmnt\u2019s fUSD stablecoin through its custody platform."
+  },
+  {
+    "title": "Bitcoin spikes toward $80K as US CPI data delivers new 22-year high in bond yields",
+    "timestamp": "Fri, 11 Sep 2026 16:03:37 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Bitcoin briefly rebounded past $79,000 and US stocks turned green as US CPI inflation data met expectations."
+  },
+  {
+    "title": "Metaplanet cuts Series 10 stock pool by 41%, plans Hong Kong subsidiary",
+    "timestamp": "Fri, 11 Sep 2026 13:44:27 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.4019,
+    "snippet": "Metaplanet will cut 131.3 million potential shares and form a $1 million Hong Kong subsidiary for trading in Bitcoin, equities and credit products."
+  },
+  {
+    "title": "Bitcoin ETF outflows accelerate as investors pull $449M in three days",
+    "timestamp": "Fri, 11 Sep 2026 12:33:38 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "ARK 21Shares accounted for $164 million of Thursday\u2019s Bitcoin ETF withdrawals, while Ether and Solana funds also recorded net outflows."
+  },
+  {
+    "title": "Bitcoin buyers wary of July sub-$58K floor amid onchain data \u2018anomaly\u2019",
+    "timestamp": "Fri, 11 Sep 2026 10:53:55 +0000",
+    "classification": "Bearish",
+    "sentiment_score": -0.2732,
+    "snippet": "Bitcoin HODL waves data revealed an unusually muted reaction to Bitcoin\u2019s drop below $58,000, raising questions over its status as a bear-market floor."
+  },
+  {
+    "title": "India launches tokenized bond pilot with $107M issued",
+    "timestamp": "Fri, 11 Sep 2026 10:33:24 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "SEBI said later phases of Demat 2.0 will introduce secondary trading and open the tokenized bonds to retail investors."
+  },
+  {
+    "title": "Blockstream rejects ransom as Liquid hackers hold nearly 600 BTC",
+    "timestamp": "Fri, 11 Sep 2026 08:43:19 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Blockstream said it would work with law enforcement, exchanges and forensic specialists to recover the Bitcoin if the hackers do not return it."
+  },
+  {
+    "title": "Bitwise to put down Dogecoin ETF less than a year after launch",
+    "timestamp": "Fri, 11 Sep 2026 07:47:13 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.1779,
+    "snippet": "BWOW held about $688,000 in net assets as of Sept. 9. Trading is expected to end Oct. 14, with cash payouts to follow around Oct. 22."
+  },
+  {
+    "title": "Revised CLARITY Act targets \u2018non-decentralized\u2019 DeFi operators",
+    "timestamp": "Fri, 11 Sep 2026 06:08:26 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "The bill\u2019s ethics section remained largely unchanged despite being one of the main points of contention ahead of a pivotal Senate vote."
+  },
+  {
     "title": "Metaplanet equity backlash, SE Asia crypto funding doubles: Asia Express",
     "timestamp": "Thu, 10 Sep 2026 23:21:26 +0000",
     "classification": "Bullish",
     "sentiment_score": 0.3818,
     "snippet": "Shareholders of Bitcoin treasury company Metaplanet are seething over equity allocations for insiders, while new figures cement Singapore\u2019s role as the top Asian crypto hub."
-  },
-  {
-    "title": "Here\u2019s what happened in crypto today",
-    "timestamp": "Thu, 10 Sep 2026 21:30:00 +0000",
-    "classification": "Neutral",
-    "sentiment_score": 0.0,
-    "snippet": "Need to know what happened in crypto today? Here is the latest news on daily trends and events impacting Bitcoin price, blockchain, DeFi, Web3 and crypto regulation."
   },
   {
     "title": "ESMA warns growing crypto ties could amplify risks to traditional finance",
@@ -33,54 +103,5 @@
     "classification": "Bullish",
     "sentiment_score": 0.2732,
     "snippet": "European finance and tokenization groups say Brussels should remove limits on assets admitted to DLT infrastructure or set a 1.5 trillion euro baseline if a cap remains."
-  },
-  {
-    "title": "Bitcoin falls on US PPI overshoot as 30-year bond yield hits new 19-year high",
-    "timestamp": "Thu, 10 Sep 2026 14:52:15 +0000",
-    "classification": "Neutral",
-    "sentiment_score": 0.0,
-    "snippet": "Bitcoin fell with US stocks as high inflation and a further surge in oil prices coincided with another multidecade high for US bond yields."
-  },
-  {
-    "title": "Solana sees record 263K tokens issued in a single day",
-    "timestamp": "Thu, 10 Sep 2026 13:00:00 +0000",
-    "classification": "Neutral",
-    "sentiment_score": 0.0,
-    "snippet": "Memecoin platform Pump.fun accounted for most of the new tokens among launchpads, as the Solana network notched a new all-time daily issuance high."
-  },
-  {
-    "title": "Treasury Secretary Bessent urges CLARITY Act passage after Senate returns",
-    "timestamp": "Thu, 10 Sep 2026 10:20:00 +0000",
-    "classification": "Bullish",
-    "sentiment_score": 0.1363,
-    "snippet": "Secretary Scott Bessent warned that failing to pass the CLARITY Act would send a \u201ctroubling signal\u201d about America\u2019s leadership in the digital asset industry."
-  },
-  {
-    "title": "Bitcoin ETFs shed $167M after strongest three-week inflow run of 2026",
-    "timestamp": "Thu, 10 Sep 2026 09:59:32 +0000",
-    "classification": "Neutral",
-    "sentiment_score": 0.0,
-    "snippet": "ARKB led Wednesday\u2019s Bitcoin ETF outflows as Ether and Solana funds returned to net inflows."
-  },
-  {
-    "title": "Bitcoin sell-side risk returns to rare lows as $80K sellers fade from view",
-    "timestamp": "Thu, 10 Sep 2026 09:36:42 +0000",
-    "classification": "Bearish",
-    "sentiment_score": -0.5478,
-    "snippet": "Bitcoin investors showed little sign of panic selling as BTC held most of its August gains and sell-side risk fell to rare lows, data showed."
-  },
-  {
-    "title": "Trezor, BitBox warn users about fake hardware wallet security alerts",
-    "timestamp": "Thu, 10 Sep 2026 05:34:21 +0000",
-    "classification": "Bullish",
-    "sentiment_score": 0.34,
-    "snippet": "BitBox said multiple Bitcoin companies appeared to have been targeted through a shared newsletter provider, while Trezor confirmed a breach at its email service."
-  },
-  {
-    "title": "Bitcoin fails to reclaim $80K as Bessent fuels yen strength around 153 per dollar",
-    "timestamp": "Wed, 09 Sep 2026 16:28:19 +0000",
-    "classification": "Bearish",
-    "sentiment_score": -0.4939,
-    "snippet": "Bitcoin trended lower with US stocks on Iran escalation while US Treasury Secretary Scott Bessent contributed to fears of a yen carry-trade unwind."
   }
 ]

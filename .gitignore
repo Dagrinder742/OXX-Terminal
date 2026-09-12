@@ -186,3 +186,9 @@ mpm/
 # --- OS & Environment Files ---
 .DS_Store
 Thumbs.db
+
+# --- Ignore Kalshi configuration or credential files ---
+kalshi/main.txt
+kalshi/access.md
+kalshi/*.key
+*.env
