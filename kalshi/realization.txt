@@ -1,0 +1,40 @@
+so you Gemini have been teaching me python for a long time now the better part of a year
+today i just made one the biggest aha moments in the world of brackets that i just never
+could seem to understand until the work im doing with you now i seen it finally click.
+
+i was looking at implementing tickers into the kalshi setup and you had given me a snippet
+"""
+sub_payload = {
+                "id": 1,
+                "cmd": "subscribe",
+                "params": {
+                    "channels": ["ticker"],
+                    "market_tickers": [
+                        "KXBTC15M-26SEP112215-15",
+                        "KXSOL15M-26SEP112215-15",
+                        "KXHYPE15M-26SEP112215-15"
+                    ]
+                }
+            }
+"""
+
+i never understood this whole way of doing things in python but this is what i realized
+
+sub_payload = { <- the opening of the function block or the main execution
+               "id": 1,
+               "cmd": "subscribe", <- quotations are used to run commands or print f"strings"(accidently used word parenthesis) <- a description to the function
+               "params": { <- opening of nested block or second issue of commands 
+
+"""
+"cmd": "subscribe" will execute inside "params": channels [ticker] <- [] tells the params channels command to view tickers
+"""
+
+the one thing that always got me was this 
+               ] <- closes the "market_tickers": [ commands or search
+           } <- closes the nested command at "params": {
+       } <- closes the opening at the start of sub_payload = {
+
+i have no idea if im right about it or not but i do feel like ive gotten alot closer
+to understanding it maybe 
+
+what you think partner and teacher?

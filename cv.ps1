@@ -5,6 +5,8 @@ Write-Host "[+] RUNNING MAINTENANCE..." -ForegroundColor Green
 Write-Host "[+] RUNNING WINGET PACKAGE UPDATE..." -ForegroundColor Green
 winget upgrade
 
+$env:PYTHONWARNINGS="ignore"
+
 Write-Host "[+] RUNNING MAINTENANCE..." -ForegroundColor Green
 Write-Host "[+] RUNNING BANDIT YAML..." -ForegroundColor Green
 bandit -c bandit.yaml -r . --severity-level all --confidence-level all --ignore-nosec

@@ -1,0 +1,68 @@
+{
+  "structural_insights": {},
+  "history": [
+    {
+      "timestamp": "2026-09-12T12:30:53.472554",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T12:37:07.823579",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T12:59:20.248218",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T13:17:27.118164",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T13:35:45.786527",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T13:53:42.579857",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T14:12:20.807676",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T16:13:18.019238",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    },
+    {
+      "timestamp": "2026-09-12T16:35:55.291498",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "market_state": "Pulse: Yes@50\u00a2 / No@50\u00a2",
+      "yes_bid": 50,
+      "no_bid": 50
+    }
+  ]
+}

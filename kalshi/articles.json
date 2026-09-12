@@ -1,0 +1,107 @@
+[
+  {
+    "title": "Here\u2019s what happened in crypto today",
+    "timestamp": "Sat, 12 Sep 2026 16:09:41 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Need to know what happened in crypto today? Here is the latest news on daily trends and events impacting Bitcoin price, blockchain, DeFi, Web3 and crypto regulation."
+  },
+  {
+    "title": "Bitcoin Suisse to shift up to half of Swiss jobs abroad",
+    "timestamp": "Fri, 11 Sep 2026 19:46:24 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.7269,
+    "snippet": "The Swiss crypto financial services firm plans to move back-office functions to lower-cost international hubs as it expands its global wealth and asset management business, according to Finews."
+  },
+  {
+    "title": "Anchorage Digital adds institutional access to Frgmnt\u2019s fUSD stablecoin",
+    "timestamp": "Fri, 11 Sep 2026 16:05:15 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.2263,
+    "snippet": "The US federally chartered crypto bank will allow institutional clients to hold, mint, redeem and stake Frgmnt\u2019s fUSD stablecoin through its custody platform."
+  },
+  {
+    "title": "Bitcoin spikes toward $80K as US CPI data delivers new 22-year high in bond yields",
+    "timestamp": "Fri, 11 Sep 2026 16:03:37 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Bitcoin briefly rebounded past $79,000 and US stocks turned green as US CPI inflation data met expectations."
+  },
+  {
+    "title": "Metaplanet cuts Series 10 stock pool by 41%, plans Hong Kong subsidiary",
+    "timestamp": "Fri, 11 Sep 2026 13:44:27 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.4019,
+    "snippet": "Metaplanet will cut 131.3 million potential shares and form a $1 million Hong Kong subsidiary for trading in Bitcoin, equities and credit products."
+  },
+  {
+    "title": "Bitcoin ETF outflows accelerate as investors pull $449M in three days",
+    "timestamp": "Fri, 11 Sep 2026 12:33:38 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "ARK 21Shares accounted for $164 million of Thursday\u2019s Bitcoin ETF withdrawals, while Ether and Solana funds also recorded net outflows."
+  },
+  {
+    "title": "Bitcoin buyers wary of July sub-$58K floor amid onchain data \u2018anomaly\u2019",
+    "timestamp": "Fri, 11 Sep 2026 10:53:55 +0000",
+    "classification": "Bearish",
+    "sentiment_score": -0.2732,
+    "snippet": "Bitcoin HODL waves data revealed an unusually muted reaction to Bitcoin\u2019s drop below $58,000, raising questions over its status as a bear-market floor."
+  },
+  {
+    "title": "India launches tokenized bond pilot with $107M issued",
+    "timestamp": "Fri, 11 Sep 2026 10:33:24 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "SEBI said later phases of Demat 2.0 will introduce secondary trading and open the tokenized bonds to retail investors."
+  },
+  {
+    "title": "Blockstream rejects ransom as Liquid hackers hold nearly 600 BTC",
+    "timestamp": "Fri, 11 Sep 2026 08:43:19 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "Blockstream said it would work with law enforcement, exchanges and forensic specialists to recover the Bitcoin if the hackers do not return it."
+  },
+  {
+    "title": "Bitwise to put down Dogecoin ETF less than a year after launch",
+    "timestamp": "Fri, 11 Sep 2026 07:47:13 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.1779,
+    "snippet": "BWOW held about $688,000 in net assets as of Sept. 9. Trading is expected to end Oct. 14, with cash payouts to follow around Oct. 22."
+  },
+  {
+    "title": "Revised CLARITY Act targets \u2018non-decentralized\u2019 DeFi operators",
+    "timestamp": "Fri, 11 Sep 2026 06:08:26 +0000",
+    "classification": "Neutral",
+    "sentiment_score": 0.0,
+    "snippet": "The bill\u2019s ethics section remained largely unchanged despite being one of the main points of contention ahead of a pivotal Senate vote."
+  },
+  {
+    "title": "Metaplanet equity backlash, SE Asia crypto funding doubles: Asia Express",
+    "timestamp": "Thu, 10 Sep 2026 23:21:26 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.3818,
+    "snippet": "Shareholders of Bitcoin treasury company Metaplanet are seething over equity allocations for insiders, while new figures cement Singapore\u2019s role as the top Asian crypto hub."
+  },
+  {
+    "title": "ESMA warns growing crypto ties could amplify risks to traditional finance",
+    "timestamp": "Thu, 10 Sep 2026 20:10:29 +0000",
+    "classification": "Bearish",
+    "sentiment_score": -0.1531,
+    "snippet": "The EU securities regulator flagged tokenized equities, DeFi exploits and prediction markets as areas where growing crypto ties could pose risks to the broader financial system."
+  },
+  {
+    "title": "UK House of Lords backs mandatory digital asset strategy over Labour position",
+    "timestamp": "Thu, 10 Sep 2026 17:54:12 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.4588,
+    "snippet": "The amendment would require the UK Treasury to develop a strategy covering cryptoassets, stablecoins, tokenized securities and digital financial infrastructure."
+  },
+  {
+    "title": "EU finance groups push to remove tokenized securities cap",
+    "timestamp": "Thu, 10 Sep 2026 15:49:22 +0000",
+    "classification": "Bullish",
+    "sentiment_score": 0.2732,
+    "snippet": "European finance and tokenization groups say Brussels should remove limits on assets admitted to DLT infrastructure or set a 1.5 trillion euro baseline if a cap remains."
+  }
+]
