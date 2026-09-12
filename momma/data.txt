@@ -1,3 +1,16 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ==========================================================
 # RENT DOCUMENTATION & LATE FEE CALCULATIONS
 # ==========================================================
@@ -5,7 +18,7 @@
 # LANDLORD: IVEY, CARLA | IVEY, CORY
 # TENANT: RUARK, JUSTIN
 
-# RENTS DUE AT THE FIRST OF EVERYMONTH, THE TENANT 
+# RENTS DUE AT THE FIRST OF EVERY MONTH, THE TENANT 
 # RUARK, JUSTIN WOULD PAY EVERY 2 WEEKS $600 WHEN HE WAS
 # PAID. HE HAS SINCE NOT FOLLOWED THROUGH ON THIS OBLIGATION.
 
@@ -79,7 +92,7 @@
 # | AUG 30,2026 |          | $75      |                    |
 # ----------------------------------------------------------
 # ==========================================================
-# | TOTAL AMOUNT DUE  | RENT   | LATE FEES | TOTAL         |
+# | TOTAL AMOUNT DUE  |  RENT  | LATE FEES | TOTAL         |
 # ----------------------------------------------------------
 # | WITH LATE FEES    | $1,200 | $1,875    | $3,075        |
 # ----------------------------------------------------------
@@ -151,7 +164,7 @@
 # | SEP 30,2026 |          | $75      |                    |
 # ----------------------------------------------------------
 # ==========================================================
-# | TOTAL AMOUNT DUE  | RENT   | LATE FEES | TOTAL         |
+# | TOTAL AMOUNT DUE  |  RENT  | LATE FEES | TOTAL         |
 # ----------------------------------------------------------
 # | WITH LATE FEES    | $1,200 | $1,875    | $3,075        |
 # ----------------------------------------------------------
