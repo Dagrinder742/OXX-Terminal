@@ -64,5 +64,16 @@
       "yes_bid": 50,
       "no_bid": 50
     }
+  ],
+  "trade_audit_log": [
+    {
+      "timestamp": "2026-09-12T17:45:25.793613",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "NO",
+      "entry_cost_cents": 50,
+      "status": "DENIED_BY_USER",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    }
   ]
 }
