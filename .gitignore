@@ -192,3 +192,4 @@ kalshi/main.txt
 kalshi/access.md
 kalshi/*.key
 *.env
+kalshi/

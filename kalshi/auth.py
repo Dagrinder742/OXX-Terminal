@@ -1,6 +1,12 @@
 # kalshi/auth.py
+"""
+Description: Secure cryptographic utility module handling RSA private key loading, RSA-PSS signature
+generation, and production header creation with URL-stripping safeguards for Kalshi API requests.
+"""
+
 import datetime
 import base64
+from urllib.parse import urlparse
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -38,8 +44,13 @@ def get_auth_headers(api_key_id: str, private_key: rsa.RSAPrivateKey, method: st
     current_time_milliseconds = int(datetime.datetime.now().timestamp() * 1000)
     timestamp_str = str(current_time_milliseconds)
 
-    # Strip query parameters from path before signing[cite: 5]
-    path_without_query = path.split('?')[0]
+    # Safeguard: if a full URL was passed instead of a relative path, extract just the path
+    parsed_url = urlparse(path)
+    clean_path = parsed_url.path if parsed_url.netloc else path
+
+    # Strip any trailing query parameters just in case[cite: 5]
+    path_without_query = clean_path.split('?')[0]
+
     msg_string = timestamp_str + method.upper() + path_without_query
     sig = sign_pss_text(private_key, msg_string)
 
