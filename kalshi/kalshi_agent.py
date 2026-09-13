@@ -25,7 +25,7 @@ logger = logging.getLogger("KalshiTrinity")
 import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.serialization import load_pem_private_key
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "837934ae-214d-4a46-86ff-dbfb21619e49")
 KALSHI_PRIVATE_KEY_PATH = os.getenv("KALSHI_PRIVATE_KEY_PATH", r"C:\Users\krayz\AndroidStudioProjects\OXXTerminal\app\src\main\Python\kalshi\main.txt")
@@ -44,7 +44,10 @@ def _generate_kalshi_headers(method: str, endpoint: str) -> dict:
 
             signature = private_key.sign(
                 msg_string.encode('utf-8'),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
                 hashes.SHA256()
             )
             signature_str = base64.b64encode(signature).decode('utf-8')
@@ -232,6 +235,50 @@ class AgentMemory:
         if not self.data["trade_audit_log"]: return "No trade audit history available."
         return json.dumps(self.data["trade_audit_log"][-5:], indent=2)
 
+    def record_pulse(self, ticker: str, yes_price: int, no_price: int):
+        """Appends a price pulse, calculates deltas, and maintains a rolling window."""
+        history = self.data.setdefault("rolling_price_history", [])
+
+        # Calculate delta from the last recorded point
+        last_entry = history[-1] if history else {"yes_price": yes_price, "no_price": no_price}
+        yes_delta = yes_price - last_entry["yes_price"]
+        no_delta = no_price - last_entry["no_price"]
+
+        pulse_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "ticker": ticker,
+            "yes_price": yes_price,
+            "no_price": no_price,
+            "yes_delta": yes_delta,
+            "no_delta": no_delta
+        }
+
+        history.append(pulse_entry)
+        # Keep a rolling window of the last 20 pulses
+        if len(history) > 20:
+            self.data["rolling_price_history"] = history[-20:]
+
+        self.save_memory()
+        return pulse_entry
+
+    def get_trend_analysis(self):
+        """Computes moving averages and momentum vectors from rolling history."""
+        history = self.data.get("rolling_price_history", [])
+        if len(history) < 2:
+            return "Insufficient historical pulses for trend calculation (Accumulating baseline...)"
+
+        recent_yes = [h["yes_price"] for h in history[-5:]]
+        ma_yes = round(sum(recent_yes) / len(recent_yes), 1)
+        latest_delta = history[-1]["yes_delta"]
+
+        direction = "STABLE / PINNED"
+        if latest_delta > 0:
+            direction = f"BULLISH MOMENTUM (+{latest_delta}¢)"
+        elif latest_delta < 0:
+            direction = f"BEARISH MOMENTUM ({latest_delta}¢)"
+
+        return f"Recent MA (Yes): {ma_yes}¢ | Current Momentum: {direction} | Total Pulses Tracked: {len(history)}"
+
 # ================================================================================================
 # DETERMINISTIC KALSHI QUANT LOGIC
 # ================================================================================================
@@ -329,10 +376,12 @@ class QuantAgentKalshiTrinity:
         if not snapshot:
             return "Pipeline Error: Kalshi market data retrieval failed."
 
-        # 2. Retrieve Audit History & Stats
+        # Record pulse into rolling history and calculate momentum
+        self.memory.record_pulse(target_ticker, snapshot['yes_price'], snapshot['no_price'])
+        trend_analysis = self.memory.get_trend_analysis()
         audit_history = self.memory.get_audit_history_string()
 
-        # 3. Context Injection
+        # 2. Context Injection
         prompt = f"""
         [ACCOUNT PORTFOLIO STATUS]
         Available Balance: {balance_str}
@@ -342,9 +391,12 @@ class QuantAgentKalshiTrinity:
         Recent Audit History:
         {audit_history}
 
+        [MARKET TREND & VELOCITY VECTOR]
+        {trend_analysis}
+
         [KALSHI MARKET SNAPSHOT: BINARY CONTRACTS]
         Ticker: {snapshot['ticker']} | Title: {snapshot['title']}
-        Current Yes Ask: {snapshot['yes_price']}¢ | Current No Ask: {snapshot['no_price']}¢ | Last: {snapshot['last_price']}¢
+        Current Yes Ask: {snapshot['yes_price']}垄 | Current No Ask: {snapshot['no_price']}垄 | Last: {snapshot['last_price']}垄
 
         [LIVE NEWS CONTEXT]
         {json.dumps(snapshot['news_sentiment'], indent=2)}
@@ -352,7 +404,7 @@ class QuantAgentKalshiTrinity:
         [PRE-COMPUTED CONTRACT SETUP]
         {snapshot['contract_setup']}
 
-        TASK: Deliberate inside <thinking>...</thinking> tags, factoring in past performance success rates and capital limits. Output ONLY the KALSHI SETUP NOTIFICATION CARD.
+        TASK: Deliberate inside <thinking>...</thinking> tags, factoring in historical moving averages, price momentum, success rates, and capital limits. Output ONLY the KALSHI SETUP NOTIFICATION CARD.
         """
 
         conversation = [
@@ -360,7 +412,7 @@ class QuantAgentKalshiTrinity:
             {"role": "user", "content": prompt}
         ]
 
-        # 4. Single-Shot Inference
+        # 3. Single-Shot Inference
         print("[*] Kalshi Trinity Reasoning Phase...")
         try:
             response = self.llm.create_chat_completion(
@@ -371,16 +423,16 @@ class QuantAgentKalshiTrinity:
             )
             reply = response['choices'][0]['message']['content']
 
-            # 5. Extract and print internal voice
+            # 4. Extract and print internal voice
             thought_match = re.search(r'<thinking>(.*?)</thinking>', reply, re.DOTALL)
             if thought_match:
                 print(f"\n[Trinity Thought]: {thought_match.group(1).strip().replace(chr(10), ' ')}")
 
-            # 6. Clean verdict extraction
+            # 5. Clean verdict extraction
             clean_verdict = re.sub(r'<thinking>.*?</thinking>', '', reply, flags=re.DOTALL).strip()
             clean_verdict = re.sub(r'</?thinking>', '', clean_verdict).strip()
 
-            # 7. Initial Log Entry (Pending User Approval)
+            # 6. Initial Log Entry (Pending User Approval)
             side_match = re.search(r'RECOMMENDED SIDE:\s*(YES|NO)', clean_verdict, re.IGNORECASE)
             price_match = re.search(r'ENTRY COST \(CENTS\):\s*(\d+)', clean_verdict)
             if side_match and price_match:
