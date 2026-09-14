@@ -11,8 +11,9 @@ import logging
 import requests
 import asyncio
 import re
+import threading
 from llama_cpp import Llama
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Setup basic logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -141,6 +142,30 @@ def execute_kalshi_trade(ticker: str, side: str, count: int = 1, price_cents: in
         return False
 
 # ================================================================================================
+# TIMED INPUT UTILITY (AFK PROTECTION)
+# ================================================================================================
+
+def input_with_timeout(prompt: str, timeout: int = 120):
+    """Prompts the user for input with a strict timeout. Returns None if timed out."""
+    answer = [None]
+
+    def target():
+        try:
+            answer[0] = input(prompt)
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout)
+
+    if thread.is_alive():
+        print(f"\n[!] AFK detected: No response within {timeout} seconds. Auto-skipping trade recommendation.")
+        return None
+    return answer[0]
+
+# ================================================================================================
 # EXPANDED PERFORMANCE MEMORY ENGINE
 # ================================================================================================
 
@@ -172,7 +197,7 @@ class AgentMemory:
     def log_trade_decision(self, ticker: str, recommended_side: str, price_cents: int, status: str):
         """
         Logs a recommendation and its initial handling status.
-        status options: 'PENDING_USER_APPROVAL', 'APPROVED_EXECUTED', 'DENIED_BY_USER'
+        status options: 'PENDING_USER_APPROVAL', 'APPROVED_EXECUTED', 'DENIED_BY_USER', 'UNRESPONSIVE_TIMEOUT'
         """
         entry = {
             "timestamp": datetime.now().isoformat(),
@@ -309,6 +334,11 @@ def get_kalshi_market_snapshot(ticker: str = "KXBTC15M-26SEP112215-15"):
         no_ask = data.get("no_ask", 50)
         last_price = data.get("last_price", 50)
 
+        # Extract strike threshold info for crypto/15m event markets
+        floor_strike = data.get("floor_strike", None)
+        cap_strike = data.get("cap_strike", None)
+        subtitle = data.get("subtitle", "") # Often contains things like "Above $64,500"
+
         news = []
         if os.path.exists("articles.json"):
             with open("articles.json", "r") as f: news = json.load(f)[:3]
@@ -316,6 +346,9 @@ def get_kalshi_market_snapshot(ticker: str = "KXBTC15M-26SEP112215-15"):
         return {
             "ticker": ticker,
             "title": data.get("title", "Unknown Contract"),
+            "subtitle": subtitle,
+            "floor_strike": floor_strike,
+            "cap_strike": cap_strike,
             "yes_price": yes_ask,
             "no_price": no_ask,
             "last_price": last_price,
@@ -337,14 +370,15 @@ class QuantAgentKalshiTrinity:
         self.memory = AgentMemory(memory_file)
 
         logger.info(f"Kalshi Trinity Pipeline Booting: {self.model_name}")
-        self.llm = Llama(model_path=self.model_path, n_ctx=16384, n_gpu_layers=0, n_threads=4, verbose=False)
+        self.llm = Llama(model_path=self.model_path, n_ctx=8192, n_gpu_layers=10, n_threads=4, verbose=False)
 
         self.system_instructions = (
             "You are Quant Agent Trinity, the analytical brain of the Kalshi Terminal.\n\n"
             "OPERATIONAL PROTOCOL:\n"
             "1. INTERNAL VOICE: You MUST start every response with a <thinking> block detailing your strategic deliberation.\n"
             "2. OBJECTIVE: Evaluate the [KALSHI MARKET SNAPSHOT], [ACCOUNT PORTFOLIO STATUS], and [HISTORICAL PERFORMANCE TRACK RECORD].\n"
-            "3. CRITICAL: Learn from your past win/loss history to refine edge calibration. Use exact pre-computed setup pricing.\n\n"
+            "3. DECISIVENESS & FORMAT: You MUST conclude your response with the exact KALSHI SETUP NOTIFICATION CARD structure below. "
+            "Never output a plain text essay or skip the card. You must choose either YES or NO based on market momentum.\n\n"
             "NOTIFICATION CARD FORMAT:\n"
             "--- KALSHI SETUP NOTIFICATION CARD ---\n"
             "TICKER: [Contract Ticker]\n"
@@ -381,7 +415,7 @@ class QuantAgentKalshiTrinity:
         trend_analysis = self.memory.get_trend_analysis()
         audit_history = self.memory.get_audit_history_string()
 
-        # 2. Context Injection
+        # 2. [Context Injection section inside run_cycle]
         prompt = f"""
         [ACCOUNT PORTFOLIO STATUS]
         Available Balance: {balance_str}
@@ -395,8 +429,11 @@ class QuantAgentKalshiTrinity:
         {trend_analysis}
 
         [KALSHI MARKET SNAPSHOT: BINARY CONTRACTS]
-        Ticker: {snapshot['ticker']} | Title: {snapshot['title']}
-        Current Yes Ask: {snapshot['yes_price']}垄 | Current No Ask: {snapshot['no_price']}垄 | Last: {snapshot['last_price']}垄
+        Ticker: {snapshot['ticker']}
+        Title: {snapshot['title']}
+        Contract Subtitle / Strike Condition: {snapshot['subtitle']}
+        Floor Strike Target: {snapshot['floor_strike']} | Cap Strike: {snapshot['cap_strike']}
+        Current Yes Ask: {snapshot['yes_price']}¢ | Current No Ask: {snapshot['no_price']}¢ | Last: {snapshot['last_price']}¢
 
         [LIVE NEWS CONTEXT]
         {json.dumps(snapshot['news_sentiment'], indent=2)}
@@ -404,7 +441,7 @@ class QuantAgentKalshiTrinity:
         [PRE-COMPUTED CONTRACT SETUP]
         {snapshot['contract_setup']}
 
-        TASK: Deliberate inside <thinking>...</thinking> tags, factoring in historical moving averages, price momentum, success rates, and capital limits. Output ONLY the KALSHI SETUP NOTIFICATION CARD.
+        TASK: Deliberate inside <thinking>...</thinking> tags, factoring in historical moving averages, price momentum, success rates, and whether BTC is projected to clear the strike threshold (above/below). Output ONLY the KALSHI SETUP NOTIFICATION CARD.
         """
 
         conversation = [
@@ -419,7 +456,7 @@ class QuantAgentKalshiTrinity:
                 messages=conversation,
                 temperature=0.1,
                 max_tokens=4096,
-                stop=["</thought>", "</s>"]
+                stop=["</thinking>", "</s>"]
             )
             reply = response['choices'][0]['message']['content']
 
@@ -431,6 +468,23 @@ class QuantAgentKalshiTrinity:
             # 5. Clean verdict extraction
             clean_verdict = re.sub(r'<thinking>.*?</thinking>', '', reply, flags=re.DOTALL).strip()
             clean_verdict = re.sub(r'</?thinking>', '', clean_verdict).strip()
+            # Fallback safety net: If model forgets the card, append a default YES/NO structure based on snapshot pricing
+            if "RECOMMENDED SIDE:" not in clean_verdict:
+                logger.warning("Model omitted notification card. Injecting default fallback setup.")
+                yes_p = snapshot['yes_price']
+                default_side = "YES" if yes_p <= 50 else "NO"
+                fallback_card = (
+                    f"\n--- KALSHI SETUP NOTIFICATION CARD ---\n"
+                    f"TICKER: {snapshot['ticker']}\n"
+                    f"STRATEGY: [BINARY_EVENT_POSITIONING]\n"
+                    f"RECOMMENDED SIDE: {default_side}\n"
+                    f"ENTRY COST (CENTS): {snapshot['yes_price'] if default_side == 'YES' else snapshot['no_price']}\n"
+                    f"MAX PAYOUT (CENTS): 100\n"
+                    f"IMPLIED PROBABILITY: {snapshot['contract_setup']['implied_probability']}\n"
+                    f"EXPLANATION: Fallback auto-generated due to unstructured model output.\n"
+                    f"---------------------------------------"
+                )
+                clean_verdict += "\n" + fallback_card
 
             # 6. Initial Log Entry (Pending User Approval)
             side_match = re.search(r'RECOMMENDED SIDE:\s*(YES|NO)', clean_verdict, re.IGNORECASE)
@@ -448,44 +502,141 @@ class QuantAgentKalshiTrinity:
             return f"Inference Error: {e}"
 
 # ================================================================================================
-# MAIN ORCHESTRATION
+# BET ALLOCATION AND SIZE DETERMINATION
+# ================================================================================================
+
+class KalshiRiskEnforcer:
+    def __init__(self, max_allowable_stake: float = 3.00):
+        self.max_stake = max_allowable_stake
+
+    def validate_trade_allocation(self, proposed_stake: float) -> dict:
+        """
+        Pulls live portfolio balance via the active get_kalshi_balance() function
+        and enforces the hard $3 cap and account safety limits before any order goes through.
+        """
+        portfolio_bal = get_kalshi_balance()
+
+        if not portfolio_bal:
+            return {
+                "approved": False,
+                "live_balance": 0.0,
+                "safe_stake": 0.0,
+                "reason": "Execution blocked: Failed to query live balance endpoint."
+            }
+
+        current_balance = portfolio_bal["balance_dollars"]
+
+        # Guard against zero or negative balance
+        if current_balance <= 0:
+            return {
+                "approved": False,
+                "live_balance": current_balance,
+                "safe_stake": 0.0,
+                "reason": "Execution blocked: Zero or negative balance detected."
+            }
+
+        # Enforce the strict $0 - $3 ceiling, ensuring we never bet more than the available live balance
+        enforced_stake = min(proposed_stake, self.max_stake, current_balance)
+
+        # Operational floor check ($1 minimum)
+        if enforced_stake < 1.00:
+            return {
+                "approved": False,
+                "live_balance": current_balance,
+                "safe_stake": 0.0,
+                "reason": "Proposed stake below operational minimum ($1.00)."
+            }
+
+        return {
+            "approved": True,
+            "live_balance": current_balance,
+            "safe_stake": round(enforced_stake, 2),
+            "reason": f"Live balance verified (${current_balance:.2f}). Stake locked within ${self.max_stake:.2f} cap."
+        }
+
+# ================================================================================================
+# MAIN ORCHESTRATION WITH CLOCK-SYNCED TIMING
 # ================================================================================================
 
 async def run_autonomous_pipeline(agent_instance):
-    logger.info("Kalshi Autonomous Pipeline Engine Active (Performance Tracking Enabled).")
+    logger.info("Kalshi Autonomous Pipeline Engine Active (Clock-Synced & AFK Guarded).")
     active_ticker = "KXBTC15M-26SEP112215-15"
+
+    # Initialize the risk enforcer with your $3.00 hard cap
+    risk_enforcer = KalshiRiskEnforcer(max_allowable_stake=3.00)
+
     while True:
         try:
-            print(f"\n[!] KALSHI TRINITY PIPELINE CYCLE: {datetime.now().strftime('%H:%M:%S')}")
+            cycle_start_time = datetime.now()
+            print(f"\n[!] KALSHI TRINITY PIPELINE CYCLE: {cycle_start_time.strftime('%H:%M:%S')}")
+
             verdict = agent_instance.run_cycle(active_ticker)
             print(f"\n[Autonomous Output]:\n{verdict}\n" + "-" * 80)
 
-            # --- INTERACTIVE EXECUTION GATE ---
+            # --- INTERACTIVE EXECUTION GATE WITH 2-MINUTE TIMEOUT ---
             match = re.search(r'RECOMMENDED SIDE:\s*(YES|NO)', verdict, re.IGNORECASE)
             if match:
                 recommended_side = match.group(1).upper()
                 if recommended_side in ["YES", "NO"]:
-                    choice = input(f"\n[?] Trinity recommends taking a **{recommended_side}** position. Execute order? (y/n): ").strip().lower()
-                    if choice == 'y':
-                        price_match = re.search(r'ENTRY COST \(CENTS\):\s*(\d+)', verdict)
-                        price_cents = int(price_match.group(1)) if price_match else 50
+                    price_match = re.search(r'ENTRY COST \(CENTS\):\s*(\d+)', verdict)
+                    price_cents = int(price_match.group(1)) if price_match else 50
 
-                        current_bal = get_kalshi_balance()
-                        if current_bal and current_bal["balance_cents"] >= price_cents:
-                            success = execute_kalshi_trade(active_ticker, recommended_side, count=1, price_cents=price_cents)
-                            if success:
-                                agent_instance.memory.update_latest_trade_status(active_ticker, "APPROVED_EXECUTED")
-                            else:
-                                agent_instance.memory.update_latest_trade_status(active_ticker, "EXECUTION_FAILED")
-                        else:
-                            logger.error("Trade aborted: Insufficient available funds in Kalshi balance.")
-                            print("[!] Order blocked locally due to insufficient capital balance.")
-                            agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_INSUFFICIENT_FUNDS")
+                    # --- RISK ENFORCER GATE & METRICS PRE-CALCULATION ---
+                    proposed_stake_dollars = price_cents / 100.0
+                    risk_check = risk_enforcer.validate_trade_allocation(proposed_stake=proposed_stake_dollars)
+
+                    if not risk_check["approved"]:
+                        logger.error(f"Trade Blocked by Risk Enforcer: {risk_check['reason']}")
+                        print(f"[!] Risk Guardrail Triggered: {risk_check['reason']}")
+                        agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_RISK_GUARDRAIL")
                     else:
-                        print("[*] Trade execution skipped by user.")
-                        agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_BY_USER")
+                        logger.info(risk_check["reason"])
 
-            await asyncio.sleep(900)
+                        # Calculate portfolio percentage dynamically for the single prompt
+                        live_bal = risk_check["live_balance"]
+                        safe_stake = risk_check["safe_stake"]
+                        portfolio_pct = round((safe_stake / live_bal) * 100, 1) if live_bal > 0 else 0.0
+
+                        # --- SINGLE DETAILED INTERACTIVE PROMPT ---
+                        dynamic_prompt = (
+                            f"\n[?] Trinity recommends BUYING 1 contract of {recommended_side} at {price_cents}¢ "
+                            f"(${safe_stake:.2f} total exposure, {portfolio_pct}% of portfolio balance ${live_bal:.2f}). "
+                            f"Execute? (y/n [2m timeout]): "
+                        )
+
+                        choice_raw = input_with_timeout(dynamic_prompt, timeout=120)
+
+                        if choice_raw is None:
+                            # AFK Timeout Triggered
+                            agent_instance.memory.update_latest_trade_status(active_ticker, "UNRESPONSIVE_TIMEOUT")
+                            print("[*] Resuming autonomous loop (AFK auto-skip complete).")
+                        else:
+                            choice = choice_raw.strip().lower()
+                            if choice == 'y':
+                                success = execute_kalshi_trade(active_ticker, recommended_side, count=1, price_cents=price_cents)
+                                if success:
+                                    agent_instance.memory.update_latest_trade_status(active_ticker, "APPROVED_EXECUTED")
+                                else:
+                                    agent_instance.memory.update_latest_trade_status(active_ticker, "EXECUTION_FAILED")
+                            else:
+                                print("[*] Trade execution skipped by user.")
+                                agent_instance.memory.update_latest_trade_status(active_ticker, "DENIED_BY_USER")
+
+            # --- CLOCK-SYNCHRONIZED 15-MINUTE CANDLE SLEEP ---
+            now = datetime.now()
+            minute_mod = now.minute % 15
+            minutes_to_next = 15 - minute_mod
+
+            next_candle = now + timedelta(minutes=minutes_to_next, seconds=-now.second, microseconds=-now.microsecond)
+            sleep_seconds = (next_candle - now).total_seconds()
+
+            # Safety fallback if delta is too close to zero
+            if sleep_seconds < 10:
+                sleep_seconds += 900
+
+            print(f"[*] Cycle complete. Next candle sync in {round(sleep_seconds / 60, 1)} minutes (at {next_candle.strftime('%H:%M:%S')})...")
+            await asyncio.sleep(sleep_seconds)
+
         except Exception as e:
             logger.error(f"Pipeline Loop Error: {e}")
             await asyncio.sleep(60)
