@@ -152,7 +152,8 @@ def input_with_timeout(prompt: str, timeout: int = 120):
     def target():
         try:
             answer[0] = input(prompt)
-        except Exception:
+        except Exception as e:
+            logging.warning(f"no user input Warning: {e}")
             pass
 
     thread = threading.Thread(target=target)

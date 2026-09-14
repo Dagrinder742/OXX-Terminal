@@ -210,6 +210,14 @@
       "no_price": 50,
       "yes_delta": 0,
       "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-14T17:30:00.944766",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
     }
   ]
 }
