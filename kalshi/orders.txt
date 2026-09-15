@@ -155,3 +155,4 @@
 # TOTAL AMOUNT IN BETS THAT LOST = $
 # =====================================================================
 # TOTAL AMOUNT IN BETS THAT WON = $
+added another 20 i havent trackd yet
