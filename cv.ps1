@@ -14,3 +14,5 @@ bandit -c bandit.yaml -r . --severity-level all --confidence-level all --ignore-
 Write-Host "[+] RUNNING MAINTENANCE..." -ForegroundColor Green
 Write-Host "[+] RUNNING PIP AUDIT..." -ForegroundColor Green
 pip-audit
+
+cd C:\Users\krayz\AndroidStudioProjects\OXXTerminal\app\src\main\Python\kalshi
