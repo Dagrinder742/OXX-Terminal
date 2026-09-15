@@ -128,11 +128,344 @@
       "status": "DENIED_RISK_GUARDRAIL",
       "outcome": "PENDING_SETTLEMENT",
       "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T17:34:11.907306",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T17:47:57.898970",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T18:03:18.419685",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T18:17:59.503937",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T18:32:50.455278",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T18:47:59.507549",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T19:02:41.948129",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T19:17:45.849005",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T19:33:03.163723",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T19:48:00.031669",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T20:03:00.374390",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T20:17:49.598942",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T20:32:59.061589",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T20:48:14.797782",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T21:02:52.895073",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T21:17:52.184833",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T21:32:55.376968",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T21:47:39.129413",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T22:03:02.434844",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T22:17:50.481819",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T22:33:12.431166",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T22:47:57.747968",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T23:02:46.097008",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T23:18:05.913099",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T23:33:01.758056",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-14T23:47:54.290952",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:03:13.505764",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:18:03.005310",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:33:27.888429",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:48:11.943573",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:02:48.903778",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:17:54.024438",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:32:51.320033",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:47:51.210327",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:03:00.887116",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:17:57.569830",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:32:41.577805",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "recommended_side": "YES",
+      "entry_cost_cents": 50,
+      "status": "DENIED_RISK_GUARDRAIL",
+      "outcome": "PENDING_SETTLEMENT",
+      "profit_loss_cents": 0
     }
   ],
   "rolling_price_history": [
     {
-      "timestamp": "2026-09-12T19:33:01.573278",
+      "timestamp": "2026-09-14T21:45:00.901009",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -140,7 +473,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-12T19:53:20.743969",
+      "timestamp": "2026-09-14T22:00:00.881799",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -148,7 +481,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-12T21:05:14.750184",
+      "timestamp": "2026-09-14T22:15:00.874089",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -156,7 +489,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-12T21:22:02.839744",
+      "timestamp": "2026-09-14T22:30:00.805541",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -164,7 +497,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T16:24:21.189150",
+      "timestamp": "2026-09-14T22:45:00.958108",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -172,7 +505,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T16:30:01.030835",
+      "timestamp": "2026-09-14T23:00:00.968316",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -180,7 +513,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T16:45:01.043148",
+      "timestamp": "2026-09-14T23:15:00.879450",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -188,7 +521,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T17:00:01.332428",
+      "timestamp": "2026-09-14T23:30:01.007023",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -196,7 +529,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T17:06:37.139558",
+      "timestamp": "2026-09-14T23:45:00.851216",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -204,7 +537,7 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T17:15:00.900128",
+      "timestamp": "2026-09-15T00:00:01.133604",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
@@ -212,7 +545,79 @@
       "no_delta": 0
     },
     {
-      "timestamp": "2026-09-14T17:30:00.944766",
+      "timestamp": "2026-09-15T00:15:01.664242",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:30:01.138462",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T00:45:00.849013",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:00:00.922570",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:15:00.949195",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:30:00.843359",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T01:45:00.788386",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:00:00.798355",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:15:00.746287",
+      "ticker": "KXBTC15M-26SEP112215-15",
+      "yes_price": 50,
+      "no_price": 50,
+      "yes_delta": 0,
+      "no_delta": 0
+    },
+    {
+      "timestamp": "2026-09-15T02:30:00.766689",
       "ticker": "KXBTC15M-26SEP112215-15",
       "yes_price": 50,
       "no_price": 50,
