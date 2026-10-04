@@ -1,0 +1,75 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===================================================================================== #
+#      ALPHABET, CREATED BY: CASEY VAUGHAN // DATE: 10/03/2026 // SATURDAY 11:42        #
+# ===================================================================================== #
+
+"""
+DESCRIPTION: IN THIS FILE ILL BE USING THE ENGLISH ALPHABET TO MAP OUT TERMINAL CHARACTERS
+TO TRANSLATE A LANGUAGE OR CIPHER, IN THE TRANSLATION IT WILL USE NUMBERS, LOWERCASE, UPPERCASE,
+AND SPECIAL CHARACTERS FOR MY OWN VIEW OF THE ALPHABET AS I SEE IT WRITTEN. I AM MAKING THIS 
+FILE SO THAT PEOPLE MAY UNDERSTAND ME BETTER. I DONT READ STANDARD LANGUAGE AS MOST PEOPLE DO
+AND THIS IS MY WAY OF LETTING PEOPLE KNOW HOW I SEE TEXT WHEN I READ IT.
+
+"IM NOT CRAZY, I JUST SEE THREW ANOTHER LENSE"
+"""
+
+
+# -------------------------
+# | LETTERS | TRANSLATION | 
+# -------------------------
+"""
+CHARACTERS ARE SEPERATED BY SPACE NOT , COMMA AS THEY ARE USED IN THE TRANSLATION.
+CHARACTERS CAN APPEAR IN STACKED FORMATION. OR USE MULTIPLE LINES. SYMMETRY IS KEY.
+CHARACTERS CAN BE ROTATED FOR EXAMPLE W, CAN BE AN M OR STACKED PACKMAN >> IM NOT ABLE TO ROTATE 
+THESE SYMBOLS SO THEYLL BE MISSING. YOU JUST HAVE TO FOLLOW TGE BASICS THAT I EXPLAIN. EVERY LETTER 
+PRINTS 4 WAYS. ROTATE IN A FULL 360 AND YOULL SEE IT COME TO LIFE. I USE CAPITALS FOR A REASON AS WELL
+LOWER CASE FOR SYMmETRY 
+"""
+
+# A: |^| |-| [-], c| C1 Cl @ ('), 0, 0. /\ /-\ 
+# =======================================================================================
+# B: |> |M |W <| 8 & |-> |) |] {} [] () |c 
+#    |>       <|     |-> |) |] {} [] () |c
+# =======================================================================================
+# C: < > ^ v ( [ {  #LETTER C ALLOWS  EXAMPLE HOW THE 360 ROTATION HAPPENS.
+# =======================================================================================
+# D: |) |] |} 1C #ROTATE C lC #ROTATE C
+# E:
+# F:
+# G:
+# H:
+# J:
+# K:
+# L:
+# M:
+# N:
+# O:
+# P:
+# Q:
+# R:
+# S:
+# T:
+# U:
+# V:
+# W:
+# X:
+# Y:
+# Z:

@@ -10,12 +10,20 @@
 
 
 
-# ===============================================
-# LEARNING TO CIPHER MACHINE CODE
-# ===============================================
-# """
-# DESCRIPTION: TAKING A RANDOM LINE FROM A CONFIG FILE AND TRYING TO
-# MAP OUT ITS FUNCTIONS TO MY COMMON KNOWLEDGE
+
+
+
+
+
+
+
+
+# =============================================== 
+# LEARNING TO CIPHER MACHINE CODE 
+# =============================================== 
+# """ 
+# DESCRIPTION: TAKING A RANDOM LINE FROM A 
+# CONFIG FILE AND TRYING TO MAP OUT ITS FUNCTIONS TO MY COMMON KNOWLEDGE 
 # """
 #
 # CONFIGURATION LINE =
@@ -30,18 +38,57 @@
 # C = WINDOWS
 # 3H = BRIDGE
 # 
+#c = windows 
+#q = in terminal  
+# $ q
+. 24h13m23s NS a.root-servers.net.
+. 24h13m23s NS b.root-servers.net.
+. 24h13m23s NS c.root-servers.net.
+. 24h13m23s NS d.root-servers.net.
+. 24h13m23s NS e.root-servers.net.
+. 24h13m23s NS f.root-servers.net.
+. 24h13m23s NS g.root-servers.net.
+. 24h13m23s NS h.root-servers.net.
+. 24h13m23s NS i.root-servers.net.
+. 24h13m23s NS j.root-servers.net.
+. 24h13m23s NS k.root-servers.net.
+. 24h13m23s NS l.root-servers.net.
+. 24h13m23s NS m.root-servers.net.
 #
+#f= f.root-servers.net 
+#0= path
+#r= like in python direct path
+#M= microsoft 
 #
+#k= terminal command kona 
+$ k
+kona      \ for help. \\ to exit.
+
+  \
+Backslash Commands:
+\0        datatypes help
+\+        verb help
+\'        adverb help
+\:        I/O verb help
+\_        reserved word help
+\.        assignment/amend, function, control flow help
+\b [s|t]  show/set break mode (stop|trace|none)
+\d [d|^]  change k directory (^=previous)
+\e [n]    show/set error flag (0=off,1=on,2=exit)
+\l f      load script f or f.k
+\p [n]    show/set print precision (0=full)
+\r [s]    show/set random seed (0=random)
+\s f      step script f or f.k
+\t [n]    show/set timer interval in msec (0=disable)
+          calls niladic .m.ts
+\t e      measure runtime of some k expression
+\v [d|^]  show k directory (^=previous)
+\w        show workspace resources used
+\[cmd]    system command (also \[ cmd]), \echo hello
+
+#its literally a config file for an operation on a users device to run task in terminal 
 #
-#
-#
-#
-#
-#
-#
-#
-#
-#
+
 #
 #
 #
