@@ -1,6 +1,21 @@
-echo -e "\033[35m°/^| Arch•i°techT | AI-GEMINI |^\°\033[0m"
-echo -e "\033[35m°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°\033[0m"
-echo -e "\033[35m°{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}°\033[0m"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+echo -e "\033[35m° /^| Arch•i°techT-CASEY VAUGHAN | AI-GEMINI | AI-CLAUDE|^\ °\033[0m"
+echo -e "\033[35m°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°\033[0m"
+echo -e "\033[35m∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆\033[0m"
 
 cd ~/OKX-Terminal
 
@@ -19,3 +34,13 @@ echo -e "\033[33m[+] Running Pip Audit...\033[0m"
 pip-audit
 
 export PATH="$HOME/.cargo/bin:$PATH"
+
+# Custom aliases / scripts
+run-cv() {
+    bash "$HOME/OKX-Terminal/cv.sh"
+}
+
+run-git() {
+    bash "$HOME/OKX-Terminal/git.sh"
+}
+
