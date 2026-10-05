@@ -1,0 +1,27 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ======================
+#     COMMAND LINES
+# ======================
+
+"""
+Description: commands to run given by claude, documenting them for records and retracable workflow
+"""
+
+python test_oxx_logic.py && python test_main_flow.py
+
+python -c "from api_client import OKXPublicClient as C; print(C.fetch_instrument('BTC-USDT')); print(C.fetch_instrument('SHIB-USDT'))"
+
+echo oxx.log >> .gitignore
