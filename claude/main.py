@@ -649,8 +649,7 @@ class OXXTerminalApp(App):
             self.push_screen(AuthModal(), self.handle_auth_result)
         else:
             self.notify("Secure credentials loaded from encrypted vault.", title="Auth Success")
-            self._start_terminal_services()
-            self.refresh_chart()
+            self._start_terminal_services()  # also loads the first chart
 
     def handle_auth_result(self, success: bool) -> None:
         if success:
@@ -1031,7 +1030,10 @@ class OXXTerminalApp(App):
             except Exception as e:
                 logging.warning(f"Could not update candlestick chart widget: {e}", exc_info=True)
 
-        self.run_worker(load_task, name="chart_update", exclusive=True)
+        # group="chart": exclusive=True cancels every other worker in the SAME group.  In the default
+        # group that silently killed the fee/history workers at start-up and any in-flight order
+        # every 30 seconds.  Keep it in its own group so it only replaces an older chart refresh.
+        self.run_worker(load_task, name="chart_update", group="chart", exclusive=True)
 
     async def _execute_order_task(self, side: str, ord_type: str, size: str, price: str, tp: str, sl: str, tag: str = "Manual", bot_id: str = None) -> None:
         """Runs one order (simulated or live) and never lets an exception escape:

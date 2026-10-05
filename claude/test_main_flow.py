@@ -192,5 +192,29 @@ async def stale_then_stop():
 run(stale_then_stop())
 check("bot pauses on a stale feed (no orders, no crash)", not app.session_fills and any("Bot paused" in l for l in app.log_lines), app.log_lines)
 
+print("worker groups")
+async def chart_vs_workers():
+    app = new_app()
+    groups = {}
+    def run_worker(work, name="", group="default", exit_on_error=True, exclusive=False, **kw):
+        # Emulates Textual's documented rule: exclusive=True cancels every other worker in the group.
+        if exclusive:
+            for t in groups.pop(group, []): t.cancel()
+        coro = work() if (callable(work) and not asyncio.iscoroutine(work)) else work
+        t = asyncio.ensure_future(coro)
+        groups.setdefault(group, []).append(t)
+        return t
+    app.run_worker = run_worker
+    done = []
+    async def slow(tag):
+        await asyncio.sleep(0.2); done.append(tag)
+    app.run_worker(slow("fees"), exit_on_error=False)   # same call shape as _start_terminal_services
+    app.run_worker(slow("order"))                       # same call shape as a manual/bot order
+    app.refresh_chart()                                 # what the 30s timer and the timeframe buttons do
+    await asyncio.sleep(0.4)
+    return sorted(done)
+done = run(chart_vs_workers())
+check("a chart refresh does not cancel in-flight fee/order workers", done == ["fees", "order"], done)
+
 print(f"\n{PASSED} passed, {len(FAILED)} failed")
 if FAILED: print("FAILED:", *FAILED, sep="\n  - "); sys.exit(1)
