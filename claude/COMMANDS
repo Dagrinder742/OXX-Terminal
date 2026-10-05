@@ -33,3 +33,5 @@ asyncio.run(a.update_accountant_fees())
 print(a.accountant.tier_label, a.accountant.maker_rate, a.accountant.taker_rate)
 "
 grep -n -i "fee\|calibrat" oxx.log | tail -n 8
+
+grep -n -i "fees\|hydrat" oxx.log | tail
