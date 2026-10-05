@@ -25,3 +25,11 @@ python test_oxx_logic.py && python test_main_flow.py
 python -c "from api_client import OKXPublicClient as C; print(C.fetch_instrument('BTC-USDT')); print(C.fetch_instrument('SHIB-USDT'))"
 
 echo oxx.log >> .gitignore
+
+python -c "
+import asyncio, main
+a = main.OXXTerminalApp()
+asyncio.run(a.update_accountant_fees())
+print(a.accountant.tier_label, a.accountant.maker_rate, a.accountant.taker_rate)
+"
+grep -n -i "fee\|calibrat" oxx.log | tail -n 8
