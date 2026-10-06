@@ -1,0 +1,674 @@
+# ====================================================================
+# OXX-TERMINAL UPDATES AND WORK DONE WITH CLAUDE TO SHARE WITH GEMINI
+# ====================================================================
+
+""" 
+DESCRIPTION: CONVERSATIONS WITH CLAUDE AI AND UPDATES WE HAVE WORKED ON AS TO DATE ON THE OXX-TERMINAL
+THIS IS JUST COPY AND PASTE OF USER AND CLAUDE OUTPUT FOR CONTEXT. I CAN PROVIDE GEMINI WITH OLD AND NEW
+FILES FOR COMPARISSON IF SHE REQUEST.
+"""
+# Note: i did not seperate the messages by user-ai context ... but if you follow the responses youll see tge dialogue is user runs commands and ask questions ai provide the work flow
+
+Can you review this file "main.py"
+
+I'll read the truncated middle section first so the review covers the whole file.
+
+I read all of `main.py`. I haven't run it, and I haven't seen `api_client`, `strategy_engine`, `okx_private` or `accountant`, so some items below are marked as unverified, with a way to test each one.
+
+**Fix first**
+
+1. **Unhandled errors can kill the app.** `_execute_order_task` has no try/except, and `run_worker` exits the app on an unhandled exception by default. Test it safely: in sim mode, click BUY with no price before the feed connects. `float("Connecting...")` should raise. Wrap the body in try/except, or pass `exit_on_error=False`.
+2. **Manage Keys duplicates everything.** `handle_auth_result` calls `_start_terminal_services()` again. That adds a second set of timers and a second websocket client, and the old task is orphaned. Test: count `len(asyncio.all_tasks())` before and after saving keys.
+3. **"Order accepted" is recorded as "filled".** `code == "0"` only means OKX accepted the order. A resting limit order isn't a fill, yet it goes into the accountant and the bot state, so PnL will be wrong. Record fills only from fill data.
+4. **Sim mode never calls `update_bot_fill`.** A bot may re-fire the same signal every second. This depends on `strategy_engine`. Test: run a sim grid for a minute and count the recorded fills.
+5. **Instrument switching.** The new client is built without `watchlist=WATCHLIST`, so the hubs likely freeze after a switch (check `api_client`). Also, "Successfully tuned" fires immediately, so a typo'd ticker still reports success.
+6. **The 5-second timers have no try/except.** `update_portfolio_balance` and `update_open_orders_and_positions` should crash the app on a network blip. Test it by toggling airplane mode.
+7. **The order book goes stale.** You trim to 5 levels, then apply deltas to that trimmed list. When a top level is removed, the next one is already gone. Keep the full book as a dict and slice only for display. How bad this is depends on which channel you subscribe to.
+8. **Percent buttons can't prefill a sell.** The buy branch wins whenever you hold any USDT.
+9. **Low-priced coins show 0.00.** The hubs use `.2f` and the book uses `.1f`, so SHIB, TRX and DOGE look flat.
+10. **OKX market buys (unverified).** For spot, `sz` on a market buy is in quote currency unless `tgtCcy="base_ccy"` is set. Check `place_order`.
+
+**Smaller things**
+
+- `label.text` (line 664) and `log_widget.renderable` (line 1156) are Textual-version-dependent. `log_action` swallows the failure silently, so keep your own list of log lines. Give the buy and sell buttons ids instead of checking label text.
+- `update_preflight_calculator` logs a full traceback on every partial keystroke. Use `except ValueError: return`.
+- "OXX" is a typo in 3 places. `current_pair` (line 404) doesn't exist, so use `self.instrument_id`.
+- The `"Connecting..."` string check is repeated about 8 times. One helper returning `float | None` would replace them all.
+- The header redraws at 10 Hz even though you have reactive vars. A `watch_current_price` would do it on change only.
+- Show a visible SIM/LIVE badge in the header. It's the best defence against thinking orders are real when they aren't, or the reverse.
+- Move the imports out of the functions, drop the unused `session_pnl`, and remove the duplicate `border` line in the `Input` CSS (lines 267 and 269).
+
+I can patch the top few if you'd like.
+
+I have provided you with the files you asked for, as well as the markdown file that indicates most of the work that I've done within the main.py file. The OXX terminal naming is intentional to avoid using OKX's terms of service. I don't have the rights to use their name. So it's a personal branding
+
+Thanks, I'll go through all five files now.
+
+Understood on OXX, I'll treat the name as deliberate. With the other modules, three of my first-pass items change.
+
+- **Retract #4.** The grid advances its own index when it emits a signal, so it doesn't re-fire every second in sim mode.
+- **Confirmed:** #5 (no watchlist after switching), #7 (the book decays) and #10 (market-buy size).
+- **Still stand:** #1-3, #6, #8 and #9.
+
+**Confirmed by running small sims on your code**
+1. **The grid sells inventory it doesn't have.** The first upward move gave a SELL while the bot's position was 0. Live, that sells coins you already hold, or gets rejected.
+2. **There's no dead-band.** Price flickering ±0.01 around a level gave 19 orders in 20 ticks. At your 0.35% taker default, that's pure fee loss.
+3. **`round(x, 2)` breaks cheap coins.** SHIB levels came out as `[0,0,0,0,0]`, so the bot shows ACTIVE and never trades. BTC probably violates tick size too.
+4. **Sizes come out as raw floats.** `str(float)` gave `0.00029746633052971317` and `5.00000005e-09`. OKX will probably reject these (unverified). Read `tickSz`/`lotSz` from the instruments endpoint and format with `Decimal`.
+5. **The accountant's average price is wrong when a trade flips direction.** Long 1, then sell 3 @100 gives avg 150, not 100. Short→long gives 135 instead of 90. Selling coins you held before the session books a "short" that shows profit as price falls (+9.65 in my test).
+6. **"Amount" means two things.** It's base quantity for manual orders but USD for the bots, and the % buttons fill it in base units.
+
+**Confirmed by reading**
+7. **Accepted is treated as filled.** The accountant records at the signal or limit price, with a taker fee on everything. Your notes (§11) say it only sees exchange-confirmed trades. In fact it sees accepted orders, and sim fills share the live ledger (only the tag differs).
+8. **STOP ALL BOTS doesn't cancel resting orders.** `okx_private` has no cancel call, so "Strategy Halted" overstates.
+9. **Market buys have no `tgtCcy`.** As I recall the OKX docs, spot market-buy `sz` defaults to quote currency. Typing 100 meaning 100 DOGE could spend 100 USDT. Add `tgtCcy="base_ccy"`, and check the docs.
+10. **Net TP shows `$0.00` when it's negative.** That's exactly when the TP is below your hurdle, which the calculator exists to show.
+11. **The book decays.** `books` is full-depth snapshot plus updates, and you trim to 5, so removed levels aren't replaced.
+12. **A UI bug looks like a network drop.** `api_client` treats any callback exception as a socket failure and reconnects, so it looks like a network problem.
+13. **DCA has no cap** on the number or total size of buys.
+14. **Loose ends.** `fetch_recent_trades` is never called, though the roadmap marks it done. Private calls use `us.okx.com`, but public ones use `www.okx.com` and `ws.okx.com`. Check the OKX US docs for the right hosts.
+
+**Unverified (Textual isn't installed here, so I couldn't run the UI)**
+- **Logging:** `logging` to stderr likely paints over the TUI. Run `python main.py 2>oxx.log`. If the glitches vanish, log to a file instead.
+- **Textual 8.2.8:** `Static.renderable` and `Button.label.text` may no longer exist. Run `python -c "from textual.widgets import Static,Button; print(hasattr(Static(''),'renderable'), hasattr(Button('x').label,'text'))"`. Both need to print `True`. If not, the Execution Log silently stops and BUY/SELL clicks error.
+- **TP/SL:** the top-level `tpTriggerPx` fields may have moved under `attachAlgoOrds`. Check the `/trade/order` docs.
+- **`asyncio` 4.0.0:** this is in your package list. asyncio is built in, and the PyPI package is an obsolete backport, so I'd uninstall it.
+
+I'd patch in this order: crash-proofing and file logging, then precision and `tgtCcy`, then the grid inventory and dead-band, then the ledger. Want me to start with the first two?
+
+First I ran your suggested command and here is the terminal output 
+
+python -c "from textual.widgets import Static,Button; print(hasattr(Static(''),'renderable'), hasattr(Button('x').label,'text'))"
+False False
+
+Second: I'm going to give some screenshots for you to see a visual of the TUI to see how it currently lays out. Maybe this will help your review.
+
+Both `False` results are real bugs, and the screenshots back them up.
+
+**What the test result means**
+1. **The Execution & Order Log has never updated.** `log_widget.renderable` doesn't exist in your Textual, so `log_action` hits the `except` and falls back to `logging.info`. Screenshot 3 matches this: the panel still reads "System initialized…" even though startup logs "Hydrating account trade history…" right away. The fix is to keep your own `self.log_lines` list and call `update("\n".join(...))`.
+2. **BUY/SELL probably crash the app.** Line 664 uses `label.text`, which doesn't exist, so pressing BUY or SELL with an amount entered should raise an unhandled error (unverified, but that's how Textual normally behaves). Give those buttons ids like `manual-buy-btn` and `manual-sell-btn`, then test `side = "buy" if event.button.id == "manual-buy-btn" else "sell"`.
+   - To test the crash safely, first confirm `simulation_mode` is `True`. Then type an amount and tap BUY.
+   - Also add `return` for any button id you don't handle, so nothing falls through to the order code.
+
+**What the screenshots add**
+- **Net SL is clipped.** `#tactical-preflight-box` is `height: 6`, which with the double border leaves 4 content rows. It needs 7 for the header plus 4 rows.
+- **The header still says "(Pre-Flight)".** The calculator replaces that with your fee tier once `get_trade_fee` returns code `"0"`. So fee calibration probably never succeeded. This is the item your notes still list as open.
+  - Test it with this read-only command: `python -c "from okx_private import OKXPrivateClient as C; print(C.get_trade_fee('SPOT'))"`.
+- **Last Trades has a duplicate header.** The static header and the first line of `trades_text` repeat each other. The "Time" column also has no data.
+- **The `0.0000` sizes are rounding, not empty levels.** `.4f` hides small BTC trades. Use 6 to 8 decimals for BTC, ideally from `lotSz`.
+- **Prices of cheap coins still lose digits.** SHIB shows `0.00`, DOGE `0.10` and TRX `0.34`. Format by magnitude instead of fixed `.2f`.
+- **The title bar says `OKXTerminalApp`.** That's the class name. Set `TITLE = "OXX Terminal"` and consider renaming the class. Dropping `Header()` would also give you a row back on a phone.
+- **A missing glyph shows as `▯`** before "Tactical Edge" and "MANAGE API KEYS". Your Termux font lacks that icon, so use plain text or a character it has.
+- **USDT and BTC show `0.0000`, but they're dust above zero.** They passed the `avail > 0` filter. The % buttons will take the BUY branch and fill about 0. Use a minimum-value threshold instead of `> 0`.
+- **Auth works.** "No open resting orders" means signed GETs on `us.okx.com` succeed. The empty fill history fits `/trade/fills`' 3-day window.
+
+I can write these as one patch to `main.py`. I can't run Textual here, so each change would come with its own test command. Want that?
+
+Here is the results of the command you asked me to test 
+
+python -c "from okx_private import OKXPrivateClient as C; print(C.get_trade_fee('SPOT'))"
+{'code': '0', 'data': [{'category': '1', 'delivery': '', 'exercise': '', 'feeGroup': [{'elpMaker': '-0.0014', 'groupId': '1', 'maker': '-0.0014', 'rpiMaker': '-0.0014', 'taker': '-0.0023'}, {'elpMaker': '-0.002', 'groupId': '2', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '3', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '4', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '5', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '6', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '7', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '8', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '9', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '10', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '0', 'groupId': '11', 'maker': '0', 'rpiMaker': '0', 'taker': '0'}, {'elpMaker': '-0.002', 'groupId': '12', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '13', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '14', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '15', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '0', 'groupId': '16', 'maker': '0', 'rpiMaker': '0', 'taker': '0'}, {'elpMaker': '0', 'groupId': '17', 'maker': '0', 'rpiMaker': '0', 'taker': '-0.0005'}, {'elpMaker': '-0.002', 'groupId': '18', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '19', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '20', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '21', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '22', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}, {'elpMaker': '-0.002', 'groupId': '23', 'maker': '-0.002', 'rpiMaker': '-0.002', 'taker': '-0.0035'}], 'fiat': [{'ccy': 'AED', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'AUD', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'HKD', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'SGD', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'EUR', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'USD', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'TRY', 'maker': '-0.002', 'taker': '-0.0035'}, {'ccy': 'BRL', 'maker': '-0.002', 'taker': '-0.0035'}], 'instType': 'SPOT', 'level': 'Lv1', 'maker': '-0.0014', 'makerU': '', 'makerUSDC': '-0.002', 'ruleType': 'normal', 'settle': '', 'taker': '-0.0023', 'takerU': '', 'takerUSDC': '-0.0035', 'ts': '1791153908364'}], 'msg': ''}
+
+I'm open to any fixes you think are necessary
+
+Your fee call worked (`code: '0'`, level `Lv1`), so my guess that calibration failed was wrong. The response also shows a different problem, so I'll check a few things in your code before patching.
+
+Everything passes. To make sure the tests can actually fail, I'll run the two most important scenarios against your original `main.py`.
+
+The fee call works, so my guess that calibration failed was wrong. Your response shows a different problem. I've patched the app and put the files in the outputs folder: `main.py`, `okx_private.py`, `strategy_engine.py`, `accountant.py`, `api_client.py`, a new `order_format.py`, and two test files.
+
+**Fee finding.** Fees are per instrument group. The top-level `0.14%` maker / `0.23%` taker matches group 1, and the other groups show `0.20%` / `0.35%`. Your code applied the group-1 rates to every pair, so it understated costs by about 50% on pairs outside group 1. The patch picks rates by the pair's group and falls back to the worst case if the group is unknown.
+
+I didn't find why the header still said "Pre-Flight". Your notes say Termux runs `test_termux_happy.py`, so the screenshots may come from a different file than `main.py`.
+
+The workspace already held partly patched copies. I reviewed every diff and re-tested them instead of trusting them.
+
+**What changed**
+- **Crashes:** order workers, the 5-second timers, and a bad UI callback can no longer exit the app or force a reconnect. "Manage API Keys" no longer starts a second feed.
+- **Broken Textual calls:** the Execution Log now works, BUY/SELL use button ids, and the order book keeps the full depth.
+- **Orders:** sizes and prices are snapped to the exchange's tick and lot sizes, market buys use base units (`tgtCcy`), and failures show the real reason.
+- **Grid bot:** it only sells what it bought, ignores 0.05% flicker around a level, and is rejected if its spacing doesn't cover round-trip fees. SHIB-priced levels no longer round to zero.
+- **DCA bot:** it stops after 10 buys.
+- **Ledger:** the average-price bugs on direction flips are fixed, and selling pre-session coins no longer books a fake short.
+- **UI:**
+  - A SIM/LIVE badge in the header.
+  - The Net SL row is no longer clipped.
+  - A negative Net TP shows in red.
+  - Prices keep their digits for cheap coins.
+  - The Last Trades header is no longer duplicated.
+  - The title and modal say OXX.
+  - The icons that showed as boxes are off by default (`export OXX_NERD_FONT=1` brings them back).
+  - Bots now have their own "Investment (USDT)" field, and only one bot can run at a time.
+
+**Verified, and what that doesn't cover.** 55 checks pass with Textual stubbed out. Against your original `main.py`, the order book dropped to 4 rows and a BUY press raised an error. Textual isn't installed here, so I haven't seen anything drawn. I also haven't sent a real order.
+
+**Not fixed. Keep `simulation_mode = True`.**
+- The live path still books an accepted order as filled.
+- Stopping bots doesn't cancel resting orders; the message now says so.
+- The % buttons can't prefill a sell when you also hold USDT.
+- The TP/SL parameter format is still unverified against the OKX docs.
+- I haven't checked the public WebSocket host (`ws.okx.com`) against OKX US docs.
+
+**Please run these**
+1. `python test_oxx_logic.py && python test_main_flow.py`
+2. `python -c "from api_client import OKXPublicClient as C; print(C.fetch_instrument('BTC-USDT')); print(C.fetch_instrument('SHIB-USDT'))"`. You should see `tickSz`, `lotSz`, `minSz` and a `groupId`. If `groupId` is `None`, fees show "worst-case". If the whole result is `None`, live orders are blocked by design.
+3. Launch the app and check these:
+   - the SIM badge shows;
+   - the log panel fills in, including a "Fees LV1…" line;
+   - the Net SL row is visible;
+   - in sim mode, BUY with an amount puts a fill in Order History without crashing.
+4. Run `echo oxx.log >> .gitignore`, because `git.sh` does `add -A` and would commit the new log file.
+
+Here are the command line results you asked me to run 
+
+$ echo oxx.log >> .gitignore
+~/OKX-Terminal/claude $ python test_oxx_logic.py && python test_main_flow.py
+order_format
+  ok    long float size -> exact lot multiple
+  ok    scientific-notation size handled
+  ok    size rounds DOWN, never up
+  ok    price snaps to tick
+  ok    cheap-coin price keeps its digits
+  ok    '$' and ',' tolerated
+  ok    SHIB price displays
+  ok    BTC price displays 2 dp
+  ok    tiny size never shows as 0.0000
+  ok    negative money keeps sign in front
+accountant
+  ok    long -> short flip: new avg is the flip price
+  ok    short -> long flip: new avg is the flip price
+  ok    short covered at a lower price realizes profit
+  ok    partial close keeps entry price, realizes gain
+  ok    selling untracked inventory books only the fee (no fake short profit)
+  ok    over-selling a long ends flat on spot
+  ok    hurdle = entry*(1+taker)/(1-maker)
+  ok    TP under the hurdle is a negative net
+grid strategy
+  ok    price flickering around a level fires nothing
+  ok    no inventory -> no SELL
+  ok    falling through a level -> BUY
+  ok    rising later -> SELL, no more than the bot holds
+  ok    cheap-coin grid levels are distinct and non-zero
+  ok    default +/-2%, 5 levels passes the fee check
+  ok    grid tighter than round-trip fees is rejected
+  ok    DCA stops after max_buys
+okx_private request building
+  ok    market order asks for BASE-currency size
+  ok    limit order has price and no tgtCcy
+  ok    POST signature matches an independent HMAC of the exact body sent
+  ok    timestamp has real milliseconds + Z
+  ok    GET signature covers the query string
+  ok    network failure returns an error dict instead of raising
+  ok    missing secret returns an error dict instead of raising
+
+33 passed, 0 failed
+fee groups
+  ok    group 1 (e.g. BTC) -> 0.14% / 0.23%
+  ok    group 2 -> 0.20% / 0.35%
+  ok    unknown group -> worst case, not the cheapest
+  ok    group 17 -> maker 0 / taker 0.05%
+  ok    startup: BTC-USDT picks its group's rates
+  ok    switching to a group-2 pair raises the estimate
+  ok    fee line reaches the Execution Log panel
+order flow (simulation)
+  ok    size/price put on the exchange grid
+  ok    sim fill reaches the ledger
+  ok    history panel updated
+  ok    below-minimum order is refused, not sent
+  ok    market order before a price exists is a notice, not a crash
+  ok    LIVE mode refuses to send when tick/lot size is unknown
+buttons
+  ok    BUY press schedules an order worker without touching label.text
+  ok    other buttons never reach order code
+log panel
+  ok    log keeps newest 4, newest first
+order book
+  ok    snapshot shows 5 levels per side
+  ok    removing the best ask is replaced by the next level (book doesn't shrink)
+tickers
+  ok    SHIB price keeps its digits
+  ok    a malformed ticker doesn't raise
+start-up
+  ok    calling start-up again (Manage API Keys) adds no timers or second feed
+bot loop
+  ok    bot pauses on a stale feed (no orders, no crash)
+
+22 passed, 0 failed
+~/OKX-Terminal/claude $ nano COMMANDS                                                                       ~/OKX-Terminal/claude $ python -c "from api_client import OKXPublicClient as C; print(C.fetch_instrument('BTC-USDT')); print(C.fetch_instrument('SHIB-USDT'))"
+{'tickSz': '0.1', 'lotSz': '0.00000001', 'minSz': '0.00001', 'groupId': '12'}
+{'tickSz': '0.000000001', 'lotSz': '1', 'minSz': '100000', 'groupId': '12'}
+
+Both test files pass on your phone (55 checks), and `fetch_instrument` works against `us.okx.com`, so the order-sizing and fee-group code now has real data behind it.
+
+**I was wrong about which fee group BTC is in.** I guessed the top-level `0.14%` / `0.23%` rates were for the majors. Your output shows BTC-USDT and SHIB-USDT are both in group `12`, which is `0.20%` maker / `0.35%` taker. So your original code understated BTC's fees by about 50%, not only the alts'. The patched version reads the group, so it now uses the higher rates:
+
+- **Hurdle:** a BTC buy has to rise about 0.55% to break even with a maker exit.
+- **Grid default:** round-trip taker fees are 0.70%, and the default ±2% / 5-level grid has about 0.98% spacing. It passes, but only about 0.28% is left per cycle before slippage. Widen it if you want real margin.
+
+The group-to-rate match is my reading of OKX's docs. The numbers line up because group 12 exists in your fee list. The real proof is your first actual fill: the fee divided by (price × size) should come out near 0.35% for a taker or 0.20% for a maker.
+
+**SHIB has a large minimum.** Its `minSz` is `100000`, roughly $1 of SHIB, so tiny test orders on it will be refused. That is the intended behaviour.
+
+**Still to do:** launch the app and look at the screen, since the tests can't. With `simulation_mode = True`, check:
+1. A yellow SIM badge shows in the top bar.
+2. The Execution Log fills in, including a line like `Fees LV1: LV1 g12 maker 0.20% taker 0.35%`. If it says `worst-case` instead, the group wasn't picked up.
+3. The Net SL row is visible in the Tactical Edge box.
+4. Type `0.001` in Amount and tap BUY. You should see a `SIM-Manual` fill in Order History and no crash.
+
+Tell me what you see on those four and I'll fix whatever differs.
+
+Here is the newest SS. I typed in 0.001 as requested and also hit buy. I did receive the toast notification indicating sim mode as well as it's print at the top TUI bar as well
+
+The first-run checks mostly pass, but the fee label is still wrong. Before guessing why, I'll look at where the label could be set.
+
+The BUY worked in sim mode, but the fee label is still wrong, so fee calibration still isn't loading.
+
+**What your screenshot confirms**
+- The yellow SIM badge, the OXX title and the full Tactical Edge box (Net SL is visible now) are all showing.
+- Your BUY triggered the "BUY market 0.001 intercepted" toast with no crash.
+
+**What it doesn't confirm**
+- Scroll down and check that Order History shows a `SIM-Manual` BUY.
+- Also check the Execution Log. It should say "SIM MODE: Manual would have placed BUY…". If the fee loaded, it should also say "Fees LV1…".
+
+**The problem:** the Tactical Edge header says `(PENDING)`, which is the accountant's starting label. It should read something like `LV1 g12`, so the fee schedule never loaded in the running app. This is why the first screenshot showed "(Pre-Flight)" too.
+
+The numbers on screen look right only by coincidence. Est. Fee $0.2996 on a $85.61 order is 0.35%, and the hurdle matches 0.35% / 0.20%. Those are the built-in defaults, and they happen to equal group 12's rates. So the numbers can't tell us whether calibration works; the label is the only tell.
+
+The code path passes in my stubbed tests, so something differs in your real run. Please run this from the project folder:
+
+```
+python -c "
+import asyncio, main
+a = main.OXXTerminalApp()
+asyncio.run(a.update_accountant_fees())
+print(a.accountant.tier_label, a.accountant.maker_rate, a.accountant.taker_rate)
+"
+grep -n -i "fee\|calibrat" oxx.log | tail -n 8
+```
+
+- **It prints `LV1 g12 0.002 0.0035`:** the code works outside the UI. The problem is only in how the app starts it, and the Execution Log or `oxx.log` should show a "Fee tier lookup failed" line saying why.
+- **It prints `PENDING 0.0035 0.002`:** `oxx.log` will show the error, and I'll fix it from that.
+
+Whichever happens, paste me the output. `oxx.log` shouldn't contain your keys, but skim it before you send it.
+
+One smaller thing: Est. Fee and Hurdle only recalculate when you type. Your hurdle was computed at about $85,612, but the live price is $85,626, so on market orders they drift. I can make them refresh every half second, after we sort out the fee issue.
+
+Here are the terminal command output 
+
+python -c "
+> import asyncio, main
+> a = main.OXXTerminalApp()
+> asyncio.run(a.update_accountant_fees())
+> print(a.accountant.tier_label, a.accountant.maker_rate, a.accountant.taker_rate)
+> "
+LV1 g12 0.002 0.0035
+
+~/OKX-Terminal/claude $ grep -n -i "fee\|calibrat" oxx.log | tail -n 8
+4:2026-10-05 00:26:43,562 [INFO] Feed live: BTC-USDT
+8:2026-10-05 00:32:02,728 [INFO] Feed live: BTC-USDT
+28:2026-10-05 00:41:05,586 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+29:2026-10-05 00:41:05,587 [INFO] Fees LV1: LV1 g12 maker 0.20% taker 0.35%
+
+The `(PENDING)` fee label is fixed in the new `main.py`. I've sent updated `main.py` and `test_main_flow.py`.
+
+**Cause.** `refresh_chart()` starts its worker with `exclusive=True` in Textual's default group. That cancels every other worker in the group, including the fee, history and order workers. `on_mount` called `refresh_chart()` right after starting them, so the fee worker died within milliseconds. A cancelled task raises `CancelledError`, which `except Exception` doesn't catch, so it logged neither success nor failure. That matches your 00:26 and 00:32 launches, and it explains the "(Pre-Flight)" and "(PENDING)" labels.
+
+**Side effects.**
+- **Order History:** it was probably also empty for this reason, because the history fetch was cancelled too.
+- **Orders:** the 30-second chart timer could cancel an order task while it was in flight. In live mode, the HTTP request keeps running in its thread, so OKX could accept an order the app never records. The window is narrow, but it's exactly the "looks fine, isn't" failure you want to avoid.
+
+**The fix.** The chart worker now has its own `group="chart"`, and I removed the duplicate chart refresh from `on_mount`.
+
+**Verified.** All 56 checks pass here (23 UI-flow, 33 logic). The new test runs the same scenario on your original `main.py`, and both workers are cancelled. The test uses my own copy of Textual's rule, because I can't run real Textual here.
+
+**Please check**
+1. Replace `main.py` and `test_main_flow.py`, then run `python test_main_flow.py`. It should say `23 passed`.
+2. Launch the app. Within a few seconds the header should read `Tactical Edge (LV1 g12)`.
+3. Run `grep -n -i "fees\|hydrat" oxx.log | tail`. You should see a "Fees LV1…" line from startup.
+
+The account-history fetch is now running inside the app for the first time ever. Order History may show real fills from the last 3 days, tagged ACCOUNT. If it errors, `oxx.log` will say why, so send me that.
+
+Next I can make Est. Fee and Hurdle follow the live price on market orders. After that I'd tackle "accepted counts as filled" and cancelling orders when you stop the bots. Do you want those, or do you want to settle this one first?
+
+Here are the command outputs as well as terminal SS where I tested a buy of 0.001 again 
+
+~/OKX-Terminal/claude $ python test_main_flow.py
+fee groups
+  ok    group 1 (e.g. BTC) -> 0.14% / 0.23%
+  ok    group 2 -> 0.20% / 0.35%
+  ok    unknown group -> worst case, not the cheapest
+  ok    group 17 -> maker 0 / taker 0.05%
+  ok    startup: BTC-USDT picks its group's rates
+  ok    switching to a group-2 pair raises the estimate
+  ok    fee line reaches the Execution Log panel
+order flow (simulation)
+  ok    size/price put on the exchange grid
+  ok    sim fill reaches the ledger
+  ok    history panel updated
+  ok    below-minimum order is refused, not sent
+  ok    market order before a price exists is a notice, not a crash
+  ok    LIVE mode refuses to send when tick/lot size is unknown
+buttons
+  ok    BUY press schedules an order worker without touching label.text
+  ok    other buttons never reach order code
+log panel
+  ok    log keeps newest 4, newest first
+order book
+  ok    snapshot shows 5 levels per side
+  ok    removing the best ask is replaced by the next level (book doesn't shrink)
+tickers
+  ok    SHIB price keeps its digits
+  ok    a malformed ticker doesn't raise
+start-up
+  ok    calling start-up again (Manage API Keys) adds no timers or second feed
+bot loop
+  ok    bot pauses on a stale feed (no orders, no crash)
+worker groups
+  ok    a chart refresh does not cancel in-flight fee/order workers
+
+23 passed, 0 failed
+
+grep -n -i "fees\|hydrat" oxx.log | tail
+6:2026-10-05 00:32:00,560 [INFO] Hydrating account trade history...
+28:2026-10-05 00:41:05,586 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+29:2026-10-05 00:41:05,587 [INFO] Fees LV1: LV1 g12 maker 0.20% taker 0.35%
+32:2026-10-05 20:55:41,340 [INFO] Hydrating account trade history...
+158:2026-10-05 20:56:02,430 [INFO] Fees for BTC-USDT: LV1 worst-case taker 0.350% maker 0.200%
+159:2026-10-05 20:56:02,431 [INFO] Fees LV1: LV1 worst-case maker 0.20% taker 0.35%
+162:2026-10-05 20:59:44,436 [INFO] Hydrating account trade history...
+165:2026-10-05 21:00:02,667 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+166:2026-10-05 21:00:02,667 [INFO] Fees LV1: LV1 g12 maker 0.20% taker 0.35%
+263:2026-10-05 21:00:04,216 [INFO] Hydration Error: HTTPSConnectionPool(host='us.okx.com', port=443): Read timed out. (read timeout=10)
+
+The test output and screenshots confirm most of the fixes. Two things need a closer look: a slow startup visible in `oxx.log`, and some mismatched rows in Last Trades. First I'll check the code behind the Last Trades rows.
+
+Most of the fixes now check out on your phone, but your log shows slow startup network calls that I want to understand before building anything else.
+
+**Confirmed working**
+- **Fee label:** it shows `(LV1 worst-case)` or `(LV1 g12)` now. The worker survives, and the earlier cancellation bug is gone.
+- **Order History and Execution Log:** your sim BUY appears as `SIM-Manual | BUY 0.001 @ 85871.9`, with the "SIM MODE: Manual would have placed…" line.
+- **Account history:** "Found 0 historical fills" means the history fetch ran and found nothing in the last 3 days.
+- **Session Net:** `-0.30` is the 0.35% taker fee on an $85.87 order, as expected.
+- **Display:** SHIB now shows `0.00000587` and DOGE `0.0953`, and the order book sizes no longer show `0.0000`.
+- **Last Trades:** the duplicate header is gone and the Time column is filled. Rows 3-8 look cut off, but the toast covers them, because the text stops exactly at its left edge. The code formats every row the same way.
+
+**What I fixed:** `Session Net` showed `$-0.30` and now shows `-$0.30`, and the fee log line no longer repeats "LV1". The new `main.py` is attached. It passes the same 56 checks here; I haven't run it in the app.
+
+**The slow startup is still unexplained.** Your log shows:
+- Fees finished 21 seconds after history started (20:55:41 to 20:56:02), and 18 seconds on the next launch.
+- The first launch fell back to `worst-case`, so the instrument lookup failed or timed out. The second got `g12`.
+- One history call hit a 10-second read timeout, and a single call took about 20 seconds to fail.
+
+It's harmless for now. BTC's group-12 rates equal the worst case, and the fallback is the designed safe behaviour. But a 20-second startup suggests something is slowing every private call, and I can't tell what from here. Please run these two:
+
+```
+python -c "import time; from secure_vault import EncryptedVault as V; t=time.time(); V.load_credentials(); print('vault', round(time.time()-t,2), 's')"
+python -c "import time; from okx_private import OKXPrivateClient as C; t=time.time(); r=C.get_trade_fee('SPOT'); print('fee call', round(time.time()-t,2), 's', r['code'])"
+```
+
+and this, which counts the repeated log messages during that first slow launch:
+
+```
+sed -n '32,262p' oxx.log | cut -c26- | sort | uniq -c | sort -rn | head -12
+```
+
+- **If the vault takes seconds,** every private call pays that cost and I'll cache the credentials.
+- **If the fee call itself is slow,** it's the network path, and I'll look at the timeouts and retries.
+- **If one message repeats hundreds of times,** that's the culprit.
+
+I did have some slow Internet connection when I ran those last test. I have reset my router though and will upload the grep commands you asked for .. 
+
+~/OKX-Terminal/claude $ python -c "import time; from secure_vault import EncryptedVault as V; t=time.time(); V.load_credentials(); print('vault', round(time.time()-t,2), 's')"
+vault 7.04 s
+~/OKX-Terminal/claude $ python -c "import time; from okx_private import OKXPrivateClient as C; t=time.time(); r=C.get_trade_fee('SPOT'); print('fee call', round(time.time()-t,2), 's', r['code'])"
+fee call 7.62 s 0
+~/OKX-Terminal/claude $ sed -n '32,262p' oxx.log | cut -c26- | sort | uniq -c | sort -rn | head -12
+     65
+      9 ll last):
+      4 he direct cause of the following exception:
+      2 ~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      2 thod,
+      2 t(method=method, url=url, **kwargs)
+      2 ror), error, _stacktrace)
+      2 rmux/files/usr/lib/python3.13/site-packages/urllib3/util/util.py", line 39, in reraise
+      2 rmux/files/usr/lib/python3.13/site-packages/urllib3/util/retry.py", line 498, in increment
+      2 rmux/files/usr/lib/python3.13/site-packages/urllib3/connectionpool.py", line 842, in urlopen
+      2 rmux/files/usr/lib/python3.13/site-packages/urllib3/connectionpool.py", line 788, in urlopen
+      2 rmux/files/usr/lib/python3.13/site-packages/urllib3/connectionpool.py", line 367, in _raise_timeout
+
+That settles it. A private call takes 7.62 s, and 7.04 s of that is decrypting your credentials. The network part is about 0.6 s. Next I'll check how often the app pays that cost.
+
+The test failed because my earlier fee test swapped in a fake client and never put the real one back. I'll restore it after that test.
+
+The slow startup is caused by decrypting your credentials, not your internet. Decrypting the vault takes about 7 s per call, and that call (7.04 s) makes up nearly all of the 7.62 s fee call, so the network share is about 0.6 s. The app made that decrypt on every private request, and it makes three of those every 5 seconds. That likely keeps your CPU saturated, and it explains the 18–21 s startup and the read timeouts. A live order would also have waited about 7 s before being sent. I've sent updated `okx_private.py`, `main.py`, `test_oxx_logic.py` and `test_main_flow.py`.
+
+The log excerpt you sent shows no message flooding the log. The two tracebacks in it are the timeouts.
+
+**The fix**
+- **One decrypt per run:** `okx_private.py` now decrypts once and keeps the result in memory. It isn't written to disk or logged, and a lock makes simultaneous first calls share one decrypt.
+- **Not cached when incomplete:** credentials that aren't all there (nothing saved yet) are never cached, so keys saved later are picked up.
+- **Saving new keys:** this now clears the cache, so Manage API Keys works without a restart.
+- **Startup unlock:** `on_mount` decrypts in a background thread instead of freezing the screen. You'll see an "Unlocking credential vault" toast for several seconds, then the app starts.
+
+**Verified:** 63 checks pass here (38 logic, 25 UI-flow). The new test fails on the previous `main.py`, which decrypted on the UI thread.
+
+**Not verified:** I haven't seen `secure_vault.py`, so I don't know why the decrypt is slow. If the cost is a per-call key derivation, the cache removes the repeats, but the first unlock will still take about 7 s. I don't know why it takes that long, and I'd rather not guess about code that protects your API keys.
+
+**Please run**
+1. `python test_oxx_logic.py && python test_main_flow.py` (expect 38 and 25 passed).
+2. Launch the app and note how long until the screen is usable.
+3. `grep -n -i "fees\|hydrat" oxx.log | tail -n 6`. Fees should now come about 7 to 10 s after "Hydrating", not 18 to 21 s, and "Hydration Error" lines should be gone.
+4. `python -c "import time; from secure_vault import EncryptedVault as V
+for i in range(3):
+    t=time.time(); V.load_credentials(); print(i, round(time.time()-t,2))"`. If only the first call is slow, it's a one-time startup cost. If all three are slow, it's a per-call key derivation.
+
+If you upload `secure_vault.py` (the code only, never your keys), I'll review how it handles your credentials.
+
+I have uploaded secure_vault.py. you shouldn't have to worry about my keys being in source files I have set up the code files to use a custom keyring .cfg file type to encrypt the credentials and how it also saves them. I don't like using env variables out of security practice it's safer to use the vaulting threw keyring in my learning.. 
+
+Here are the command results 
+
+python test_oxx_logic.py && python test_main_flow.py
+order_format
+  ok    long float size -> exact lot multiple
+  ok    scientific-notation size handled
+  ok    size rounds DOWN, never up
+  ok    price snaps to tick
+  ok    cheap-coin price keeps its digits
+  ok    '$' and ',' tolerated
+  ok    SHIB price displays
+  ok    BTC price displays 2 dp
+  ok    tiny size never shows as 0.0000
+  ok    negative money keeps sign in front
+accountant
+  ok    long -> short flip: new avg is the flip price
+  ok    short -> long flip: new avg is the flip price
+  ok    short covered at a lower price realizes profit
+  ok    partial close keeps entry price, realizes gain
+  ok    selling untracked inventory books only the fee (no fake short profit)
+  ok    over-selling a long ends flat on spot
+  ok    hurdle = entry*(1+taker)/(1-maker)
+  ok    TP under the hurdle is a negative net
+grid strategy
+  ok    price flickering around a level fires nothing
+  ok    no inventory -> no SELL
+  ok    falling through a level -> BUY
+  ok    rising later -> SELL, no more than the bot holds
+  ok    cheap-coin grid levels are distinct and non-zero
+  ok    default +/-2%, 5 levels passes the fee check
+  ok    grid tighter than round-trip fees is rejected
+  ok    DCA stops after max_buys
+okx_private request building
+  ok    market order asks for BASE-currency size
+  ok    limit order has price and no tgtCcy
+  ok    POST signature matches an independent HMAC of the exact body sent
+  ok    timestamp has real milliseconds + Z
+  ok    GET signature covers the query string
+  ok    network failure returns an error dict instead of raising
+  ok    missing secret returns an error dict instead of raising
+credential cache (the vault takes ~7 s per decrypt on your phone)
+  ok    10 sequential requests decrypt the vault once
+  ok    8 simultaneous first requests share ONE decrypt
+  ok    clearing the cache (new keys saved) forces a re-read
+  ok    incomplete credentials are never cached
+  ok    keys saved later are picked up without a restart
+
+38 passed, 0 failed
+fee groups
+  ok    group 1 (e.g. BTC) -> 0.14% / 0.23%
+  ok    group 2 -> 0.20% / 0.35%
+  ok    unknown group -> worst case, not the cheapest
+  ok    group 17 -> maker 0 / taker 0.05%
+  ok    startup: BTC-USDT picks its group's rates
+  ok    switching to a group-2 pair raises the estimate
+  ok    fee line reaches the Execution Log panel
+order flow (simulation)
+  ok    size/price put on the exchange grid
+  ok    sim fill reaches the ledger
+  ok    history panel updated
+  ok    below-minimum order is refused, not sent
+  ok    market order before a price exists is a notice, not a crash
+  ok    LIVE mode refuses to send when tick/lot size is unknown
+buttons
+  ok    BUY press schedules an order worker without touching label.text
+  ok    other buttons never reach order code
+log panel
+  ok    log keeps newest 4, newest first
+order book
+  ok    snapshot shows 5 levels per side
+  ok    removing the best ask is replaced by the next level (book doesn't shrink)
+tickers
+  ok    SHIB price keeps its digits
+  ok    a malformed ticker doesn't raise
+start-up
+  ok    calling start-up again (Manage API Keys) adds no timers or second feed
+bot loop
+  ok    bot pauses on a stale feed (no orders, no crash)
+worker groups
+  ok    a chart refresh does not cancel in-flight fee/order workers
+vault unlock
+  ok    start-up decrypts the vault OFF the UI thread, exactly once
+  ok    services still start after the unlock
+
+25 passed, 0 failed
+
+grep -n -i "fees\|hydrat" oxx.log | tail -n 6
+165:2026-10-05 21:00:02,667 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+166:2026-10-05 21:00:02,667 [INFO] Fees LV1: LV1 g12 maker 0.20% taker 0.35%
+263:2026-10-05 21:00:04,216 [INFO] Hydration Error: HTTPSConnectionPool(host='us.okx.com', port=443): Read timed out. (read timeout=10)
+541:2026-10-05 22:05:36,481 [INFO] Hydrating account trade history...
+546:2026-10-05 22:05:37,704 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+547:2026-10-05 22:05:37,704 [INFO] Fees LV1 g12: maker 0.20% taker 0.35%
+
+On the last command #4 I hit a syntax error so I made an adjustment. If this is the correct output you wanted great if not pls explain further.
+
+python -c "import time; from secure_vault import EncryptedVault as V for i in range(3): t=time.time(); V.load_credentials(); print(i, round(time.time()-t,2))".
+  File "<string>", line 1
+    import time; from secure_vault import EncryptedVault as V for i in range(3): t=time.time(); V.load_credentials(); print(i, round(time.time()-t,2)).
+                                                              ^^^
+SyntaxError: invalid syntax
+~/OKX-Terminal/claude $ python -c "import time; from secure_vault import EncryptedVault as V; [print(i, round((t := time.time()) and 0 or round(time.time() - t, 2))) for i in range(3)]"
+0 0
+1 0
+2 0
+
+Your log shows a big improvement: fees now arrive 1.2 s after "Hydrating", not 18–21 s. Before I touch the `#4` result, I'll read `secure_vault.py`.
+
+Your results look good: all 63 checks pass on your phone, and the log shows the speed-up. Fees now arrive 1.2 s after "Hydrating" instead of 18–21 s, and that run has no hydration error.
+
+**Your adjusted command (#4) doesn't test anything.** I ran it against a stub vault, and it made zero vault calls: it only subtracts `time()` from itself, so "0 0 0" is meaningless. The syntax error was my fault, because my multi-line command collapsed into one line when typed. This single-line version times the keyring setup and each read separately. It prints only timings, never the secret values, so paste it as one line:
+
+```
+python -c "import time; from secure_vault import EncryptedVault as V, SERVICE_NAME as S; t=time.time(); kr=V._get_configured_keyring(); print('init', round(time.time()-t,2)); [print(k, round((lambda t0: (kr.get_password(S,k), time.time()-t0)[1])(time.time()),2)) for k in ('api_key','secret_key','passphrase','api_key')]"
+```
+
+**What I read in `secure_vault.py`.** I haven't run it, since `keyrings.cryptfile` isn't installed here.
+- **Why it's slow (a guess):** each `get_password` decrypts separately, and `load_credentials` makes three of them. 7 s ÷ 3 is about 2.3 s per read, which the command above would show.
+- **If the reads are each slow:** I'd store the three values as one entry, so one decrypt replaces three (about 2.3 s at launch, not 7). I'd migrate your current keys automatically and keep the old format as a fallback.
+
+**Your key storage.** Your choice is a sound one, with one caveat. The master key sits in plaintext at `~/.local/share/python_keyring/okx_tuid_master.key`, next to the encrypted file. So the encryption protects against casual exposure, such as a `git add -A`, a log, a screenshot or a shared file. Anything that can read your home folder as your user gets both files. That is the usual trade-off for an app that must start without a prompt. I never suggested env variables for your keys; the only one in my patch is the non-secret icon toggle `OXX_NERD_FONT`.
+
+**Hardening I'd suggest:**
+1. Create the key file as 0600 from the start with `os.open(..., 0o600)`, and make the folder 0700. Today it's written first and `chmod`ed after.
+2. On OKX, make the API key trade-only with no withdrawal permission. If your IP is stable, add an IP allowlist. That limits the damage however the keys are stored.
+
+Saving keys in the Manage API Keys dialog will also freeze the screen for several seconds, since it encrypts three values on the UI thread. I haven't changed that.
+
+Do you want me to apply the file-permission fix and the one-entry storage, or wait for the timing result first?
+
+I have ran your updated command results are below 
+
+python -c "import time; from secure_vault import EncryptedVault as V, SERVICE_NAME as S; t=time.time(); kr=V._get_configured_keyring(); print('init', round(time.time()-t,2)); [print(k, round((lambda t0: (kr.get_password(S,k), time.time()-t0)[1])(time.time()),2)) for k in ('api_key','secret_key','passphrase','api_key')]"
+init 1.58
+api_key 1.53
+secret_key 1.56
+passphrase 1.54
+api_key 1.56
+
+Also to address my context and your statement about the env variables. I know you haven't used env in any updates and I wasn't saying you did. In our earlier conversation I told you I was a self learning coder of python and was explaining my reasons for using the keyring credentials and the .cfg format because its the best way I had learned to handle the keys so far. Hope that clears it up and sorry for making you feel accused of using env
+
+Your timings explain it. Creating the keyring costs 1.58 s, each read costs about 1.55 s, and reading `api_key` twice costs the same both times, so nothing is cached. One load is therefore 1.58 + 3 × 1.55 ≈ 6.2 s, which fits the 7.04 s you measured. That supports the one-entry design. Before editing, I'll check which secure_vault names the rest of the code uses.
+
+The vault logic passes. Next I'll move the key-save off the UI thread, since it now takes a few seconds, and test that too.
+
+No apology needed, and thanks for clarifying. Your reasoning for using a keyring holds up.
+
+Your timings show where the 7 seconds went. Creating the keyring costs 1.58 s, and every read costs about 1.55 s, even a repeat read of `api_key`. One load made three reads, so about 6.2 s, which matches your 7.04 s. I've sent updated `secure_vault.py` and `main.py`, plus new `test_secure_vault.py` and an updated `test_main_flow.py`.
+
+**What changed**
+- **One entry instead of three.** Your credentials are stored as a single encrypted entry, so a load is one read. I estimate about 3.1 s at launch, down from about 6.2 s.
+- **Automatic migration.** The first launch reads your old entries, writes the new one and reads it back to check it. It leaves the old entries in place, so you can roll back. That first launch should take roughly 10 to 11 s, once.
+- **Cleanup on request.** `EncryptedVault.purge_legacy_entries()` deletes the old entries. It refuses to run until the new entry exists, and it's up to you when to call it.
+- **Key-file hardening.** The master key file is now created as 0600 from the first byte, and the folder is 0700. The file is created exclusively, so two threads can't generate different keys, and an empty key file now raises an error instead of silently using a blank key. Your existing key file and encrypted file stay compatible.
+- **Saves are verified.** A save is read back, and an error is raised if it didn't stick.
+- **The dialog no longer freezes.** Saving keys runs in the background with an "Encrypting and saving…" message. A double tap saves once, and a failed save keeps the dialog open with the error.
+
+**Verified here:** 89 checks pass (38 logic, 29 UI-flow, 22 vault). The new modal test fails on the old behaviour, and the vault tests include that no secret value appears in any log line.
+
+**Not verified:** the vault tests use an in-memory fake keyring, since `keyrings.cryptfile` isn't installed here. So the real 3.1 s figure and the migration on your actual vault are untested, and the old entries stay as your backup until you've confirmed the app starts.
+
+**Please run**
+1. `python test_secure_vault.py && python test_oxx_logic.py && python test_main_flow.py`. Expect 22, 38 and 29 passed.
+2. Launch the app once and expect about 10 to 11 s before it's usable. Then run `grep -n -i "migrat" oxx.log`. You want "migrated to single-entry format", not "could not be verified".
+3. Launch it again. The toast should clear in about 3 s, and `grep -n -i "fees" oxx.log | tail -n 3` should show fees loading quickly.
+
+Back up `~/.local/share/python_keyring/` before the first launch with the new vault. If anything goes wrong, you'll still have your old credentials.
+
+Before I run your new list of commands, your last statement says backup local share Python key ring. Before my first launch with the new vault, can you also give me the command for Termux that would do this? Again, I'm still learning, so I'm not sure how to back up.
+
+Here is the backup command. Paste it as one line, because it will wrap on your screen but must not be split with Enter:
+
+```
+B=~/vault-backup/python_keyring-$(date +%Y%m%d-%H%M%S); mkdir -p -m 700 ~/vault-backup && mkdir -m 700 "$B" && cp -a ~/.local/share/python_keyring/. "$B"/ && diff -r ~/.local/share/python_keyring "$B" && echo "BACKUP OK: $B"
+```
+
+**What it does**
+- `B=…` picks a backup folder named with today's date and time.
+- `mkdir -m 700` creates the folder so that only you can open it. It stops with an error if that folder already exists, so it never overwrites an older backup.
+- `cp -a` copies everything, including hidden files, and keeps the file permissions.
+- `diff -r` compares the backup with the original.
+- `&&` means each step only runs if the one before it worked.
+
+**What you should see:** a line like `BACKUP OK: /data/data/com.termux/files/home/vault-backup/python_keyring-20261006-…`. If that line doesn't appear, the backup failed. Don't launch the new version yet, and send me the error text.
+
+To check the copy, run `ls -la ~/vault-backup/*/`. You should see `okx_tuid_master.key` and a `.cfg` file, both showing `-rw-------`.
+
+**To restore, only if something goes wrong.** Run `ls ~/vault-backup` to see the folder name, then put that name in place of `<NAME>`:
+
+```
+cp -a ~/vault-backup/<NAME>/. ~/.local/share/python_keyring/
+```
+
+That puts your vault back exactly as it was at backup time, including the old three-entry format.
+
+**Keep the backup safe.** It holds your master key and your encrypted credentials, so treat it like the keys themselves.
+- It's in your home folder, outside your project folders, on purpose. Your `git.sh` does `git add -A`, so never put it inside a repo.
+- Don't copy it to shared storage such as `~/storage/shared`, where other apps can read it.
+- Once the new vault has worked for a few days, delete it with `rm -rf ~/vault-backup/<NAME>`.
+
+I tested these commands in a throwaway folder here, in both `bash` and `sh`, and they printed `BACKUP OK`. I also tested that a mismatched copy is caught, and that a same-second collision fails loudly instead of nesting. I haven't run them on Termux itself, but they use only standard `cp`, `diff` and `mkdir`.
+
+in the file above is the documentation of me running the commands you asked me to run after securing the backup.
+## i hit rate limits so claude never responded here yet but ill supply tge fike to gemini. its bamed P

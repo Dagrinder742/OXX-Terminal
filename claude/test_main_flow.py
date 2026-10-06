@@ -50,17 +50,24 @@ _mod("rich.text", Text=object)
 _mod("websockets", exceptions=types.SimpleNamespace(ConnectionClosed=Exception))
 _mod("plotext")
 
+import threading
 class _Vault:
     creds = {"api_key": "K", "secret_key": "S", "passphrase": "P"}
+    loaded_on = []
     @classmethod
-    def load_credentials(cls): return cls.creds
+    def load_credentials(cls):
+        cls.loaded_on.append(threading.get_ident()); return cls.creds
+    saved_on = []
     @classmethod
-    def save_credentials(cls, *a): pass
+    def save_credentials(cls, *a):
+        cls.saved_on.append(threading.get_ident())
+        if getattr(cls, "fail_save", False): raise OSError("disk full")
 _mod("secure_vault", EncryptedVault=_Vault)
 _mod("chart_renderer", OKXChartEngine=type("OKXChartEngine", (), {}))
 
 import main as M                      # noqa: E402  (after stubs)
 import okx_private                    # noqa: E402
+_RealPriv = okx_private.OKXPrivateClient   # some tests swap in a fake; they must put this back
 import api_client                     # noqa: E402
 logging.disable(logging.CRITICAL)
 
@@ -110,6 +117,7 @@ async def fee_flow():
     await a.update_accountant_fees()
     return a
 a = run(fee_flow())
+sys.modules["okx_private"].OKXPrivateClient = _RealPriv
 check("startup: BTC-USDT picks its group's rates", a.accountant.taker_rate == 0.0023 and a.accountant.tier_label.endswith("g1"), a.accountant.tier_label)
 async def switch_fees():
     a.instrument_id = "SHIB-USDT"
@@ -215,6 +223,46 @@ async def chart_vs_workers():
     return sorted(done)
 done = run(chart_vs_workers())
 check("a chart refresh does not cancel in-flight fee/order workers", done == ["fees", "order"], done)
+
+print("vault unlock")
+async def mount_unlock():
+    app = new_app(); app.client = None
+    okx_private.OKXPrivateClient.clear_credentials_cache(); _Vault.loaded_on.clear()
+    loop_thread = threading.get_ident()
+    await app.on_mount()
+    return loop_thread, list(_Vault.loaded_on), len(app.intervals)
+loop_thread, loaded_on, n_int = run(mount_unlock())
+check("start-up decrypts the vault OFF the UI thread, exactly once", len(loaded_on) == 1 and loaded_on[0] != loop_thread, (loop_thread, loaded_on))
+check("services still start after the unlock", n_int >= 5, n_int)
+
+print("credential dialog")
+class _Field:
+    def __init__(self, v): self.value = v
+def make_modal(key="K", sec="S", ph="P"):
+    mdl = M.AuthModal(); mdl._title = _W(); mdl.dismissed = []
+    fields = {"#api_key_input": _Field(key), "#secret_key_input": _Field(sec), "#passphrase_input": _Field(ph)}
+    mdl.query_one = lambda sel, typ=None: fields[sel] if isinstance(sel, str) else mdl._title
+    mdl.dismiss = lambda v: mdl.dismissed.append(v)
+    return mdl
+async def modal_save():
+    _Vault.saved_on.clear(); _Vault.fail_save = False
+    mdl = make_modal(); loop_thread = threading.get_ident()
+    await asyncio.gather(mdl._submit_credentials(), mdl._submit_credentials())   # double tap
+    return loop_thread, list(_Vault.saved_on), mdl.dismissed
+lt, saved_on, dismissed = run(modal_save())
+check("saving keys runs off the UI thread", len(saved_on) == 1 and saved_on[0] != lt, (lt, saved_on))
+check("a double tap saves once and closes once", len(saved_on) == 1 and dismissed == [True], (saved_on, dismissed))
+async def modal_fail():
+    _Vault.saved_on.clear(); _Vault.fail_save = True
+    mdl = make_modal(); await mdl._submit_credentials(); _Vault.fail_save = False
+    return mdl.dismissed, mdl._title.text
+dismissed, text = run(modal_fail())
+check("a failed save shows the error and keeps the dialog open", dismissed == [] and "Could not save" in text, (dismissed, text))
+async def modal_empty():
+    _Vault.saved_on.clear(); mdl = make_modal(ph=""); await mdl._submit_credentials()
+    return list(_Vault.saved_on), mdl.dismissed
+saved_on, dismissed = run(modal_empty())
+check("missing field: nothing saved, dialog stays", saved_on == [] and dismissed == [])
 
 print(f"\n{PASSED} passed, {len(FAILED)} failed")
 if FAILED: print("FAILED:", *FAILED, sep="\n  - "); sys.exit(1)

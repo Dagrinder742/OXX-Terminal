@@ -35,3 +35,41 @@ print(a.accountant.tier_label, a.accountant.maker_rate, a.accountant.taker_rate)
 grep -n -i "fee\|calibrat" oxx.log | tail -n 8
 
 grep -n -i "fees\|hydrat" oxx.log | tail
+
+grep -n -i "fees\|hydrat" oxx.log | tail -n 6
+165:2026-10-05 21:00:02,667 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+166:2026-10-05 21:00:02,667 [INFO] Fees LV1: LV1 g12 maker 0.20% taker 0.35%
+263:2026-10-05 21:00:04,216 [INFO] Hydration Error: HTTPSConnectionPool(host='us.okx.com', port=443): Read timed out. (read timeout=10)
+541:2026-10-05 22:05:36,481 [INFO] Hydrating account trade history...
+546:2026-10-05 22:05:37,704 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+547:2026-10-05 22:05:37,704 [INFO] Fees LV1 g12: maker 0.20% taker 0.35%
+
+python -c "import time; from secure_vault import EncryptedVault as V for i in range(3): t=time.time(); V.load_credentials(); print(i, round(time.time()-t,2))"
+
+
+Your timings explain it. Creating the keyring costs 1.58 s, each read costs about 1.55 s, and reading `api_key` twice costs the same both times, so nothing is cached. One load is therefore 1.58 + 3 × 1.55 ≈ 6.2 s, which fits the 7.04 s you measured. That supports the one-entry design. Before editing, I'll check which secure_vault names the rest of the code uses.
+
+The vault logic passes. Next I'll move the key-save off the UI thread, since it now takes a few seconds, and test that too.
+
+No apology needed, and thanks for clarifying. Your reasoning for using a keyring holds up.
+
+Your timings show where the 7 seconds went. Creating the keyring costs 1.58 s, and every read costs about 1.55 s, even a repeat read of `api_key`. One load made three reads, so about 6.2 s, which matches your 7.04 s. I've sent updated `secure_vault.py` and `main.py`, plus new `test_secure_vault.py` and an updated `test_main_flow.py`.
+
+**What changed**
+- **One entry instead of three.** Your credentials are stored as a single encrypted entry, so a load is one read. I estimate about 3.1 s at launch, down from about 6.2 s.
+- **Automatic migration.** The first launch reads your old entries, writes the new one and reads it back to check it. It leaves the old entries in place, so you can roll back. That first launch should take roughly 10 to 11 s, once.
+- **Cleanup on request.** `EncryptedVault.purge_legacy_entries()` deletes the old entries. It refuses to run until the new entry exists, and it's up to you when to call it.
+- **Key-file hardening.** The master key file is now created as 0600 from the first byte, and the folder is 0700. The file is created exclusively, so two threads can't generate different keys, and an empty key file now raises an error instead of silently using a blank key. Your existing key file and encrypted file stay compatible.
+- **Saves are verified.** A save is read back, and an error is raised if it didn't stick.
+- **The dialog no longer freezes.** Saving keys runs in the background with an "Encrypting and saving…" message. A double tap saves once, and a failed save keeps the dialog open with the error.
+
+**Verified here:** 89 checks pass (38 logic, 29 UI-flow, 22 vault). The new modal test fails on the old behaviour, and the vault tests include that no secret value appears in any log line.
+
+**Not verified:** the vault tests use an in-memory fake keyring, since `keyrings.cryptfile` isn't installed here. So the real 3.1 s figure and the migration on your actual vault are untested, and the old entries stay as your backup until you've confirmed the app starts.
+
+**Please run**
+1. `python test_secure_vault.py && python test_oxx_logic.py && python test_main_flow.py`. Expect 22, 38 and 29 passed.
+2. Launch the app once and expect about 10 to 11 s before it's usable. Then run `grep -n -i "migrat" oxx.log`. You want "migrated to single-entry format", not "could not be verified".
+3. Launch it again. The toast should clear in about 3 s, and `grep -n -i "fees" oxx.log | tail -n 3` should show fees loading quickly.
+
+Back up `~/.local/share/python_keyring/` before the first launch with the new vault. If anything goes wrong, you'll still have your old credentials.

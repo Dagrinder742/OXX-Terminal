@@ -166,8 +166,38 @@ okx_private.requests.get = _boom
 res = OKXPrivateClient.get_account_balance()
 check("network failure returns an error dict instead of raising", res.get("code") == "500", res)
 _StubVault.creds = {"api_key": "KEY", "secret_key": None, "passphrase": "PASS"}
+OKXPrivateClient.clear_credentials_cache()
 res = OKXPrivateClient.get_account_balance()
 check("missing secret returns an error dict instead of raising", res.get("code") == "1", res)
+
+print("credential cache (the vault takes ~7 s per decrypt on your phone)")
+import threading, time as _time
+loads = []
+class _CountingVault:
+    creds = {"api_key": "KEY", "secret_key": "SECRET", "passphrase": "PASS"}
+    @classmethod
+    def load_credentials(cls):
+        loads.append(threading.get_ident()); _time.sleep(0.05)   # stand-in for the slow decrypt
+        return cls.creds
+okx_private.EncryptedVault = _CountingVault
+okx_private.requests.get = _fake_get
+OKXPrivateClient.clear_credentials_cache()
+for _ in range(10): OKXPrivateClient.get_account_balance()
+check("10 sequential requests decrypt the vault once", len(loads) == 1, len(loads))
+OKXPrivateClient.clear_credentials_cache(); loads.clear()
+ths = [threading.Thread(target=OKXPrivateClient.get_account_balance) for _ in range(8)]
+[th.start() for th in ths]; [th.join() for th in ths]
+check("8 simultaneous first requests share ONE decrypt", len(loads) == 1, len(loads))
+OKXPrivateClient.get_account_balance(); n = len(loads)
+OKXPrivateClient.clear_credentials_cache(); OKXPrivateClient.get_account_balance()
+check("clearing the cache (new keys saved) forces a re-read", len(loads) == n + 1, (n, len(loads)))
+_CountingVault.creds = {}                       # nothing saved yet
+OKXPrivateClient.clear_credentials_cache(); loads.clear()
+OKXPrivateClient.get_account_balance(); OKXPrivateClient.get_account_balance()
+check("incomplete credentials are never cached", len(loads) == 2, len(loads))
+_CountingVault.creds = {"api_key": "KEY", "secret_key": "SECRET", "passphrase": "PASS"}
+res = OKXPrivateClient.get_account_balance()
+check("keys saved later are picked up without a restart", res.get("code") == "0", res)
 
 print(f"\n{PASSED} passed, {len(FAILED)} failed")
 if FAILED:

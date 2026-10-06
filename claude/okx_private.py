@@ -4,6 +4,7 @@ import base64
 import json
 import requests
 import logging
+import threading
 from datetime import datetime, timezone
 from secure_vault import EncryptedVault
 
@@ -17,6 +18,31 @@ class OKXPrivateClient:
     """
 
     BASE_URL = "https://us.okx.com"
+
+    # Decrypting the vault is SLOW on a phone (measured: ~7 s per call), and the app makes several
+    # private calls every 5 seconds -- so decrypt ONCE per process and keep the result in memory.
+    # (Memory only: never written to disk, never logged.)  The lock makes concurrent first calls
+    # wait for one decrypt instead of each starting their own.
+    _creds = None
+    _creds_lock = threading.Lock()
+
+    @classmethod
+    def get_credentials(cls) -> dict:
+        """Returns the vault credentials, decrypting at most once.  Incomplete credentials
+        (e.g. nothing saved yet) are returned but NOT cached, so saving keys later is picked up."""
+        with cls._creds_lock:
+            if cls._creds is not None:
+                return cls._creds
+            creds = EncryptedVault.load_credentials() or {}
+            if creds.get("api_key") and creds.get("secret_key") and creds.get("passphrase"):
+                cls._creds = creds
+            return creds
+
+    @classmethod
+    def clear_credentials_cache(cls) -> None:
+        """Call after the keys change (Manage API Keys) so the next request re-reads the vault."""
+        with cls._creds_lock:
+            cls._creds = None
 
     @staticmethod
     def _get_timestamp() -> str:
@@ -38,7 +64,7 @@ class OKXPrivateClient:
     def _request(cls, method: str, path: str, payload: dict = None, timeout: int = 10) -> dict:
         """Signs and sends one request. `path` includes any query string (it is part of the signature)."""
         try:
-            creds = EncryptedVault.load_credentials()
+            creds = cls.get_credentials()
             api_key = creds.get("api_key")
             secret_key = creds.get("secret_key")
             passphrase = creds.get("passphrase")

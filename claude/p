@@ -1,0 +1,148 @@
+Ok I will start from the backup commands and confirmation 
+
+~/OKX-Terminal/claude $ B=~/vault-backup/python_keyring-$(date +%Y%m%d-%H%M%S); mkdir -p -m 700 ~/vault-backup && mkdir -m 700 "$B" && cp -a ~/.local/share/python_keyring/. "$B"/ && diff -r ~/.local/share/python_keyring "$B" && echo "BACKUP OK: $B"
+BACKUP OK: /data/data/com.termux/files/home/vault-backup/python_keyring-20261005-223050
+~/OKX-Terminal/claude $ ls -la ~/vault-backup/*/
+total 23
+drwx------. 2 u0_a365 u0_a365 3452 Aug 21 15:37 .
+drwx------. 3 u0_a365 u0_a365 3452 Oct  5 22:30 ..
+-rw-------. 1 u0_a365 u0_a365 1037 Aug 21 15:38 cryptfile_pass.cfg
+-rw-------. 1 u0_a365 u0_a365  201 Aug 21 15:22 keyring_pass.cfg
+-rw-------. 1 u0_a365 u0_a365   73 Jul 15 23:58 keyringrc.cfg
+-rw-------. 1 u0_a365 u0_a365   64 Aug 21 15:37 okx_tuid_master.key
+
+I believe we hit success on the backup so I proceeded with the commands you asked me to run in the message before the backup instructions 
+ 
+
+
+/OKX-Terminal/claude $ python test_secure_vault.py && python test_oxx_logic.py && python test_main_flow.py
+master key file
+  ok    created on first use with 64 hex chars
+  ok    key file is 0600
+  ok    key folder is 0700
+  ok    keyring is given exactly the file's key
+  ok    an existing key is reused, never regenerated
+  ok    an EMPTY key file fails closed instead of using a blank key
+  ok    12 threads racing on first start all get the SAME key
+save / load (new format)
+  ok    round trip
+  ok    a load costs exactly ONE keyring read (was 3)
+  ok    stored as one entry
+  ok    a save that does not read back correctly raises
+migration from the old 3-entry format
+  ok    old install loads correctly
+  ok    ... and was migrated to the single entry
+  ok    ... old entries are left in place (rollback-safe)
+  ok    second load is one read
+  ok    partial old data returns what exists and does NOT migrate
+  ok    empty vault returns all None
+  ok    a failing migration still returns the credentials
+  ok    a corrupt single entry falls back to the old entries
+purge old entries
+  ok    refuses to delete old entries before the new one exists
+  ok    after migration it removes all 3
+logging
+  ok    no secret value appears in any log line
+
+22 passed, 0 failed
+order_format
+  ok    long float size -> exact lot multiple
+  ok    scientific-notation size handled
+  ok    size rounds DOWN, never up
+  ok    price snaps to tick
+  ok    cheap-coin price keeps its digits
+  ok    '$' and ',' tolerated
+  ok    SHIB price displays
+  ok    BTC price displays 2 dp
+  ok    tiny size never shows as 0.0000
+  ok    negative money keeps sign in front
+accountant
+  ok    long -> short flip: new avg is the flip price
+  ok    short -> long flip: new avg is the flip price
+  ok    short covered at a lower price realizes profit
+  ok    partial close keeps entry price, realizes gain
+  ok    selling untracked inventory books only the fee (no fake short profit)
+  ok    over-selling a long ends flat on spot
+  ok    hurdle = entry*(1+taker)/(1-maker)
+  ok    TP under the hurdle is a negative net
+grid strategy
+  ok    price flickering around a level fires nothing
+  ok    no inventory -> no SELL
+  ok    falling through a level -> BUY
+  ok    rising later -> SELL, no more than the bot holds
+  ok    cheap-coin grid levels are distinct and non-zero
+  ok    default +/-2%, 5 levels passes the fee check
+  ok    grid tighter than round-trip fees is rejected
+  ok    DCA stops after max_buys
+okx_private request building
+  ok    market order asks for BASE-currency size
+  ok    limit order has price and no tgtCcy
+  ok    POST signature matches an independent HMAC of the exact body sent
+  ok    timestamp has real milliseconds + Z
+  ok    GET signature covers the query string
+  ok    network failure returns an error dict instead of raising
+  ok    missing secret returns an error dict instead of raising
+credential cache (the vault takes ~7 s per decrypt on your phone)
+  ok    10 sequential requests decrypt the vault once
+  ok    8 simultaneous first requests share ONE decrypt
+  ok    clearing the cache (new keys saved) forces a re-read
+  ok    incomplete credentials are never cached
+  ok    keys saved later are picked up without a restart
+
+38 passed, 0 failed
+fee groups
+  ok    group 1 (e.g. BTC) -> 0.14% / 0.23%
+  ok    group 2 -> 0.20% / 0.35%
+  ok    unknown group -> worst case, not the cheapest
+  ok    group 17 -> maker 0 / taker 0.05%
+  ok    startup: BTC-USDT picks its group's rates
+  ok    switching to a group-2 pair raises the estimate
+  ok    fee line reaches the Execution Log panel
+order flow (simulation)
+  ok    size/price put on the exchange grid
+  ok    sim fill reaches the ledger
+  ok    history panel updated
+  ok    below-minimum order is refused, not sent
+  ok    market order before a price exists is a notice, not a crash
+  ok    LIVE mode refuses to send when tick/lot size is unknown
+buttons
+  ok    BUY press schedules an order worker without touching label.text
+  ok    other buttons never reach order code
+log panel
+  ok    log keeps newest 4, newest first
+order book
+  ok    snapshot shows 5 levels per side
+  ok    removing the best ask is replaced by the next level (book doesn't shrink)
+tickers
+  ok    SHIB price keeps its digits
+  ok    a malformed ticker doesn't raise
+start-up
+  ok    calling start-up again (Manage API Keys) adds no timers or second feed
+bot loop
+  ok    bot pauses on a stale feed (no orders, no crash)
+worker groups
+  ok    a chart refresh does not cancel in-flight fee/order workers
+vault unlock
+  ok    start-up decrypts the vault OFF the UI thread, exactly once
+  ok    services still start after the unlock
+credential dialog
+  FAIL  saving keys runs off the UI thread  (538586885408, [527296765040, 527296765040])
+  FAIL  a double tap saves once and closes once  ([527296765040, 527296765040], [True, True])
+  ok    a failed save shows the error and keeps the dialog open
+  ok    missing field: nothing saved, dialog stays
+
+27 passed, 2 failed
+FAILED:
+  - saving keys runs off the UI thread
+  - a double tap saves once and closes once
+~/OKX-Terminal/claude $ grep -n -i "migrat" oxx.log
+557:2026-10-05 23:17:27,226 [INFO] Vault migrated to single-entry format (old entries left in place).
+~/OKX-Terminal/claude $ grep -n -i "fees" oxx.log | tail -n 3
+582:2026-10-05 23:20:13,794 [INFO] Fees LV1 g12: maker 0.20% taker 0.35%
+590:2026-10-05 23:20:45,563 [INFO] Fees for BTC-USDT: LV1 g12 taker 0.350% maker 0.200%
+591:2026-10-05 23:20:45,563 [INFO] Fees LV1 g12: maker 0.20% taker 0.35%
+
+
+
+
+NOTE: you asked me to launch main.py once, that it would take 11s or so which it did. you asked me to run the grep command and relaunch the main.py app again and it would happen in 3s or so whuch also happened. althiugh two test did fail in earlier commands but for best information i ran every command even in failures

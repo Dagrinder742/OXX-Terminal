@@ -94,23 +94,40 @@ class AuthModal(ModalScreen):
 
             yield Button("Save & Launch Terminal", variant="success", id="save_btn")
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self._submit_credentials()
+    _saving = False
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        await self._submit_credentials()
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save_btn":
-            self._submit_credentials()
+            await self._submit_credentials()
 
-    def _submit_credentials(self) -> None:
+    async def _submit_credentials(self) -> None:
+        if self._saving:        # Enter + button, or a double tap, while the slow save is running
+            return
         api_key = self.query_one("#api_key_input", Input).value.strip()
         secret_key = self.query_one("#secret_key_input", Input).value.strip()
         passphrase = self.query_one("#passphrase_input", Input).value.strip()
 
-        if api_key and secret_key and passphrase:
-            EncryptedVault.save_credentials(api_key, secret_key, passphrase)
-            self.dismiss(True)
-        else:
+        if not (api_key and secret_key and passphrase):
             self.query_one(Static).update("[bold red]All fields are required! Please fill out all inputs.[/bold red]")
+            return
+
+        self._saving = True
+        self.query_one(Static).update("[bold yellow]Encrypting and saving - this takes a few seconds...[/bold yellow]")
+        try:
+            # Encrypting is slow on a phone: keep it off the UI thread so the screen doesn't freeze.
+            await asyncio.to_thread(EncryptedVault.save_credentials, api_key, secret_key, passphrase)
+        except Exception as e:
+            logging.error(f"Saving credentials failed: {type(e).__name__}: {e}")
+            self.query_one(Static).update(f"[bold red]Could not save credentials: {escape(str(e))}[/bold red]")
+            return
+        finally:
+            self._saving = False
+        from okx_private import OKXPrivateClient
+        OKXPrivateClient.clear_credentials_cache()   # next request re-reads the NEW keys
+        self.dismiss(True)
 
 class OXXTerminalApp(App):
     """A fully asynchronous, real-time OXX TUI trading terminal with live market depth grids."""
@@ -644,7 +661,11 @@ class OXXTerminalApp(App):
             self.action_switch_instrument(new_inst)
 
     async def on_mount(self) -> None:
-        creds = EncryptedVault.load_credentials()
+        # The vault decrypt takes seconds on a phone: do it off the UI thread, once.  Every later
+        # private request reuses the cached result (see OKXPrivateClient.get_credentials).
+        from okx_private import OKXPrivateClient
+        self.notify("Unlocking credential vault (can take several seconds)...", timeout=8)
+        creds = await asyncio.to_thread(OKXPrivateClient.get_credentials)
         if not creds.get("api_key"):
             self.push_screen(AuthModal(), self.handle_auth_result)
         else:
@@ -943,7 +964,7 @@ class OXXTerminalApp(App):
         
         pnl_color = "#ffcc00" if live_net >= 0 else "#ff3333" # Gold if profit, Red if loss
         self.query_one("#bot-metrics", Static).update(
-            f"Active Bots: {summary['count']} | Session Net: [bold {pnl_color}]${live_net:,.2f}[/bold {pnl_color}]\n"
+            f"Active Bots: {summary['count']} | Session Net: [bold {pnl_color}]{money(live_net)}[/bold {pnl_color}]\n"
             f"[dim]{summary['details']}[/dim]"
         )
 
@@ -1258,7 +1279,7 @@ class OXXTerminalApp(App):
                 self.accountant.load_fee_schedule(fee_data)
                 await self._apply_instrument_fees(self.instrument_id)  # picks this pair's fee group
                 a = self.accountant
-                self.log_action(f"[dim]Fees {a.fee_level}: {a.tier_label} maker {a.maker_rate*100:.2f}% taker {a.taker_rate*100:.2f}%[/dim]")
+                self.log_action(f"[dim]Fees {a.tier_label}: maker {a.maker_rate*100:.2f}% taker {a.taker_rate*100:.2f}%[/dim]")
             else:
                 logging.warning(f"Fee tier lookup failed: {result.get('code')} {result.get('msg')}")
                 self.log_action(f"[yellow]Fee tier lookup failed: {escape(str(result.get('msg')))} - using worst-case default rates[/yellow]")
@@ -1355,7 +1376,7 @@ class OXXTerminalApp(App):
                     pos_sz = p.get("pos")
                     pnl = float(p.get("upl") or 0)
                     pnl_color = "green" if pnl >= 0 else "red"
-                    output_lines.append(f"  • {inst} | Size: {pos_sz} | PnL: [{pnl_color}]${pnl:,.2f}[/{pnl_color}]")
+                    output_lines.append(f"  • {inst} | Size: {pos_sz} | PnL: [{pnl_color}]{money(pnl)}[/{pnl_color}]")
             else:
                 output_lines.append("[dim]No active trading positions[/dim]")
         else:
