@@ -1,0 +1,45 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FOR TERMUX (LINUX)
+
+echo -e "\033[35m _____________________________________________________________\033[0m"
+echo -e "\033[35m|° /^| Arch•i°techT-CASEY VAUGHAN | AI-GEMINI | AI-CLAUDE|^\ °|\033[0m"
+echo -e "\033[35m|°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°|\033[0m"
+echo -e "\033[35m|∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆|\033[0m"
+echo -e "\033[35m|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|\033[0m"
+echo -e "\033[35m|X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X|\033[0m"
+echo -e "\033[35m| X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X |\033[0m"
+echo -e "\033[35m|§§§§§§§§§§§§§§§§§§§§§§§§§§§-PYTHON-§§§§§§§§§§§§§§§§§§§§§§§§§§|\033[0m"
+echo -e "\033[35m|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|\033[0m"
+echo -e "\033[35m|:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::|\033[0m"
+echo -e "\033[35m|_____________________________________________________________|\033[0m"
+
+
+
+# FOR WINDOWS
+
+Write-Host  "_____________________________________________________________" -ForegroundColor Green
+Write-Host "|° /^| Arch•i°techT-CASEY VAUGHAN | AI-GEMINI | AI-CLAUDE|^\ °|" -ForegroundColor Green
+Write-Host "|°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°|" -ForegroundColor Green
+Write-Host "|∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆|" -ForegroundColor Green
+Write-Host "|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|" -ForegroundColor Green
+Write-Host "|X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X|" -ForegroundColor Green
+Write-Host "| X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X |" -ForegroundColor Green
+Write-Host "|§§§§§§§§§§§§§§§§§§§§§§§§§§§-PYTHON-§§§§§§§§§§§§§§§§§§§§§§§§§§|" -ForegroundColor Green
+Write-Host "|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|" -ForegroundColor Green
+Write-Host "|:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::|" -ForegroundColor Green
+Write-Host "|_____________________________________________________________|" -ForegroundColor Green
