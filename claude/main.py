@@ -94,7 +94,8 @@ class AuthModal(ModalScreen):
 
             yield Button("Save & Launch Terminal", variant="success", id="save_btn")
 
-    _saving = False
+    _saving = False   # a save is running right now
+    _done = False     # a save already succeeded; the dialog is closing
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         await self._submit_credentials()
@@ -104,7 +105,7 @@ class AuthModal(ModalScreen):
             await self._submit_credentials()
 
     async def _submit_credentials(self) -> None:
-        if self._saving:        # Enter + button, or a double tap, while the slow save is running
+        if self._saving or self._done:   # double tap / Enter + button: during the save, or just after it
             return
         api_key = self.query_one("#api_key_input", Input).value.strip()
         secret_key = self.query_one("#secret_key_input", Input).value.strip()
@@ -125,6 +126,7 @@ class AuthModal(ModalScreen):
             return
         finally:
             self._saving = False
+        self._done = True
         from okx_private import OKXPrivateClient
         OKXPrivateClient.clear_credentials_cache()   # next request re-reads the NEW keys
         self.dismiss(True)
@@ -143,7 +145,7 @@ class OXXTerminalApp(App):
         self._services_started = False
         self._polling = set()          # names of poll tasks currently running
         self._hubs_dirty = False
-        self._last_tick = 0.0          # monotonic time of the last ticker for the focus instrument
+        self._last_tick = float("-inf")  # monotonic time of the last ticker for the focus instrument (-inf = none yet; stale regardless of device uptime)
         self._feed_confirmed = None    # instrument whose first ticker has arrived
         self.instrument_id = "BTC-USDT"
         self.cached_asks = []

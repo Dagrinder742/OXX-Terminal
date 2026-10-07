@@ -61,6 +61,7 @@ class _Vault:
     @classmethod
     def save_credentials(cls, *a):
         cls.saved_on.append(threading.get_ident())
+        if getattr(cls, "save_delay", 0): time.sleep(cls.save_delay)   # a real encrypt takes seconds
         if getattr(cls, "fail_save", False): raise OSError("disk full")
 _mod("secure_vault", EncryptedVault=_Vault)
 _mod("chart_renderer", OKXChartEngine=type("OKXChartEngine", (), {}))
@@ -193,7 +194,7 @@ print("bot loop")
 app = new_app(); app.accountant.load_fee_schedule(FEE_ROW); app.accountant.apply_fee_group("1")
 bot_id = app.strategy_manager.start_grid_bot("BTC-USDT", 85000, 88000, 5, 100)
 async def stale_then_stop():
-    app._last_tick = 0.0                      # feed never ticked
+    app._last_tick = float("-inf")           # feed never ticked
     t = asyncio.create_task(app._run_bot_execution_loop(bot_id))
     await asyncio.sleep(1.3); app.strategy_manager.stop_all(); await asyncio.sleep(1.2)
     return t
@@ -244,14 +245,18 @@ def make_modal(key="K", sec="S", ph="P"):
     mdl.query_one = lambda sel, typ=None: fields[sel] if isinstance(sel, str) else mdl._title
     mdl.dismiss = lambda v: mdl.dismissed.append(v)
     return mdl
-async def modal_save():
-    _Vault.saved_on.clear(); _Vault.fail_save = False
+async def modal_save(delay):
+    _Vault.saved_on.clear(); _Vault.fail_save = False; _Vault.save_delay = delay
     mdl = make_modal(); loop_thread = threading.get_ident()
     await asyncio.gather(mdl._submit_credentials(), mdl._submit_credentials())   # double tap
+    await mdl._submit_credentials()                                               # late third tap
+    _Vault.save_delay = 0
     return loop_thread, list(_Vault.saved_on), mdl.dismissed
-lt, saved_on, dismissed = run(modal_save())
+lt, saved_on, dismissed = run(modal_save(0.05))
 check("saving keys runs off the UI thread", len(saved_on) == 1 and saved_on[0] != lt, (lt, saved_on))
-check("a double tap saves once and closes once", len(saved_on) == 1 and dismissed == [True], (saved_on, dismissed))
+check("double tap during a SLOW save: saved once, closed once", len(saved_on) == 1 and dismissed == [True], (saved_on, dismissed))
+lt, saved_on, dismissed = run(modal_save(0))
+check("double tap with an INSTANT save: saved once, closed once", len(saved_on) == 1 and dismissed == [True], (saved_on, dismissed))
 async def modal_fail():
     _Vault.saved_on.clear(); _Vault.fail_save = True
     mdl = make_modal(); await mdl._submit_credentials(); _Vault.fail_save = False

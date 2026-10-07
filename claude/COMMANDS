@@ -73,3 +73,12 @@ Your timings show where the 7 seconds went. Creating the keyring costs 1.58 s, a
 3. Launch it again. The toast should clear in about 3 s, and `grep -n -i "fees" oxx.log | tail -n 3` should show fees loading quickly.
 
 Back up `~/.local/share/python_keyring/` before the first launch with the new vault. If anything goes wrong, you'll still have your old credentials.
+
+---------
+The one real finding. keyring_pass.cfg is a plain-text copy of your current credentials, readable with a simple base64 decode. My backup command also copied it into ~/vault-backup/. Your keys are read-only test keys, so the risk is small now, but it should be gone before you create a trade-enabled key. I wouldn't delete it yet, because some of your TRINITY scripts might still use it. Rename it instead; that's reversible:
+mv ~/.local/share/python_keyring/keyring_pass.cfg ~/.local/share/python_keyring/keyring_pass.cfg.disabled
+Then run your TRINITY scripts as you normally would. If a script breaks, undo it:
+mv ~/.local/share/python_keyring/keyring_pass.cfg.disabled ~/.local/share/python_keyring/keyring_pass.cfg
+If nothing breaks after a few days, delete the renamed file and the backup copy:
+rm ~/.local/share/python_keyring/keyring_pass.cfg.disabled ~/vault-backup/python_keyring-20261005-223050/keyring_pass.cfg
+My checker will keep flagging the .disabled file until you delete it.
