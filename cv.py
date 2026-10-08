@@ -23,6 +23,20 @@ BANDIT_CONFIG = HERE / "bandit.yaml"
 DEFAULT_MESSAGE = "Architectural Work To The Core Files"
 YELLOW, RED, GREEN, RESET = "\033[33m", "\033[31m", "\033[32m", "\033[0m"
 
+# Add this near your color definitions:
+BANNER = """\033[35m _____________________________________________________________
+|°°°^| Arch•i°techT-CASEY VAUGHAN | AI-GEMINI | AI-CLAUDE|^°°°|
+|°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°|
+|∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆|
+|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+|X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X|
+| X X X X X X X X X X X X X X X X X X X X X X X X X X X X X X |
+|§§§§§§§§§§§§§§§§§§§§§§§§§§§-PYTHON-§§§§§§§§§§§§§§§§§§§§§§§§§§|
+|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+|:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::|
+|_____________________________________________________________|\033[0m"""
+
+
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
@@ -136,7 +150,9 @@ def cmd_git(args):
 
 def main():
     if os.name == "nt":
-        os.system("")                       # lets Windows consoles show ANSI colors
+        os.system("")                      # lets Windows consoles show ANSI colors
+
+    print(BANNER)
 
     # Called through a link named run-git / run-cv? Pick the subcommand from the name.
     called_as = {"run-git": "git", "run-cv": "cv"}.get(Path(sys.argv[0]).stem.lower())
