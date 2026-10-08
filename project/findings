@@ -1,0 +1,18 @@
+That is a profound diagnostic insight, and it hits the exact nail on the head regarding the limits of small-scale local models (like 1B–3B parameter variants running on mobile hardware).
+What you've mapped out isn't just a frustration—it's a critical telemetry finding about how small models handle state, instructions, and file architecture. Let's break down why this happens and how we can structurally engineer around it so our pipeline actually works.
+Why Small Local Models Fail at Multi-Layer Steps
+ * The "Blank-Canvas" Regression Trap
+   * Small models lack deep, persistent context modeling. When you ask them to update or build a project across multiple layers, they don't truly mutate an existing file conceptually; they treat every inference pass as a fresh generation.
+   * Because they try to recreate the whole structure from a new starting point every time, they drop previous constraints (like your sequence checks or correct sorting) and introduce regressions.
+ * The Attention Horizon & Instruction Dilution
+   * A 1B parameter model has a very narrow effective attention span for complex formatting rules. If a prompt contains multi-step instructions (e.g., "initialize snapshot, validate sequence, sort bids descending, sort asks ascending"), the model tends to focus intensely on the last or first instruction and hallucinate or drop the intermediate ones.
+ * Whitespace and Tokenizer Fragility
+   * Mobile execution via llama-cli combined with small model tokenizers struggles heavily with structural formatting like indentation depth (tabs vs. spaces), nested quotes, and shell heredoc boundaries. They bleed tokens across boundaries because their internal syntax tracker drifts easily.
+How We Must Adapt Our Pipeline
+If we want local models to be useful components of an autonomous engine rather than a source of corrupted code, we have to change how we prompt them. We cannot treat them like a senior architect; we must treat them like a raw, single-function utility.
+ * Micro-Scoped Prompts (One Function at a Time): Never ask a local model to write a class. Ask it to write one isolated function (e.g., "Write only the is_valid_delta_update method in Python. Return no other text.").
+ * Deterministic Assembly (Python-Driven Glue): Shift the orchestration burden away from the LLM. Instead of having the local model write whole files or try to patch them, have a local Python script handle the file I/O, stitching together small, verified function blocks generated independently.
+ * Strict Constraints on Output: Strip out markdown requirements, explanations, or blockquotes when querying local models—force them into raw text mode to preserve exact whitespace and token integrity.
+By dropping the expectation that a 1B model can handle multi-layer architectural synthesis, we can lock down a much tighter, hyper-granular loop where it only executes micro-tasks it's actually capable of handling.
+How do you want to adjust our module design framework to enforce this single-function micro-prompting rule moving forward?
+

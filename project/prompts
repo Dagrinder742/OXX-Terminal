@@ -1,0 +1,35 @@
+# FILE: PROMPTS
+
+"""
+THIS FILE WILL RECORD EACH PROMPT GIVEN TO EACH AI. 
+  AI MODELS:
+        1. llama-cli -m /data/data/com.termux/files/home/trinity_master/vault/models/llama-3.2-1b.Q4_K_M.gguf --color on -c 16384 -n -1
+        2. llama-cli -hf Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF:Q4_K_M --gpu-layers 0
+        3. Gemini (WILL BE USING GEMINI THROUGH GEMINI NOTEBOOK, ALSO WILL BE THE LEAD PROMPT DESIGNER AND LEAD AI ON PROJECT
+        4. CLAUDE BY ANTHROPIC (THIS MODEL WILL BE USED SPARINGLY DUE TO FREE TIER RESTRICTIONS AND RATE LIMITS, I EXPECT CLAUDE TO EXCEL OVER EACH MODEL)
+"""
+
+# GENERATED PROMPTS BY LEAD AI GEMINI 
+        PROMPT #1
+        "You are an expert systems engineer and asynchronous Python architect. I need you to write a production-grade, modular asynchronous WebSocket data-ingestion and state-management engine in Python.
+
+The target is a live public exchange WebSocket feed (such as Coinbase Advanced Trade L2 order book). 
+
+The script must fulfill three core engineering requirements:
+
+1. Asynchronous Resilience:
+- Implement a persistent WebSocket connection loop using `asyncio` and `websockets`.
+- Include robust reconnection logic with exponential backoff and jitter to survive network drops, socket timeouts, or server-side disconnections without crashing or leaking memory.
+
+2. State Synchronization:
+- Maintain an in-memory local order book that handles initial snapshot frames and incoming incremental delta updates (`l2update`).
+- Properly sort bids (descending) and asks (ascending) by price.
+- Implement strict sequence-gap detection and validation to discard out-of-order frames, stale sequence numbers, or duplicate payloads.
+
+3. Resource & Latency Optimization:
+- Decouple the high-frequency ingestion loop from inspection and telemetry layers using proper async synchronization primitives (e.g., `asyncio.Lock`) so that background telemetry or logging tasks never block, starve, or lag the primary websocket read loop.
+
+Deliver the complete, clean, self-contained Python script implementing this architecture with clear logging and structured code blocks."
+
+
+
