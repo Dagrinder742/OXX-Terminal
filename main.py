@@ -661,7 +661,7 @@ class OKXTerminalApp(App):
             return
 
         ord_type = "limit" if price_val else "market"
-        side = "buy" if event.button.label.text.startswith("BUY") else "sell"
+        side = "buy" if str(event.button.label).startswith("BUY") else "sell"
 
         self.run_worker(self._execute_order_task(side, ord_type, amount_val, price_val, tp_val, sl_val, tag="Manual"))
 
