@@ -132,12 +132,22 @@ print("order flow (simulation)")
 app = new_app()
 app._last_tick = time.monotonic()
 run(app._execute_order_task("buy", "limit", "0.00029746633052971317", "86000.123", None, None))
-check("size/price put on the exchange grid", app.session_fills[0]["sz"] == "0.00029746" and app.session_fills[0]["px"] == "86000.1", app.session_fills[:1])
-check("sim fill reaches the ledger", app.accountant.positions["BTC-USDT"]["size"] > 0)
-check("history panel updated", "SIM-Manual" in app._w["#history-content"].text)
+o = app.order_tracker.open_orders()[0]
+check("size/price put on the exchange grid", abs(o.sz - 0.00029746) < 1e-12 and o.px == 86000.1, (o.sz, o.px))
+check("a resting limit buy is OPEN and books NOTHING (accepted != filled)", app.session_fills == [] and app.accountant.positions.get("BTC-USDT", {}).get("size", 0) == 0 and app.accountant.fills == [])
+check("history panel shows it as OPEN", "OPEN" in app._w["#history-content"].text and "SIM-Manual" in app._w["#history-content"].text, app._w["#history-content"].text)
+app.current_price = "85900.0"; run(app._poll_orders())
+check("when the market trades through it, it fills at ITS price (maker)", len(app.session_fills) == 1 and float(app.session_fills[0]["px"].replace(",", "")) == 86000.1, app.session_fills)
+check("... reaches the ledger with an exchange-style fee, and the order closes", app.accountant.positions["BTC-USDT"]["size"] > 0 and app.accountant.total_fees_paid > 0 and not app.order_tracker.orders)
+n = len(app.session_fills)
+run(app._poll_orders()); run(app._poll_orders())
+check("polling again never books it twice", len(app.session_fills) == n and len(app.accountant.fills) == 1)
+app = new_app(); app._last_tick = time.monotonic()
+run(app._execute_order_task("buy", "market", "0.001", "", None, None))
+check("a market order fills immediately at the market price", len(app.session_fills) == 1 and float(app.session_fills[0]["px"].replace(",", "")) == 86306.6 and "SIM-Manual" in app._w["#history-content"].text, app.session_fills)
 n = len(app.session_fills)
 run(app._execute_order_task("buy", "limit", "0.000001", "86000", None, None))
-check("below-minimum order is refused, not sent", len(app.session_fills) == n and any("below the exchange minimum" in m for m, _ in app.notes), app.notes[-1:])
+check("below-minimum order is refused, not sent", len(app.session_fills) == n and not app.order_tracker.open_orders() and any("below the exchange minimum" in m for m, _ in app.notes), app.notes[-1:])
 app2 = new_app(); app2.current_price = "Connecting..."
 run(app2._execute_order_task("buy", "market", "0.001", "", None, None))
 check("market order before a price exists is a notice, not a crash", any("no live price" in m for m, _ in app2.notes), app2.notes)
@@ -268,6 +278,90 @@ async def modal_empty():
     return list(_Vault.saved_on), mdl.dismissed
 saved_on, dismissed = run(modal_empty())
 check("missing field: nothing saved, dialog stays", saved_on == [] and dismissed == [])
+
+print("order lifecycle: stop bots / cancel / bot state")
+def sim_app():
+    a = new_app(); a._last_tick = time.monotonic(); a.accountant.load_fee_schedule(FEE_ROW); a.accountant.apply_fee_group("12" if False else "1")
+    return a
+async def stop_cancels_bot_orders():
+    a = sim_app()
+    bot = a.strategy_manager.start_grid_bot("BTC-USDT", 85000, 88000, 5, 100)
+    # a resting bot buy (below market) and a resting MANUAL buy
+    await a._execute_order("buy", "limit", "0.0005", "85000", None, None, "GridBot", bot)
+    await a._execute_order("buy", "limit", "0.0005", "84000", None, None, "Manual", None)
+    before = len(a.order_tracker.open_orders())
+    a.workers = []
+    a.run_worker = lambda work, **kw: a.workers.append(work)
+    a.action_stop_bot()
+    for w in a.workers: await w
+    return a, before
+a, before = run(stop_cancels_bot_orders())
+check("two orders were resting before the stop", before == 2, before)
+left = a.order_tracker.open_orders()
+check("STOP ALL BOTS cancels the bot's resting order but NOT the manual one", len(left) == 1 and left[0].bot_id is None, [(o.tag, o.bot_id) for o in left])
+check("... and says what it did, truthfully", any("cancelled" in l.lower() for l in a.log_lines) and not any("NOT cancelled" in l and "resting exchange" in l for l in a.log_lines), a.log_lines)
+async def cancel_button():
+    a, _ = await stop_cancels_bot_orders()
+    a.workers = []
+    a.run_worker = lambda work, **kw: a.workers.append(work)
+    a.on_button_pressed(types.SimpleNamespace(button=types.SimpleNamespace(id="cancel-orders-btn", label="x")))
+    for w in a.workers: await w
+    return a
+a = run(cancel_button())
+check("CANCEL MY OPEN ORDERS clears everything this session has open", not a.order_tracker.open_orders() and a.session_fills == [])
+async def cancel_loses_race():
+    a = sim_app()
+    await a._execute_order("sell", "limit", "0.001", "86400", None, None, "Manual", None)   # resting sell above market
+    a.current_price = "86500.0"                                                              # market trades through it before the cancel
+    await a._cancel_orders(a.order_tracker.open_orders(), "test")
+    return a
+a = run(cancel_loses_race())
+check("a fill that beats the cancel is booked, and reported as already filled", len(a.session_fills) == 1 and any("already filled" in l for l in a.log_lines), (a.session_fills, a.log_lines))
+async def bot_state_follows_fills():
+    a = sim_app()
+    bot_id = a.strategy_manager.start_grid_bot("BTC-USDT", 85000, 88000, 5, 100)
+    bot = a.strategy_manager.active_bots[bot_id]
+    await a._execute_order("buy", "limit", "0.0005", "85000", None, None, "GridBot", bot_id)
+    pos_resting = bot.current_pos
+    a.current_price = "84900.0"; await a._poll_orders()
+    return bot, pos_resting
+bot, pos_resting = run(bot_state_follows_fills())
+check("a bot's position does NOT move while its order only rests", pos_resting == 0.0, pos_resting)
+check("... and moves by exactly the filled size once it fills", abs(bot.current_pos - 0.0005) < 1e-12, bot.current_pos)
+async def sell_reservation():
+    a = sim_app()
+    bot_id = a.strategy_manager.start_grid_bot("BTC-USDT", 85000, 88000, 5, 100)
+    bot = a.strategy_manager.active_bots[bot_id]
+    bot.order_filled("buy", 85000.0, 0.001)
+    await a._execute_order("sell", "limit", "0.001", "89000", None, None, "GridBot", bot_id)   # resting sell for ALL of it
+    reserved = bot.open_sell_qty
+    await a._cancel_orders(a.order_tracker.open_orders(), "test")
+    return reserved, bot.open_sell_qty
+reserved, after = run(sell_reservation())
+check("a resting sell reserves the coins, and cancelling releases them", abs(reserved - 0.001) < 1e-9 and after == 0.0, (reserved, after))
+async def lost_answer():
+    a = sim_app()
+    import okx_private as _op
+    a.simulation_mode = False
+    real = _op.OKXPrivateClient
+    class Timeout:
+        placed = []
+        @staticmethod
+        def place_order(**kw): Timeout.placed.append(kw); return {"code": "500", "msg": "timed out"}
+        @staticmethod
+        def get_order(i, o=None, c=None): return {"code": "51603", "msg": "Order does not exist", "data": []}
+    sys.modules["okx_private"].OKXPrivateClient = Timeout
+    try:
+        await a._execute_order("buy", "limit", "0.001", "85000", None, None, "Manual", None)
+    finally:
+        sys.modules["okx_private"].OKXPrivateClient = real
+    return a, Timeout.placed
+a, placed = run(lost_answer())
+o = a.order_tracker.open_orders()
+check("a timed-out placement is tracked as UNKNOWN, not reported as failed or filled", len(o) == 1 and o[0].uncertain and a.session_fills == [], o)
+check("... it carries a client order id so it can be looked up", placed and placed[0].get("cl_ord_id", "").startswith("oxx"), placed)
+check("... and the user is told not to resend", any("do NOT resend" in m for m, _ in a.notes), a.notes)
+check("history shows it as status unknown", "status unknown" in a._w["#history-content"].text, a._w["#history-content"].text)
 
 print(f"\n{PASSED} passed, {len(FAILED)} failed")
 if FAILED: print("FAILED:", *FAILED, sep="\n  - "); sys.exit(1)

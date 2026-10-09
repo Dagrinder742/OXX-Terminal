@@ -24,6 +24,7 @@ from strategy_engine import StrategyManager, OKXGridValidator
 from accountant import PnLAccountant
 from rich.markup import escape
 from order_format import quantize_price, quantize_size, fmt_price, fmt_qty, money
+from order_tracker import OrderTracker, TrackedOrder, SimExchange, new_cl_ord_id
 
 # Log to a FILE, not the terminal: Textual owns the screen, and a console log handler paints
 # over it.  force=True replaces any handler a module installed at import time (the first
@@ -163,7 +164,18 @@ class OXXTerminalApp(App):
         self.portfolio_balances = {} # {asset: available_balance}
         self.telemetry_data = {} # {instId: {last: str, change: str}}
         self.accountant = PnLAccountant() # Our mathematical co-pilot
-        self.simulation_mode = True # SAFETY PIN: Set to False only when ready for real risk (live fills are NOT yet confirmed from the exchange - keep True)
+        self.simulation_mode = True # SAFETY PIN: Set to False only when ready for real risk.
+        # Orders are tracked until the exchange reports them filled/cancelled; only real fills are booked.
+        self.sim_exchange = SimExchange(
+            price_fn=self._price_for,
+            rates_fn=lambda: (self.accountant.maker_rate, self.accountant.taker_rate),
+        )
+        self.order_tracker = OrderTracker(
+            exchange_fn=self._exchange,
+            on_fill=self._on_order_fill,
+            on_closed=self._on_order_closed,
+            on_note=self.log_action,
+        )
 
     CSS = """
     Screen {
@@ -533,6 +545,7 @@ class OXXTerminalApp(App):
                         yield Button("START GRID BOT", variant="success", id="start-grid-btn", classes="buy-btn")
                         yield Button("START DCA BOT", variant="success", id="start-dca-btn", classes="buy-btn")
                         yield Button("STOP ALL BOTS", variant="error", id="stop-bot-btn", classes="sell-btn")
+                        yield Button("CANCEL MY OPEN ORDERS", variant="error", id="cancel-orders-btn", classes="sell-btn")
 
                     # Open Orders & Positions Sub-Panel
                     with Vertical(classes="sub-panel positions-container", id="positions-panel"):
@@ -701,6 +714,10 @@ class OXXTerminalApp(App):
 
         if button_id == "stop-bot-btn":
             self.action_stop_bot()
+            return
+
+        if button_id == "cancel-orders-btn":
+            self.action_cancel_orders()
             return
 
         if button_id == "grid-type-btn":
@@ -877,12 +894,50 @@ class OXXTerminalApp(App):
             return
 
     def action_stop_bot(self) -> None:
+        bot_ids = set(self.strategy_manager.active_bots)
         count = self.strategy_manager.stop_all()
         if self.bot_worker:
             self.bot_worker.cancel()
 
-        self.notify(f"Stopped {count} active bots. Orders already resting on the exchange are NOT cancelled.", title="Strategy Halted")
-        self.log_action("[red]Strategy Engine: all bots stopped (resting exchange orders NOT cancelled).[/red]")
+        resting = self.order_tracker.open_orders(bot_ids=bot_ids)
+        if resting:
+            self.notify(f"Stopped {count} bots. Cancelling {len(resting)} resting order(s)...", title="Strategy Halted")
+            self.log_action(f"[red]Strategy Engine: bots stopped; cancelling {len(resting)} resting order(s)...[/red]")
+            self.run_worker(self._cancel_orders(resting, "bot stop"), group="orders", exit_on_error=False)
+        else:
+            self.notify(f"Stopped {count} active bots. No resting bot orders to cancel.", title="Strategy Halted")
+            self.log_action("[red]Strategy Engine: all bots stopped (no resting orders from this session).[/red]")
+        self.update_bot_ui()
+
+    def action_cancel_orders(self) -> None:
+        """Cancels every order THIS session placed that is still open (manual and bot)."""
+        resting = self.order_tracker.open_orders()
+        if not resting:
+            self.notify("No open orders from this session.", title="Nothing to cancel")
+            return
+        extra = " Bots are still running and may place new ones." if self.strategy_manager.active_bots else ""
+        self.notify(f"Cancelling {len(resting)} open order(s)...{extra}", title="Cancel Orders")
+        self.run_worker(self._cancel_orders(resting, "manual cancel"), group="orders", exit_on_error=False)
+
+    async def _cancel_orders(self, orders, reason: str) -> None:
+        summary = await self.order_tracker.cancel(orders)
+        parts = []
+        if summary["cancelled"]:
+            parts.append(f"{summary['cancelled']} cancelled")
+        if summary["already_done"]:
+            parts.append(f"{summary['already_done']} had already filled/closed")
+        if summary["unconfirmed"]:
+            parts.append(f"{len(summary['unconfirmed'])} cancel accepted but not yet confirmed")
+        text = ", ".join(parts) or "nothing to cancel"
+        self.log_action(f"[cyan]Cancel ({reason}): {text}[/cyan]")
+        if summary["failed"]:
+            detail = "; ".join(f"{o.inst_id} {o.side.upper()} {fmt_qty(o.remaining)}: {r}" for o, r in summary["failed"][:2])
+            self.notify(f"{len(summary['failed'])} order(s) could NOT be cancelled: {escape(detail)}. Check the exchange.",
+                        severity="error", title="Cancel Failed")
+            self.log_action(f"[bold red]{len(summary['failed'])} order(s) NOT cancelled - still open: {escape(detail)}[/bold red]")
+        else:
+            self.notify(text, title="Cancel Orders")
+        self.update_history_display()
         self.update_bot_ui()
 
     def action_manage_keys(self) -> None:
@@ -1104,68 +1159,114 @@ class OXXTerminalApp(App):
                 sl = quantize_price(sl, spec["tickSz"])
 
         last = self._last_price()
-        exec_px = price if price else (str(last) if last is not None else None)
-        if exec_px is None:
+        if not price and last is None:
             raise ValueError("no live price yet")
 
-        if self.simulation_mode:
-            self.notify(f"[SIM] {side.upper()} {ord_type} {size} intercepted.", title="Sim Mode")
-            self.log_action(f"[cyan]SIM MODE: {tag} would have placed {side.upper()} {size} @ {price or 'MKT'}[/cyan]")
-            # Treat the simulated order as filled so the dashboard math, history and bot state all move.
-            self.accountant.record_confirmed_fill(inst_id, side, float(exec_px), float(size), tag=f"SIM-{tag}")
-            if bot_id:
-                self.strategy_manager.update_bot_fill(bot_id, side, float(exec_px), float(size))
-            self._record_session_fill(inst_id, side, size, exec_px, f"SIM-{tag}")
-            self.update_history_display()
-            self.update_bot_ui()
-            return
-
-        self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
-        self.log_action(f"[yellow]{tag}: submitting {side.upper()} {ord_type} order (sz: {size}) (TP: {tp or 'None'}, SL: {sl or 'None'})...[/yellow]")
-
-        result = await asyncio.to_thread(
-            OKXPrivateClient.place_order,
-            inst_id=inst_id,
-            side=side,
-            order_type=ord_type,
-            sz=size,
-            px=price if ord_type == "limit" else None,
-            tp_trigger_px=tp,
-            sl_trigger_px=sl
+        order = TrackedOrder(
+            cl_ord_id=new_cl_ord_id(), inst_id=inst_id, side=side.lower(), ord_type=ord_type,
+            sz=float(size), px=float(price) if (price and ord_type == "limit") else None,
+            tag=tag, bot_id=bot_id,
         )
+        px_arg = price if ord_type == "limit" else None
+
+        if self.simulation_mode:
+            self.notify(f"[SIM] {side.upper()} {ord_type} {size} sent to the simulator (no real order).", title="Sim Mode")
+            self.log_action(f"[cyan]SIM MODE: {tag} placed {side.upper()} {size} @ {price or 'MKT'}[/cyan]")
+            result = self.sim_exchange.place(inst_id, side, ord_type, size, px_arg, order.cl_ord_id)
+        else:
+            self.notify(f"Submitting {side.upper()} {ord_type} order...", title="Executing")
+            self.log_action(f"[yellow]{tag}: submitting {side.upper()} {ord_type} order (sz: {size}) (TP: {tp or 'None'}, SL: {sl or 'None'})...[/yellow]")
+            result = await asyncio.to_thread(
+                OKXPrivateClient.place_order,
+                inst_id=inst_id,
+                side=side,
+                order_type=ord_type,
+                sz=size,
+                px=px_arg,
+                tp_trigger_px=tp,
+                sl_trigger_px=sl,
+                cl_ord_id=order.cl_ord_id,
+            )
 
         code = str(result.get("code"))
         row = (result.get("data") or [{}])[0]
         s_code = str(row.get("sCode", "0"))
+
         if code == "0" and s_code == "0":
-            ord_id = row.get("ordId", "Unknown")
-
-            # ACCEPTED is not FILLED.  A resting limit order has not traded yet, but for now it is
-            # still booked below so bots/PnL move.  Until fills are polled from the exchange,
-            # treat live PnL as an estimate (and keep simulation_mode on).
-            self._record_session_fill(inst_id, side, size, exec_px, tag)
-
-            if bot_id:
-                try:
-                    self.strategy_manager.update_bot_fill(bot_id, side, float(exec_px), float(size))
-                except Exception as e:
-                    logging.error(f"Failed to update bot fill: {e}", exc_info=True)
-
-            try:
-                self.accountant.record_confirmed_fill(inst_id, side, float(exec_px), float(size), tag=tag)
-            except Exception as e:
-                logging.error(f"Accountant failed to record fill: {e}", exc_info=True)
-
-            self.notify(f"Order accepted (not necessarily filled). ID: {ord_id}", severity="information", title="Order Accepted")
-            self.log_action(f"[green]ACCEPTED: {tag} order ID {ord_id}[/green]")
-            self.update_history_display()
-            self.update_bot_ui()
+            order.ord_id = row.get("ordId")
+            # ACCEPTED is not FILLED.  Register it; fills are booked only when the exchange reports them.
+            await self._track_new_order(order, f"[green]PLACED: {tag} {side.upper()} {size} @ {price or 'MKT'} (ID {order.ord_id}) - waiting for fills[/green]")
+            self.notify(f"Order placed (not filled yet). ID: {order.ord_id}", title="Order Placed")
+        elif code == "500":
+            # The request failed locally (timeout / network).  The exchange MAY have the order, so do
+            # not call it failed and do not retry blindly: track it by our client id and find out.
+            order.uncertain = True
+            await self._track_new_order(order, f"[yellow]{tag}: no answer from the exchange ({escape(str(result.get('msg')))}). Checking whether the order exists...[/yellow]")
+            self.notify("No answer from the exchange. Checking whether the order was placed - do NOT resend yet.",
+                        severity="warning", title="Order Status Unknown")
         else:
             # The useful reason lives in data[0].sMsg; the envelope usually just says "All operations failed".
             msg = row.get("sMsg") or result.get("msg") or "Unknown error"
             shown_code = s_code if s_code != "0" else code
             self.notify(f"Order failed ({shown_code}): {escape(str(msg))}", severity="error", title="API Error")
             self.log_action(f"[red]FAILED ({tag}): {escape(str(msg))}[/red]")
+
+    async def _track_new_order(self, order: TrackedOrder, message: str) -> None:
+        self.order_tracker.register(order)
+        if order.bot_id:
+            self.strategy_manager.order_placed(order.bot_id, order.side, order.sz)
+        self.log_action(message)
+        self.update_history_display()
+        await self._poll_orders()   # market orders usually fill at once: don't wait for the timer
+
+    # ---------------------------------------------------------------- order lifecycle
+    def _exchange(self):
+        """Where orders live right now: the simulator, or the real exchange client."""
+        if self.simulation_mode:
+            return self.sim_exchange
+        from okx_private import OKXPrivateClient
+        return OKXPrivateClient
+
+    def _price_for(self, inst_id: str):
+        if inst_id == self.instrument_id:
+            return self._last_price()
+        return self.telemetry_data.get(inst_id, {}).get("raw_last")
+
+    async def _poll_orders(self) -> None:
+        await self._guarded_poll("order-tracking", self.order_tracker.poll)
+
+    def _display_tag(self, order: TrackedOrder) -> str:
+        return f"SIM-{order.tag}" if self.simulation_mode else order.tag
+
+    def _on_order_fill(self, order: TrackedOrder, size: float, price: float, fee_quote) -> None:
+        """A real piece of fill: the ONLY place the ledger, bot state and history are updated."""
+        tag = self._display_tag(order)
+        try:
+            self.accountant.record_confirmed_fill(order.inst_id, order.side, price, size, tag=tag, fee_quote=fee_quote)
+        except Exception as e:
+            logging.error(f"Accountant failed to record fill: {e}", exc_info=True)
+        if order.bot_id:
+            try:
+                self.strategy_manager.order_filled(order.bot_id, order.side, price, size)
+            except Exception as e:
+                logging.error(f"Failed to update bot fill: {e}", exc_info=True)
+        self._record_session_fill(order.inst_id, order.side, fmt_qty(size), fmt_price(price), tag)
+        partial = f" (partial {fmt_qty(order.booked_sz)}/{fmt_qty(order.sz)})" if order.booked_sz < order.sz - 1e-12 else ""
+        self.log_action(f"[green]FILLED: {tag} {order.side.upper()} {fmt_qty(size)} {order.inst_id} @ {fmt_price(price)}{partial}[/green]")
+        self.notify(f"{order.side.upper()} {fmt_qty(size)} @ {fmt_price(price)}{partial}", title="Order Filled")
+        self.update_history_display()
+        self.update_bot_ui()
+
+    def _on_order_closed(self, order: TrackedOrder, state: str, unfilled: float) -> None:
+        if order.bot_id:
+            self.strategy_manager.order_closed(order.bot_id, order.side, unfilled)
+        tag = self._display_tag(order)
+        if state == "filled":
+            self.log_action(f"[green]ORDER COMPLETE: {tag} {order.side.upper()} {fmt_qty(order.sz)} {order.inst_id}[/green]")
+        elif state in ("canceled", "mmp_canceled"):
+            self.log_action(f"[yellow]ORDER CANCELLED: {tag} {order.side.upper()} - {fmt_qty(order.booked_sz)} filled, {fmt_qty(unfilled)} unfilled[/yellow]")
+        self.update_history_display()
+        self.update_bot_ui()
 
     def _record_session_fill(self, inst_id: str, side: str, size, px, tag: str) -> None:
         self.session_fills.insert(0, {
@@ -1180,6 +1281,10 @@ class OXXTerminalApp(App):
 
     def update_history_display(self) -> None:
         lines = []
+        for o in self.order_tracker.open_orders()[:3]:
+            where = f"@ {fmt_price(o.px)}" if o.px else "@ MKT"
+            note = " [dim](status unknown)[/dim]" if o.uncertain else ""
+            lines.append(f"[yellow]OPEN[/yellow] {self._display_tag(o)} | {o.side.upper()} {fmt_qty(o.remaining)} {where}{note}")
         for f in self.session_fills:
             color = "green" if f["side"] == "BUY" else "red"
             tag_color = "#3399ff" if f["tag"] == "Manual" else "#ffcc00"
@@ -1188,7 +1293,7 @@ class OXXTerminalApp(App):
                 f"[{color}]{f['side']}[/{color}] {f['sz']} @ {f['px']}"
             )
         
-        history_text = "\n".join(lines) if lines else "Waiting for session fills..."
+        history_text = "\n".join(lines) if lines else "No orders or fills yet this session..."
         try:
             self.query_one("#history-content", Static).update(history_text)
         except Exception as e:
@@ -1256,6 +1361,7 @@ class OXXTerminalApp(App):
         self.set_interval(0.5, self.update_header_display)
         self.set_interval(5.0, self.update_portfolio_balance)
         self.set_interval(5.0, self.update_open_orders_and_positions)
+        self.set_interval(2.0, self._poll_orders)   # order lifecycle: fills, cancels, unknown placements
         self.set_interval(30.0, self.refresh_chart)
         self.set_interval(1.0, self._flush_hubs)  # redraw the 24-pair board at most once a second
         self.client = OKXPublicClient(instrument_id=self.instrument_id, watchlist=WATCHLIST, callback=self.handle_ws_data)
@@ -1350,6 +1456,13 @@ class OXXTerminalApp(App):
         pos_res = await asyncio.to_thread(OKXPrivateClient.get_positions)
 
         output_lines = []
+        if self.simulation_mode:
+            sim_open = self.order_tracker.open_orders()
+            if sim_open:
+                output_lines.append("[bold yellow][SIM] Resting Orders:[/bold yellow]")
+                for o in sim_open[:3]:
+                    where = fmt_price(o.px) if o.px else "MKT"
+                    output_lines.append(f"  • {o.inst_id} | {o.side.upper()} {fmt_qty(o.remaining)} @ {where}")
 
         if orders_res.get("code") == "0":
             orders = orders_res.get("data", [])

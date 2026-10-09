@@ -105,14 +105,19 @@ class PnLAccountant:
             "net_sl": net_sl
         }
 
-    def record_confirmed_fill(self, inst_id: str, side: str, price: float, size: float, tag: str = "Manual", fee_rate: float = None):
+    def record_confirmed_fill(self, inst_id: str, side: str, price: float, size: float, tag: str = "Manual",
+                              fee_rate: float = None, fee_quote: float = None):
         """Records a fill in the ledger.
 
-        fee_rate: pass the maker rate for resting limit fills; defaults to the taker rate
-        (conservative).
+        fee_quote: the fee the exchange actually charged, in the quote currency (preferred).
+        fee_rate:  otherwise estimate with this rate (pass the maker rate for resting limit fills).
+                   With neither, the taker rate is used (conservative).
         """
-        rate = self.taker_rate if fee_rate is None else abs(float(fee_rate))
-        fee_usd = price * size * rate
+        if fee_quote is not None:
+            fee_usd = abs(float(fee_quote))
+        else:
+            rate = self.taker_rate if fee_rate is None else abs(float(fee_rate))
+            fee_usd = price * size * rate
         self.total_fees_paid += fee_usd
 
         side_u = side.upper()

@@ -92,7 +92,7 @@ class OKXPrivateClient:
             return {"code": "500", "msg": str(e)}
 
     @classmethod
-    def place_order(cls, inst_id: str, side: str, order_type: str, sz: str, px: str = None, tp_trigger_px: str = None, sl_trigger_px: str = None) -> dict:
+    def place_order(cls, inst_id: str, side: str, order_type: str, sz: str, px: str = None, tp_trigger_px: str = None, sl_trigger_px: str = None, cl_ord_id: str = None) -> dict:
         payload = {
             "instId": inst_id,
             "tdMode": "cash",
@@ -100,6 +100,9 @@ class OKXPrivateClient:
             "ordType": order_type,
             "sz": str(sz)
         }
+        if cl_ord_id:
+            # Our own id for this order: if the reply is lost (timeout) we can still look it up.
+            payload["clOrdId"] = str(cl_ord_id)
 
         if order_type == "market":
             # Spot market orders: without tgtCcy a BUY's `sz` is read as QUOTE currency
@@ -120,6 +123,25 @@ class OKXPrivateClient:
             payload["slOrdPx"] = "-1"  # Market order execution upon SL trigger
 
         return cls._request("POST", "/api/v5/trade/order", payload)
+
+    @classmethod
+    def get_order(cls, inst_id: str, ord_id: str = None, cl_ord_id: str = None) -> dict:
+        """One order's current state (live / partially_filled / filled / canceled) and cumulative fills."""
+        if not ord_id and not cl_ord_id:
+            return {"code": "1", "msg": "get_order needs ordId or clOrdId"}
+        key = f"ordId={ord_id}" if ord_id else f"clOrdId={cl_ord_id}"
+        return cls._request("GET", f"/api/v5/trade/order?instId={inst_id}&{key}")
+
+    @classmethod
+    def cancel_order(cls, inst_id: str, ord_id: str = None, cl_ord_id: str = None) -> dict:
+        if not ord_id and not cl_ord_id:
+            return {"code": "1", "msg": "cancel_order needs ordId or clOrdId"}
+        payload = {"instId": inst_id}
+        if ord_id:
+            payload["ordId"] = str(ord_id)
+        else:
+            payload["clOrdId"] = str(cl_ord_id)
+        return cls._request("POST", "/api/v5/trade/cancel-order", payload)
 
     @classmethod
     def get_pending_orders(cls) -> dict:

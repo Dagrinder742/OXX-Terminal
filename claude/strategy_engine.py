@@ -54,7 +54,28 @@ def _round_price(x: float) -> float:
     return float(f"{x:.7g}")
 
 
-class GridStrategyEngine:
+class _OrderBookkeeping:
+    """Tracks coins already promised to resting SELL orders, so one holding can't be sold twice
+    before the first sell has filled."""
+    open_sell_qty = 0.0
+
+    def order_placed(self, side: str, size: float) -> None:
+        if side.lower() == "sell":
+            self.open_sell_qty += size
+
+    def order_filled(self, side: str, price: float, size: float) -> None:
+        """A real fill (possibly partial) from the exchange."""
+        self.update_position(side, price, size)
+        if side.lower() == "sell":
+            self.open_sell_qty = max(0.0, self.open_sell_qty - size)
+
+    def order_closed(self, side: str, unfilled: float) -> None:
+        """The order is finished; release whatever part of a SELL never traded."""
+        if side.lower() == "sell":
+            self.open_sell_qty = max(0.0, self.open_sell_qty - unfilled)
+
+
+class GridStrategyEngine(_OrderBookkeeping):
     def __init__(self, inst_id: str, lower_bound: float, upper_bound: float, grids: int, investment_amount: float,
                  grid_type: str = "arithmetic", hysteresis: float = 0.0005):
         self.inst_id = inst_id
@@ -118,10 +139,12 @@ class GridStrategyEngine:
                 return None
             self.last_grid_index = confirmed
             sz = self.investment_amount / self.grids / current_price
-            # Spot grid: sell only what this bot bought.  Never sell coins it doesn't hold.
-            if self.current_pos <= 1e-12:
-                return ("LOG", f"SELL skipped at {self.grid_levels[confirmed]}: bot holds no inventory", 0, "GridBot")
-            return ("SELL", self.grid_levels[confirmed], min(sz, self.current_pos), "GridBot")
+            # Spot grid: sell only what this bot bought AND has not already promised to another
+            # resting sell.  Never sell coins it doesn't hold.
+            available = self.current_pos - self.open_sell_qty
+            if available <= 1e-12:
+                return ("LOG", f"SELL skipped at {self.grid_levels[confirmed]}: no unreserved inventory", 0, "GridBot")
+            return ("SELL", self.grid_levels[confirmed], min(sz, available), "GridBot")
 
         if new_index < self.last_grid_index:
             # Price moved down: it must be below the level we were sitting on by the margin.
@@ -240,6 +263,22 @@ class StrategyManager:
         if bot_id in self.active_bots:
             self.active_bots[bot_id].update_position(side, price, size)
 
+    # Order-lifecycle hooks.  A bot that was stopped meanwhile is simply ignored.
+    def order_placed(self, bot_id, side, size):
+        bot = self.active_bots.get(bot_id)
+        if bot:
+            bot.order_placed(side, size)
+
+    def order_filled(self, bot_id, side, price, size):
+        bot = self.active_bots.get(bot_id)
+        if bot:
+            bot.order_filled(side, price, size)
+
+    def order_closed(self, bot_id, side, unfilled):
+        bot = self.active_bots.get(bot_id)
+        if bot:
+            bot.order_closed(side, unfilled)
+
     def get_total_session_pnl(self, current_prices):
         """
         Aggregates PnL across all active bots.
@@ -272,7 +311,7 @@ class StrategyManager:
             "details": "\n".join(bot_details) if bot_details else "No active bots"
         }
 
-class DCAStrategyEngine:
+class DCAStrategyEngine(_OrderBookkeeping):
     def __init__(self, inst_id: str, base_order_size: float, drop_trigger_pct: float, max_buys: int = 10):
         self.inst_id = inst_id
         self.max_buys = max_buys      # hard cap on signals: without it a crash keeps buying every drop_pct
