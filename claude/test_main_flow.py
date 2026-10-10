@@ -363,5 +363,32 @@ check("... it carries a client order id so it can be looked up", placed and plac
 check("... and the user is told not to resend", any("do NOT resend" in m for m, _ in a.notes), a.notes)
 check("history shows it as status unknown", "status unknown" in a._w["#history-content"].text, a._w["#history-content"].text)
 
+print("positions panel (simulation)")
+async def sim_panel():
+    a = sim_app()
+    import okx_private as _op
+    real = _op.OKXPrivateClient
+    class Real:
+        calls = 0
+        @staticmethod
+        def get_pending_orders(): Real.calls += 1; return {"code": "0", "data": []}
+        @staticmethod
+        def get_positions(): Real.calls += 1; return {"code": "0", "data": []}
+    sys.modules["okx_private"].OKXPrivateClient = Real
+    try:
+        await a._execute_order("buy", "limit", "0.001", "80000", None, None, "Manual", None)   # rests
+        await a._execute_order("buy", "market", "0.001", "", None, None, "Manual", None)       # fills
+        await a._update_open_orders_and_positions()
+    finally:
+        sys.modules["okx_private"].OKXPrivateClient = real
+    return a, Real.calls
+a, calls = run(sim_panel())
+txt = a._w["#positions-content"].text
+check("sim panel does NOT ask the real account", calls == 0, calls)
+check("sim panel lists the resting simulated order", "80,000" in txt and "BUY" in txt, txt)
+check("... and never says 'No open resting orders' next to it", "No open resting orders" not in txt, txt)
+check("... shows the simulated position that the market buy created", "Positions" in txt and "No simulated positions" not in txt, txt)
+check("... and the [SIM] label survives Rich markup", "[SIM]" in txt.replace("\\[", "["), txt)
+
 print(f"\n{PASSED} passed, {len(FAILED)} failed")
 if FAILED: print("FAILED:", *FAILED, sep="\n  - "); sys.exit(1)

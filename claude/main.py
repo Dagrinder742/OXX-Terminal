@@ -1452,17 +1452,42 @@ class OXXTerminalApp(App):
     async def _update_open_orders_and_positions(self) -> None:
         from okx_private import OKXPrivateClient
 
-        orders_res = await asyncio.to_thread(OKXPrivateClient.get_pending_orders)
-        pos_res = await asyncio.to_thread(OKXPrivateClient.get_positions)
-
         output_lines = []
         if self.simulation_mode:
+            # Simulation: show ONLY the simulated session. The real account is not queried, so the
+            # panel can never mix "SIM resting order" with "no open orders" from the real exchange.
+            output_lines.append("[bold yellow]\\[SIM] Resting Orders:[/bold yellow]")
             sim_open = self.order_tracker.open_orders()
             if sim_open:
-                output_lines.append("[bold yellow][SIM] Resting Orders:[/bold yellow]")
                 for o in sim_open[:3]:
                     where = fmt_price(o.px) if o.px else "MKT"
                     output_lines.append(f"  • {o.inst_id} | {o.side.upper()} {fmt_qty(o.remaining)} @ {where}")
+            else:
+                output_lines.append("[dim]No open resting orders[/dim]")
+            output_lines.append("")
+            held = {k: v for k, v in self.accountant.positions.items() if abs(v["size"]) > 1e-12}
+            if held:
+                output_lines.append("[bold cyan]\\[SIM] Positions:[/bold cyan]")
+                for inst, pos in held.items():
+                    mark = self.current_price if inst == self.instrument_id else None
+                    try:
+                        mark = float(str(mark).replace(",", ""))
+                    except (TypeError, ValueError):
+                        mark = pos["avg_price"]
+                    pnl = (mark - pos["avg_price"]) * pos["size"]
+                    color = "green" if pnl >= 0 else "red"
+                    output_lines.append(f"  • {inst} | {fmt_qty(pos['size'])} @ {fmt_price(pos['avg_price'])}"
+                                        f" | PnL: [{color}]{money(pnl)}[/{color}]")
+            else:
+                output_lines.append("[dim]No simulated positions[/dim]")
+            try:
+                self.query_one("#positions-content", Static).update("\n".join(output_lines))
+            except Exception as e:
+                logging.warning(f"Could not update positions/orders widget: {e}", exc_info=True)
+            return
+
+        orders_res = await asyncio.to_thread(OKXPrivateClient.get_pending_orders)
+        pos_res = await asyncio.to_thread(OKXPrivateClient.get_positions)
 
         if orders_res.get("code") == "0":
             orders = orders_res.get("data", [])
