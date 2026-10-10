@@ -5,8 +5,14 @@ import requests
 import websockets
 from typing import Callable, Optional, List, Dict, Any
 
-# Primary public WebSocket endpoint for OKX market feeds
-OKX_WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
+# Public WebSocket endpoints, tried in this order.  The US API docs (app.okx.com/docs-v5) list
+# wss://wsus.okx.com/ws/v5/public for US accounts.  The global host is what this app used before
+# and is kept as the fallback.  Which one connected is written to oxx.log.
+OKX_WS_PUBLIC_URLS = [
+    "wss://wsus.okx.com/ws/v5/public",
+    "wss://ws.okx.com:8443/ws/v5/public",
+]
+OKX_WS_PUBLIC = OKX_WS_PUBLIC_URLS[0]
 
 logger = logging.getLogger("OKX_Client")  # logging is configured by the entry point (main.py)
 
@@ -14,7 +20,9 @@ class OKXPublicClient:
     def __init__(self, instrument_id: str = "BTC-USDT", callback: Optional[Callable[[str, dict], None]] = None, watchlist: List[str] = None):
         self.instrument_id = instrument_id
         self.watchlist = watchlist or []
-        self.uri = OKX_WS_PUBLIC
+        self.uris = list(OKX_WS_PUBLIC_URLS)
+        self._uri_idx = 0
+        self.uri = self.uris[0]
         self.callback = callback  # Callback function to push data packets back to the TUI app
 
     @staticmethod
@@ -62,7 +70,9 @@ class OKXPublicClient:
     async def connect_market_streams(self):
         """Connects to the OKX public WebSocket and subscribes to tickers, order book, and trades."""
         while True:
+            got_data = False  # did this host deliver anything?  If not, the next attempt tries the other host
             try:
+                self.uri = self.uris[self._uri_idx % len(self.uris)]
                 logger.info(f"Connecting to OKX WebSocket at {self.uri}...")
                 async with websockets.connect(self.uri) as websocket:
 
@@ -91,6 +101,9 @@ class OKXPublicClient:
                         arg = data.get("arg", {})
                         channel = arg.get("channel")
 
+                        if "data" in data and not got_data:
+                            got_data = True
+                            logger.info(f"Market data is flowing from {self.uri}")
                         if "data" in data and channel and self.callback:
                             # Forward the channel name and data payload to our UI orchestrator.
                             # A bug in the UI handler must not look like a network failure
@@ -102,9 +115,13 @@ class OKXPublicClient:
 
             except websockets.exceptions.ConnectionClosed as e:
                 logger.warning(f"WebSocket connection closed: {e}. Reconnecting in 5 seconds...")
+                if not got_data:
+                    self._uri_idx += 1
                 await asyncio.sleep(5)
             except Exception as e:
                 logger.error(f"Unexpected error in WebSocket loop: {e}. Reconnecting in 5 seconds...", exc_info=True)
+                if not got_data:
+                    self._uri_idx += 1  # this host never worked: try the other one next
                 await asyncio.sleep(5)
 
 if __name__ == "__main__":

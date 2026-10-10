@@ -1,0 +1,36 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┌────────────────────────────────────────────────────────┐
+  Macro Data Feed (1-Hour / 4-Hour / 24-Hour Regimes)     
+  - Moving Averages (EMA 20/50/200)                      
+  - Multi-hour Volatility & Average True Range (ATR)     
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+  Rolling Log Database (`kalshi_history.db` or CSV)      
+  - Stores every 1-second BRTI tick & 15-min outcome     
+  - Tracks strike-to-settlement historical delta          
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+  Local 15-Min Execution Engine                           
+  - Evaluates local window AGAINST macro trend context   
+  - Adjusts base probability using higher-timeframe bias 
+└────────────────────────────────────────────────────────┘
