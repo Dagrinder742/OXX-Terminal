@@ -1,3 +1,7 @@
+Write-Host "°/^| Arch•i°techT | AI-GEMINI |^\°" -ForegroundColor Green
+Write-Host "°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°" -ForegroundColor Green
+Write-Host "°{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}°" -ForegroundColor Green
+
 # Automatically set location to the script's directory
 Set-Location $PSScriptRoot
 
