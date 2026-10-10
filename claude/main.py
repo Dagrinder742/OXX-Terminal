@@ -45,6 +45,12 @@ ICON_CHART = "\uf4c8 " if _NERD else ""
 
 STABLE_QUOTES = {"USDT", "USDC", "USD", "DAI"}
 DUST_USD = 1.0  # balances worth less than this are treated as "nothing to trade"
+try:
+    SIM_START_USDT = float(os.environ.get("OXX_SIM_USDT", "1000"))  # starting play-money wallet in simulation
+except ValueError:
+    SIM_START_USDT = 1000.0
+BUY_HEADROOM = 0.005  # % buttons keep 0.5% of the quote balance back, so a price tick can't make a 100% buy unaffordable
+QUIT_CONFIRM_SECONDS = 15  # second quit press within this window quits even with live orders resting
 
 WATCHLIST = [
     "BTC-USDT", "HYPE-USDT", "SOL-USDT", "ETH-USDT", "JUP-USDT",
@@ -165,6 +171,10 @@ class OXXTerminalApp(App):
         self.telemetry_data = {} # {instId: {last: str, change: str}}
         self.accountant = PnLAccountant() # Our mathematical co-pilot
         self.simulation_mode = True # SAFETY PIN: Set to False only when ready for real risk.
+        self.sim_balances = {"USDT": SIM_START_USDT}  # play-money wallet used only in simulation
+        self.pct_side = "buy"       # which side the 25/50/75/100% buttons size when both coins are held
+        self._quit_armed_at = None
+        self._auto_px = None        # text of a price the APP put in the Price box (follows the market); None = nothing auto
         # Orders are tracked until the exchange reports them filled/cancelled; only real fills are booked.
         self.sim_exchange = SimExchange(
             price_fn=self._price_for,
@@ -498,6 +508,7 @@ class OXXTerminalApp(App):
                             yield Button("50%", id="pct-50", classes="pct-btn")
                             yield Button("75%", id="pct-75", classes="pct-btn")
                             yield Button("100%", id="pct-100", classes="pct-btn")
+                        yield Button("% SIZES: BUY (tap for SELL)", id="pct-side", classes="pct-btn")
 
                         yield Static("Total (USD Estimate):")
                         yield Input(placeholder="$0.00", id="total-input", disabled=True)
@@ -615,8 +626,47 @@ class OXXTerminalApp(App):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Reactively updates the Tactical Pre-Flight box as the user types."""
+        if event.input.id == "price-input" and self._auto_px is not None and str(event.value).strip() != self._auto_px:
+            self._auto_px = None   # the user typed in the box: from now on it is THEIR price, not the market's
         if event.input.id in ["price-input", "amount-input", "tp-input", "sl-input"]:
             self.update_preflight_calculator()
+
+    # ---------------------------------------------------------------- price box: typed price vs market price
+    def _price_is_auto(self) -> bool:
+        """True while the Price box still holds the price the APP filled in (not one the user typed)."""
+        try:
+            return self._auto_px is not None and self.query_one("#price-input", Input).value.strip() == self._auto_px
+        except Exception:
+            return False
+
+    def _price_text(self, inst_id: str, px: float) -> str:
+        spec = self.instrument_specs.get(inst_id) or {}
+        if spec.get("tickSz"):
+            places = max(0, -Decimal(str(spec["tickSz"])).as_tuple().exponent)   # BTC tick 0.1 -> 1 decimal
+            return f"{Decimal(quantize_price(px, spec['tickSz'])):.{places}f}"
+        return f"{px:.2f}" if px >= 1 else f"{px:.8f}"   # cheap coins need their digits (SHIB is 0.0000055)
+
+    def _set_auto_price(self, px: float) -> None:
+        text = self._price_text(self.instrument_id, px)
+        self._auto_px = text   # set BEFORE the box changes, so its Changed event is not mistaken for a user edit
+        self.query_one("#price-input", Input).value = text
+
+    def _refresh_auto_price(self) -> None:
+        """A price the app filled in tracks the live market, so a later click never uses a stale one."""
+        if not self._price_is_auto():
+            return
+        px = self._last_price()
+        if px and self._price_text(self.instrument_id, px) != self._auto_px:
+            self._set_auto_price(px)
+
+    def _refresh_preflight_if_market(self) -> None:
+        """With no typed price the order is a market order: its price, fee and hurdle follow the live market."""
+        try:
+            self._refresh_auto_price()
+            if not self.query_one("#price-input", Input).value.strip() or self._price_is_auto():
+                self.update_preflight_calculator()
+        except Exception:
+            pass
 
     def update_preflight_calculator(self) -> None:
         try:
@@ -729,6 +779,12 @@ class OXXTerminalApp(App):
             self.action_manage_keys()
             return
 
+        if button_id == "pct-side":
+            self.pct_side = "sell" if self.pct_side == "buy" else "buy"
+            other = "SELL" if self.pct_side == "buy" else "BUY"
+            event.button.label = f"% SIZES: {self.pct_side.upper()} (tap for {other})"
+            return
+
         if button_id and button_id.startswith("pct-"):
             pct = float(button_id.split("-")[1]) / 100.0
             self.action_quick_load_amount(pct)
@@ -741,6 +797,8 @@ class OXXTerminalApp(App):
             return self.query_one(widget_id, Input).value.strip().replace("$", "").replace(",", "")
 
         price_val = _clean("#price-input")
+        if self._price_is_auto():
+            price_val = ""   # the box only shows the market price the app filled in: send a MARKET order
         amount_val = _clean("#amount-input")
         tp_val = _clean("#tp-input")
         sl_val = _clean("#sl-input")
@@ -766,6 +824,9 @@ class OXXTerminalApp(App):
             self.notify("Trading Bot stopped due to instrument switch.", severity="warning")
 
         old_inst = self.instrument_id
+        if self._price_is_auto():   # the old pair's price means nothing for the new pair
+            self._auto_px = None
+            self.query_one("#price-input", Input).value = ""
         self.instrument_id = new_inst
         self.query_one("#header-bar", Static).update(f" OXX TUI > {self.instrument_id} | Loading Ticker Feed...")
         self.notify(f"Switching instrument from {old_inst} to {new_inst}...", title="Market Switch")
@@ -944,6 +1005,27 @@ class OXXTerminalApp(App):
         """Allows re-authenticating and updating API credentials on the fly."""
         self.push_screen(AuthModal(), self.handle_auth_result)
 
+    def _reset_order_form(self) -> None:
+        """Clear Price / Amount / Total after an order was accepted (or its answer was lost), so the next
+        order starts from the live market and the same amount can't be sent twice by accident."""
+        self._auto_px = None
+        for widget_id in ("#price-input", "#amount-input", "#total-input"):
+            try:
+                self.query_one(widget_id, Input).value = ""
+            except Exception as e:
+                logging.warning(f"Could not clear {widget_id}: {e}")
+        self.update_preflight_calculator()
+
+    @staticmethod
+    def _quick_note(user_price: bool) -> str:
+        return " at your typed price (limit order)" if user_price else " at the live market price (clear or type the Price box to change)"
+
+    def _amount_text(self, inst_id: str, qty: float) -> str:
+        """Amount-box text for a % button: always rounded DOWN to the lot size.  Rounding to nearest could
+        round a 100% SELL up past what is held, and the exchange would refuse it for insufficient balance."""
+        spec = self.instrument_specs.get(inst_id) or {}
+        return quantize_size(qty, spec.get("lotSz") or "0.000001")
+
     def action_quick_load_amount(self, percentage: float) -> None:
         """Calculates and fills the price, amount, and total based on available balance."""
         try:
@@ -954,7 +1036,10 @@ class OXXTerminalApp(App):
             
             price_input_widget = self.query_one("#price-input", Input)
             price_input_val = price_input_widget.value.strip()
-            target_px = float(price_input_val.replace("$", "").replace(",", "")) if price_input_val else curr_px
+            # A price the USER typed is respected.  A price an earlier quick-fill wrote is stale by now:
+            # use the live market instead (this is what made a later SELL go out at the old buy price).
+            user_price = bool(price_input_val) and not self._price_is_auto()
+            target_px = float(price_input_val.replace("$", "").replace(",", "")) if user_price else curr_px
 
             available_quote = self.portfolio_balances.get(quote_asset, 0.0)
             available_base = self.portfolio_balances.get(base_asset, 0.0)
@@ -967,31 +1052,33 @@ class OXXTerminalApp(App):
                 quote_ok = available_quote > 0
                 base_ok = available_base > 0
 
-            if quote_ok:
+            want_buy = quote_ok and (self.pct_side == "buy" or not base_ok)
+            want_sell = base_ok and not want_buy
+            if want_buy:
                 # BUY Side Logic
-                spend_amount = available_quote * percentage
+                spend_amount = available_quote * percentage / (1 + BUY_HEADROOM)  # headroom: see BUY_HEADROOM
                 buy_qty = spend_amount / target_px
                 
                 # Update TUI
-                self.query_one("#amount-input", Input).value = f"{buy_qty:.6f}"
+                self.query_one("#amount-input", Input).value = self._amount_text(self.instrument_id, buy_qty)
                 self.query_one("#total-input", Input).value = f"{spend_amount:.2f}"
-                if not price_input_val:
-                    price_input_widget.value = f"{target_px:.2f}"
+                if not user_price:
+                    self._set_auto_price(target_px)
                 
-                self.notify(f"Prepared to BUY with {int(percentage*100)}% of {quote_asset}", title="Quick Load")
+                self.notify(f"Prepared to BUY with {int(percentage*100)}% of {quote_asset}{self._quick_note(user_price)}", title="Quick Load")
             
-            elif base_ok:
+            elif want_sell:
                 # SELL Side Logic
                 sell_qty = available_base * percentage
                 total_value = sell_qty * target_px
                 
                 # Update TUI
-                self.query_one("#amount-input", Input).value = f"{sell_qty:.6f}"
+                self.query_one("#amount-input", Input).value = self._amount_text(self.instrument_id, sell_qty)
                 self.query_one("#total-input", Input).value = f"{total_value:.2f}"
-                if not price_input_val:
-                    price_input_widget.value = f"{target_px:.2f}"
+                if not user_price:
+                    self._set_auto_price(target_px)
                     
-                self.notify(f"Prepared to SELL {int(percentage*100)}% of {base_asset}", title="Quick Load")
+                self.notify(f"Prepared to SELL {int(percentage*100)}% of {base_asset}{self._quick_note(user_price)}", title="Quick Load")
 
             else:
                 self.notify(f"Nothing to load: {quote_asset} and {base_asset} balances are below ~${DUST_USD:.0f}.", severity="warning", title="Quick Load")
@@ -1139,6 +1226,12 @@ class OXXTerminalApp(App):
         price = price or None
         tp = tp or None
         sl = sl or None
+        if tp or sl:
+            # How OKX wants TP/SL attached to a spot order is not verified, and a TP/SL order would
+            # also sit on the exchange untracked by this app.  Refuse in BOTH modes so simulation
+            # never looks safer than live.  The Net TP / Net SL preview still works.
+            raise ValueError("TP/SL orders are switched off until their OKX format is verified. "
+                             "Clear the Take-Profit / Stop-Loss boxes (the Net TP/SL preview still works).")
 
         # Put size/price exactly on the exchange's grid (and enforce its minimum) in BOTH modes,
         # so simulation exercises the same checks the live path will face.
@@ -1170,6 +1263,7 @@ class OXXTerminalApp(App):
         px_arg = price if ord_type == "limit" else None
 
         if self.simulation_mode:
+            self._check_sim_funds(inst_id, side, float(size), float(price) if price else last)
             self.notify(f"[SIM] {side.upper()} {ord_type} {size} sent to the simulator (no real order).", title="Sim Mode")
             self.log_action(f"[cyan]SIM MODE: {tag} placed {side.upper()} {size} @ {price or 'MKT'}[/cyan]")
             result = self.sim_exchange.place(inst_id, side, ord_type, size, px_arg, order.cl_ord_id)
@@ -1217,6 +1311,8 @@ class OXXTerminalApp(App):
             self.strategy_manager.order_placed(order.bot_id, order.side, order.sz)
         self.log_action(message)
         self.update_history_display()
+        if order.tag == "Manual":
+            self._reset_order_form()   # the order is on its way: nothing stale may be sent twice (bots never touch the form)
         await self._poll_orders()   # market orders usually fill at once: don't wait for the timer
 
     # ---------------------------------------------------------------- order lifecycle
@@ -1241,21 +1337,131 @@ class OXXTerminalApp(App):
     def _on_order_fill(self, order: TrackedOrder, size: float, price: float, fee_quote) -> None:
         """A real piece of fill: the ONLY place the ledger, bot state and history are updated."""
         tag = self._display_tag(order)
+        # A spot BUY's fee comes out of the coin received, so what is actually held (and sellable) is
+        # size minus fee/price.  Counting the gross size would make a bot try to sell coins it does not
+        # have.  ASSUMPTION (unverified on live OKX): if the fee were charged in USDT instead, this
+        # under-counts holdings by at most the fee rate, which errs on the safe side (never over-sells).
+        held = size
+        if order.side == "buy" and fee_quote and price:
+            held = max(0.0, size - abs(fee_quote) / price)
         try:
-            self.accountant.record_confirmed_fill(order.inst_id, order.side, price, size, tag=tag, fee_quote=fee_quote)
+            self.accountant.record_confirmed_fill(order.inst_id, order.side, price, held, tag=tag, fee_quote=fee_quote)
         except Exception as e:
             logging.error(f"Accountant failed to record fill: {e}", exc_info=True)
         if order.bot_id:
             try:
-                self.strategy_manager.order_filled(order.bot_id, order.side, price, size)
+                self.strategy_manager.order_filled(order.bot_id, order.side, price, held)
             except Exception as e:
                 logging.error(f"Failed to update bot fill: {e}", exc_info=True)
+        if self.simulation_mode:
+            self._apply_sim_fill(order, size, price, fee_quote)
         self._record_session_fill(order.inst_id, order.side, fmt_qty(size), fmt_price(price), tag)
         partial = f" (partial {fmt_qty(order.booked_sz)}/{fmt_qty(order.sz)})" if order.booked_sz < order.sz - 1e-12 else ""
         self.log_action(f"[green]FILLED: {tag} {order.side.upper()} {fmt_qty(size)} {order.inst_id} @ {fmt_price(price)}{partial}[/green]")
         self.notify(f"{order.side.upper()} {fmt_qty(size)} @ {fmt_price(price)}{partial}", title="Order Filled")
         self.update_history_display()
         self.update_bot_ui()
+
+    # ---------------------------------------------------------------- simulated wallet
+    def _sim_reserved(self, ccy: str) -> float:
+        """Funds locked by resting simulated orders (like the real exchange locks them)."""
+        locked = 0.0
+        for o in self.order_tracker.open_orders():
+            if o.state not in ("live", "partially_filled"):
+                continue
+            if o.side == "buy" and o.quote == ccy:
+                locked += o.remaining * (o.px or self._price_for(o.inst_id) or 0.0)
+            elif o.side == "sell" and o.base == ccy:
+                locked += o.remaining
+        return locked
+
+    def _sim_available(self, ccy: str) -> float:
+        return max(0.0, self.sim_balances.get(ccy, 0.0) - self._sim_reserved(ccy))
+
+    def _check_sim_funds(self, inst_id: str, side: str, size: float, px) -> None:
+        """Refuse what the real exchange would refuse for lack of funds."""
+        base, _, quote = inst_id.partition("-")
+        if side.lower() == "buy":
+            need = size * float(px or 0.0)   # the buy fee is taken in the coin received, not from the quote
+            have = self._sim_available(quote)
+            if need > have + 1e-9:
+                raise ValueError(f"insufficient simulated {quote}: need {need:,.2f}, available {have:,.2f}")
+        else:
+            have = self._sim_available(base)
+            if size > have + 1e-12:
+                raise ValueError(f"insufficient simulated {base}: need {fmt_qty(size)}, available {fmt_qty(have)}")
+
+    def _apply_sim_fill(self, order: TrackedOrder, size: float, price: float, fee_quote) -> None:
+        fee = abs(fee_quote) if fee_quote is not None else price * size * self.accountant.taker_rate
+        b = self.sim_balances
+        if order.side == "buy":
+            b[order.quote] = b.get(order.quote, 0.0) - price * size
+            b[order.base] = b.get(order.base, 0.0) + size - (fee / price if price else 0.0)  # BUY fee is taken in the coin bought
+        else:
+            b[order.base] = b.get(order.base, 0.0) - size
+            b[order.quote] = b.get(order.quote, 0.0) + price * size - fee
+        self._render_sim_wallet()
+
+    def _render_sim_wallet(self) -> None:
+        self.portfolio_balances = {ccy: self._sim_available(ccy) for ccy in self.sim_balances}
+        lines = ["[bold yellow]\\[SIM] wallet (play money)[/bold yellow]"]
+        for ccy, bal in sorted(self.sim_balances.items()):
+            if abs(bal) > 1e-12:
+                lines.append(f"[bold white]{ccy}:[/bold white] {bal:,.6f}".rstrip("0").rstrip(".") if ccy != "USDT" else f"[bold white]{ccy}:[/bold white] {bal:,.2f}")
+        try:
+            self.query_one("#portfolio-balance", Static).update("\n".join(lines))
+        except Exception as e:
+            logging.warning(f"Could not update sim wallet widget: {e}", exc_info=True)
+
+    # ---------------------------------------------------------------- orders left over from before this session
+    async def _adopt_open_orders(self) -> None:
+        """Live mode: orders already resting on the exchange (from an earlier session) are tracked, shown and cancellable."""
+        if self.simulation_mode:
+            return
+        from okx_private import OKXPrivateClient
+        res = await asyncio.to_thread(OKXPrivateClient.get_pending_orders)
+        if str(res.get("code")) != "0":
+            self.log_action(f"[yellow]Could not list orders already open on OKX ({escape(str(res.get('msg')))}). They are NOT tracked by this session.[/yellow]")
+            return
+        known = {o.ord_id for o in self.order_tracker.open_orders() if o.ord_id}
+        adopted = 0
+        for row in res.get("data") or []:
+            ord_id = row.get("ordId")
+            if not ord_id or ord_id in known:
+                continue
+            try:
+                order = TrackedOrder(
+                    cl_ord_id=row.get("clOrdId") or new_cl_ord_id(), inst_id=row["instId"], side=str(row["side"]).lower(),
+                    ord_type="limit" if row.get("ordType") == "limit" else str(row.get("ordType") or "limit"),
+                    sz=float(row["sz"]), px=float(row["px"]) if row.get("px") else None,
+                    tag="Adopted", ord_id=ord_id,
+                )
+                # Fills that happened BEFORE this session are not ours to book: start counting from here.
+                order.booked_sz = float(row.get("accFillSz") or 0.0)
+                order.booked_value = order.booked_sz * float(row.get("avgPx") or 0.0)
+            except (KeyError, ValueError, TypeError) as e:
+                logging.warning(f"Could not adopt order row {row}: {e}")
+                continue
+            self.order_tracker.register(order)
+            adopted += 1
+        if adopted:
+            self.log_action(f"[yellow]Found {adopted} order(s) already open on OKX from before this session. They are tracked now; "
+                            f"'CANCEL MY OPEN ORDERS' will cancel them.[/yellow]")
+            self.notify(f"{adopted} order(s) from an earlier session are still open on OKX.", severity="warning", title="Open Orders")
+            self.update_history_display()
+
+    async def action_quit(self) -> None:
+        """Quitting does NOT cancel orders resting on the exchange: say so, and ask for a second press."""
+        n = 0 if self.simulation_mode else len(self.order_tracker.open_orders())
+        now = time.monotonic()
+        armed = self._quit_armed_at is not None and now - self._quit_armed_at <= QUIT_CONFIRM_SECONDS
+        if n and not armed:
+            self._quit_armed_at = now
+            self.notify(f"{n} order(s) are still resting on OKX and will STAY there after you quit. "
+                        f"Press 'CANCEL MY OPEN ORDERS' first, or quit again within {QUIT_CONFIRM_SECONDS}s to leave them.",
+                        severity="warning", title="Open Orders", timeout=12)
+            return
+        self.exit()
 
     def _on_order_closed(self, order: TrackedOrder, state: str, unfilled: float) -> None:
         if order.bot_id:
@@ -1372,6 +1578,10 @@ class OXXTerminalApp(App):
         # exit_on_error=False: a failure in any of these must be logged, not exit the app
         self.run_worker(self.hydrate_fill_history(), exit_on_error=False)   # account trade history
         self.run_worker(self.update_accountant_fees(), exit_on_error=False) # account fee tier
+        if self.simulation_mode:
+            self._render_sim_wallet()
+        else:
+            self.run_worker(self._adopt_open_orders(), exit_on_error=False)
 
     def _flush_hubs(self) -> None:
         if self._hubs_dirty:
@@ -1423,6 +1633,9 @@ class OXXTerminalApp(App):
         await self._guarded_poll("orders", self._update_open_orders_and_positions)
 
     async def _update_portfolio_balance(self) -> None:
+        if self.simulation_mode:
+            self._render_sim_wallet()  # simulation: show the play-money wallet, never the real account
+            return
         from okx_private import OKXPrivateClient
         result = await asyncio.to_thread(OKXPrivateClient.get_account_balance)
 
@@ -1552,6 +1765,7 @@ class OXXTerminalApp(App):
                         self._feed_confirmed = inst_id
                         self.log_action(f"[green]Feed live: {inst_id}[/green]")
                     self.current_price = last
+                    self._refresh_preflight_if_market()
                     self.high_24h = ticker.get("high24h", "0.0")
                     self.low_24h = ticker.get("low24h", "0.0")
                     self.volume_24h = ticker.get("vol24h", "0.0")
