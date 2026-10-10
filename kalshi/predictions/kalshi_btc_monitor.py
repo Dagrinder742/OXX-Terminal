@@ -14,23 +14,44 @@ import sys
 import requests
 import websockets
 
-HAS_RICH = True
+HAS_TEXTUAL = True
 try:
-    from rich.console import Console
-    from rich.layout import Layout
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.text import Text
-    console = Console()
+    from textual.app import App, ComposeResult
+    from textual.containers import Container
+    from textual.widgets import Header, Footer, Static
 except ImportError:
-    HAS_RICH = False
+    HAS_TEXTUAL = False
 
-class KalshiBTCMonitor:
+class KalshiBTCMonitor(App):
+    CSS = """
+    Screen {
+        background: #111111;
+        color: #eeeeee;
+    }
+    #header-box {
+        dock: top;
+        height: 3;
+        content-align: center middle;
+        background: #1f2430;
+        color: #5ccfe6;
+        text-style: bold;
+        border-bottom: solid #3b4252;
+    }
+    #main-box {
+        height: 100%;
+        padding: 2 4;
+        background: #111111;
+        color: #ffffff;
+    }
+    """
+
     def __init__(self, strike_price: float = None):
+        super().__init__()
         self.strike_price = strike_price
         self.current_spot = strike_price if strike_price else 82900.00
         self.brti_ticks_60s = []
         self.market_ticker = "AUTO-FETCHING..."
+        self._spot_task = None
 
     def fetch_active_strike(self):
         """Queries Kalshi public endpoint for active 15-min BTC target."""
@@ -97,76 +118,76 @@ class KalshiBTCMonitor:
 
         return round(prob, 3), zone
 
-    def render(self):
+    def compose(self) -> ComposeResult:
+        yield Static("KALSHI 15-MIN BTC LIVE MONITOR", id="header-box")
+        yield Static("Initializing Live Feed...", id="main-box")
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        if not self.strike_price:
+            self.fetch_active_strike()
+        self._spot_task = asyncio.create_task(self.coinbase_listener())
+        self.set_interval(0.5, self.update_display)
+
+    def update_display(self):
         secs_left = self.get_seconds_remaining()
         prob, zone = self.calculate_probability_and_zone()
         strike_disp = f"${self.strike_price:,.2f}" if self.strike_price else "FETCHING..."
+        distance = self.current_spot - (self.strike_price or self.current_spot)
 
-        if HAS_RICH:
-            layout = Layout()
-            layout.split_column(
-                Layout(name="header", size=3),
-                Layout(name="main", size=11),
-                Layout(name="footer", size=3)
-            )
-            layout["header"].update(Panel(Text("KALSHI 15-MIN BTC LIVE MONITOR", style="bold cyan", justify="center"), style="blue"))
+        content = f"""[b]State Engine[/b] ({self.market_ticker})
 
-            table = Table(show_header=False, expand=True)
-            table.add_column("Metric", style="bold yellow")
-            table.add_column("Value", style="bold white")
+  [yellow]Target Strike Price:[/yellow]    {strike_disp}
+  [yellow]Live Spot Feed (Coinbase):[/yellow] ${self.current_spot:,.2f}
+  [yellow]Distance to Strike:[/yellow]       ${distance:+,.2f}
+  [yellow]Time Remaining:[/yellow]           {secs_left // 60:02d}:{secs_left % 60:02d}
+  [yellow]Model Probability:[/yellow]        {prob * 100:.1f}%
+  [yellow]Signal Zone:[/yellow]              [green]{zone}[/green]
 
-            table.add_row("Target Strike Price", strike_disp)
-            table.add_row("Live Spot Feed (Coinbase)", f"${self.current_spot:,.2f}")
-            table.add_row("Distance to Strike", f"${self.current_spot - (self.strike_price or self.current_spot):+,.2f}")
-            table.add_row("Time Remaining", f"{secs_left // 60:02d}:{secs_left % 60:02d}")
-            table.add_row("Model Probability", f"{prob * 100:.1f}%")
-            table.add_row("Signal Zone", f"[bold green]{zone}[/bold green]")
+[dim]Bypassing human emotion. Press Ctrl+C or q to quit.[/dim]"""
 
-            layout["main"].update(Panel(table, title=f"State Engine ({self.market_ticker})", border_style="green"))
-            layout["footer"].update(Panel(Text("Bypassing human emotion. Press Ctrl+C to quit.", style="dim"), border_style="yellow"))
-            
-            console.clear()
-            console.print(layout)
-
-async def coinbase_listener(monitor):
-    uri = "wss://ws-feed.exchange.coinbase.com"
-    subscribe_message = {
-        "type": "subscribe",
-        "product_ids": ["BTC-USD"],
-        "channels": ["ticker"]
-    }
-    
-    while True:
         try:
-            async with websockets.connect(uri) as websocket:
-                await websocket.send(json.dumps(subscribe_message))
-                async for message in websocket:
-                    data = json.loads(message)
-                    if data.get("type") == "ticker" and "price" in data:
-                        monitor.current_spot = float(data["price"])
-                        monitor.brti_ticks_60s.append(monitor.current_spot)
-                        if len(monitor.brti_ticks_60s) > 60:
-                            monitor.brti_ticks_60s.pop(0)
-                        
-                        if monitor.get_seconds_remaining() > 890 or not monitor.strike_price:
-                            monitor.fetch_active_strike()
-                            
-                        monitor.render()
+            main_box = self.query_one("#main-box", Static)
+            main_box.update(content)
         except Exception:
-            await asyncio.sleep(3)
+            pass
 
-async def main():
-    monitor = KalshiBTCMonitor()
-    if len(sys.argv) > 1:
-        monitor.strike_price = float(sys.argv[1].replace(",", ""))
-    else:
-        monitor.fetch_active_strike()
+    async def coinbase_listener(self):
+        uri = "wss://ws-feed.exchange.coinbase.com"
+        subscribe_message = {
+            "type": "subscribe",
+            "product_ids": ["BTC-USD"],
+            "channels": ["ticker"]
+        }
         
-    await coinbase_listener(monitor)
+        while True:
+            try:
+                async with websockets.connect(uri) as websocket:
+                    await websocket.send(json.dumps(subscribe_message))
+                    async for message in websocket:
+                        data = json.loads(message)
+                        if data.get("type") == "ticker" and "price" in data:
+                            self.current_spot = float(data["price"])
+                            self.brti_ticks_60s.append(self.current_spot)
+                            if len(self.brti_ticks_60s) > 60:
+                                self.brti_ticks_60s.pop(0)
+                            
+                            if self.get_seconds_remaining() > 890 or not self.strike_price:
+                                self.fetch_active_strike()
+            except Exception:
+                await asyncio.sleep(3)
+
+def main():
+    strike = None
+    if len(sys.argv) > 1:
+        strike = float(sys.argv[1].replace(",", ""))
+    
+    if not HAS_TEXTUAL:
+        print("Error: 'textual' library is not installed. Please run: pip install textual", file=sys.stderr)
+        sys.exit(1)
+
+    app = KalshiBTCMonitor(strike_price=strike)
+    app.run()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nMonitor closed.")
-
+    main()
