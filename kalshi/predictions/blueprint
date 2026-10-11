@@ -34,3 +34,6 @@
   - Evaluates local window AGAINST macro trend context   
   - Adjusts base probability using higher-timeframe bias 
 └────────────────────────────────────────────────────────┘
+
+
+Commands: selftest, macro, collect, eval --strike X --secs-left N [--base-p 0.55], and report. report is the one to run after your 300+ windows. It compares the up-rate when the bias was bullish against when it was bearish.
