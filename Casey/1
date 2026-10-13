@@ -1,0 +1,1 @@
+llama-cli -hf Qwen/Qwen2.5-Coder-3B-Instruct-GGUF:Q4_K_M -p "Write a Python function that adds two numbers." -n 100 -st --no-display-prompt < /dev/null
