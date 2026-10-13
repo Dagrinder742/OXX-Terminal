@@ -1,0 +1,22 @@
+{
+    "tasks": [
+        {
+            "id": 1,
+            "title": "Asynchronous Gateway Core",
+            "description": "Write a standalone Python module named 'resilient_gateway.py' that establishes an async websocket connection loop using asyncio and websockets, featuring exponential backoff and jitter for network resilience.",
+            "status": "completed"
+        },
+        {
+            "id": 2,
+            "title": "In-Memory Order Book State Engine",
+            "description": "Write a Python module named 'order_book_engine.py' that imports or integrates with the gateway concept to manage an in-memory order book, handling snapshots, delta sorting (bids descending, asks ascending), and sequence-gap validation.",
+            "status": "completed"
+        },
+        {
+            "id": 3,
+            "title": "Latency Decoupling and Telemetry",
+            "description": "Write a final integration module named 'gateway_terminal.py' that ties the resilient gateway and order book together, using 'asyncio.Lock' to decouple high-frequency data ingestion from background telemetry logging so the primary loop never lags.",
+            "status": "completed"
+        }
+    ]
+}

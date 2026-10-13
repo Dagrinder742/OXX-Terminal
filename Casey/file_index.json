@@ -1,0 +1,34 @@
+{
+    "files": {
+        "architect_gemini.py": {
+            "description": "Main autonomous agent core logic with local Qwen-Coder integration, self-repair, and continuous loop.",
+            "version": 14,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/architect_gemini.py"
+        },
+        "tasks.json": {
+            "description": "Persistent task queue for agent objectives.",
+            "version": 1,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/tasks.json"
+        },
+        "auto_helper.py": {
+            "description": "Autonomously generated helper module.",
+            "version": 1,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/auto_helper.py"
+        },
+        "build_market_price_simulator.py": {
+            "description": "Autonomously generated via Qwen for: Build Market Price Simulator",
+            "version": 1,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/build_market_price_simulator.py"
+        },
+        "in-memory_order_book_state_engine.py": {
+            "description": "Autonomously generated via Qwen for: In-Memory Order Book State Engine",
+            "version": 1,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/in-memory_order_book_state_engine.py"
+        },
+        "latency_decoupling_and_telemetry.py": {
+            "description": "Autonomously generated via Qwen for: Latency Decoupling and Telemetry",
+            "version": 1,
+            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/latency_decoupling_and_telemetry.py"
+        }
+    }
+}
