@@ -69,7 +69,7 @@ class SelfCodingAgent:
 
         cmd = [
             "llama-cli",
-            "-hf", "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF:Q4_K_M",
+            "-hf", "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF:Q4_K_M",
             "-p", full_prompt,
             "-n", "768",
             "--gpu-layers", "0",
@@ -103,14 +103,14 @@ class SelfCodingAgent:
         """Pulls the python code out of the model's markdown output (no validation)."""
         code_block = raw_output
 
+        # Use the LAST fenced block: if the prompt is echoed back (it contains the
+        # previous attempt's code on retries), the new answer is always after it.
         if "```python" in raw_output:
-            parts = raw_output.split("```python")
-            if len(parts) > 1:
-                code_block = parts[1].split("```")[0].strip()
+            code_block = raw_output.split("```python")[-1].split("```")[0].strip()
         elif "```" in raw_output:
             parts = raw_output.split("```")
             if len(parts) > 1:
-                code_block = parts[1].strip()
+                code_block = parts[-2].strip()
 
         return code_block
 
@@ -227,12 +227,14 @@ class SelfCodingAgent:
             source = self.read_own_source()
             if source:
                 print(f"[INTROSPECTION] Read {len(source)} chars from {self.core_name}.")
-                task['status'] = "completed"
+            # Never leave a task "pending" after trying it, or the loop retries it forever.
+            task['status'] = "completed" if source else "failed"
         else:
             target_filename = task['title'].lower().replace(" ", "_") + ".py"
             success = self.generate_with_repair(task['title'], task['description'], target_filename)
-            if success:
-                task['status'] = "completed"
+            task['status'] = "completed" if success else "failed"
+            if not success:
+                print(f"[QUEUE] Task #{task['id']} marked FAILED. Set its status back to \"pending\" in tasks.json to retry.")
 
         self.save_tasks(data)
         return True
@@ -261,7 +263,7 @@ class SelfCodingAgent:
         data = self.load_tasks()
         print("\n--- TASK QUEUE STATUS ---")
         for t in data["tasks"]:
-            status_icon = "✓" if t['status'] == "completed" else "•"
+            status_icon = {"completed": "✓", "failed": "✗"}.get(t['status'], "•")
             print(f"{status_icon} [{t['status'].upper()}] Task #{t['id']}: {t['title']}")
         print("-------------------------\n")
 
