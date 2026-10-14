@@ -2,8 +2,8 @@
     "files": {
         "architect_gemini.py": {
             "description": "Main autonomous agent core logic with local Qwen-Coder integration, self-repair, and continuous loop.",
-            "version": 14,
-            "path": "/data/data/com.termux/files/home/OKX-Terminal/Casey/architect_gemini.py"
+            "version": 15,
+            "path": "C:\\Users\\krayz\\AndroidStudioProjects\\OXXTerminal\\app\\src\\main\\Python\\Casey\\architect_gemini.py"
         },
         "tasks.json": {
             "description": "Persistent task queue for agent objectives.",
