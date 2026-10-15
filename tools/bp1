@@ -18,3 +18,6 @@ DESIGN RULES:
 ​1. Strict Sandbox Boundary Enforcement: Just like your path validator (_inside()), any file target must be checked with realpath to guarantee it cannot escape the tools directory (no ../ escapes).
 2. ​Restricted File Extensions/Types: To prevent the agent from accidentally overwriting critical system files or executable binaries, we can restrict writing to safe extensions (e.g., .py, .md, .json, .txt).
 3. ​The Tracking Index Rule: Per your system setup preference, every new file created by the agent must be formally logged to your index/tracking log so you always have a precise record of what code was generated.
+
+CHMOD PROTECTIONS:
+The tool now warns on startup if the file is inside the sandbox and still writable. To edit it yourself later, run chmod u+w, edit, then chmod 444 again. I also blocked writes inside __pycache__, so the model can't plant compiled code.
