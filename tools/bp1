@@ -21,3 +21,10 @@ DESIGN RULES:
 
 CHMOD PROTECTIONS:
 The tool now warns on startup if the file is inside the sandbox and still writable. To edit it yourself later, run chmod u+w, edit, then chmod 444 again. I also blocked writes inside __pycache__, so the model can't plant compiled code.
+
+COMMANDS:
+killall llama-server
+
+llama-server -hf Qwen/Qwen2.5-Coder-3B-Instruct-GGUF --port 8080 &
+
+
