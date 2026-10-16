@@ -21,7 +21,9 @@ import tokenize
 import shlex
 import subprocess
 import urllib.request
+import time
 from pathlib import Path
+from google import genai
 
 SANDBOX = Path(os.environ.get(
     "SANDBOX_DIR", "/data/data/com.termux/files/home/OKX-Terminal/tools")).resolve()
@@ -618,48 +620,36 @@ If a file is longer than what you read, say which lines you reviewed and make no
 claims about lines you have not seen (use the 'To continue' hint to read more).
 When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.8-flash"
 SERVER_URL = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
 
 def ask_model(msgs) -> str:
-    # Context Pruning: Keep only the latest tool output at full size,
-    # and truncate older tool outputs to save precious context tokens.
-    trimmed_msgs = []
-    total_msgs = len(msgs)
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return "ERROR: GEMINI_API_KEY environment variable is not set."
 
-    for idx, (role, content) in enumerate(msgs):
-        # Check if this is an older user message containing tool output
-        if role == "user" and "Here is the output from running" in content and idx < total_msgs - 2:
-            # Grab just the first line (e.g., the file header) as a mini summary
-            first_line = content.splitlines()[0] if content.splitlines() else "tool output"
-            trimmed_msgs.append((role, f"{first_line}\n[older tool output truncated for context efficiency]"))
-        else:
-            trimmed_msgs.append((role, content))
+    client = genai.Client(api_key=api_key)
 
-    formatted_messages = [
-        {"role": role, "content": content} for role, content in trimmed_msgs
-    ]
+    contents = []
+    for role, content in msgs:
+        if role != "system":
+            contents.append(content)
 
-    payload = {
-        "model": MODEL,
-        "messages": formatted_messages,
-        "temperature": 0.2,
-        "max_tokens": 1024
-    }
-
-    req = urllib.request.Request(
-        SERVER_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=300) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            content = res_data["choices"][0]["message"]["content"]
-            return content.strip()
-    except Exception as e:
-        return f"ERROR: Failed to connect to local llama-server: {e}"
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=contents,
+            )
+            return response.text.strip()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                return f"ERROR: Failed to connect to Gemini API: {e}"
+            # Wider back-off: wait 5s, 10s, 15s, 20s to let the queue drain
+            sleep_time = 5 * (attempt + 1)
+            print(f"[info] Server busy (503), retrying in {sleep_time}s (attempt {attempt + 1}/{max_retries})...")
+            time.sleep(sleep_time)
 
 BLOCK_CMDS = ("write_file", "patch_file")
 
