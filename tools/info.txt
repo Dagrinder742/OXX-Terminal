@@ -1,0 +1,173 @@
+IM WRITING THIS FILE FOR YOU CLAUDE AND OUR CURRENT BUILD. TODAY WHILE WORKING ON THE ARCHITECTURE OF 
+SCRIPT "sandbox_tool.py" I WAS USING THE --AGENT FLAG AND RUNNING PROMPTS THREW THE 3B LOCAL MODEL TESTING
+ITS ABILITIES AND OUTPUTS 
+
+MY FIRST PROMPT AND THE MODELS OUTPUT IS BELOW 
+
+#-------------------------FIRST PROMPT
+python sandbox_tool.py --agent "create a skill in python file skill.py. Perceive – The AI gathers environmental and internal states, Reason – Based on perception, it generates possible actions.Evaluate – Assigns scores to actions and picks the best one. Act – Executes the chosen action. Think – Runs the full pipeline."
+model> NOTE: Created skill.py file with basic structure
+CMD: write_file skill.py
+```python
+class Skill:
+    def perceive(self):
+        # Implement perception logic here
+        pass
+
+    def reason(self):
+        # Implement reasoning logic here
+        pass
+
+    def evaluate(self):
+        # Implement evaluation logic here
+        pass
+
+    def act(self):
+        # Implement action execution logic here
+        pass
+
+    def think(self):
+        # Implement the full pipeline logic here
+        self.perceive()
+        self.reason()
+        self.evaluate()
+        self.act()
+```
+tool>  [exit 0]
+Successfully wrote skill.py
+model> DONE: Created a skill.py file with basic structure.
+
+#-------------------------EXPLAIN
+GEMINI AND I NOTICED THAT THE MODEL GAVE US A GENERIC RESPONCE AND RETURNED A BASIC TEMPLATE RATHER THAN
+WRITING AN EXECUTABLE FILE. 
+WE MADE AN ADJUSTMENT TO ITS PROMPT
+SYSTEM = """You are a coding assistant with restricted terminal and file tools.
+Every reply is an optional one-line note followed by ONE command:
+NOTE: <one line: what you just learned or what you plan next>
+CMD: <command>
+
+Your NOTE lines are your memory. Old tool output is deleted, so write findings into a NOTE.
+
+CRITICAL IMPLEMENTATION RULES: #ADDED THIS SECTION TO THE SYSTEM PROMPT TO HOPEFULLY CORRECT THE TEMPLATE FILE WRITES
+- When asked to write or implement Python code, write ACTUAL, FULLY REALIZED LOGIC. 
+- NEVER use 'pass', empty bodies, or '# TODO' placeholders unless the user explicitly asks for an interface or skeleton file. Implement mock data structures, dictionaries, scoring loops, or print statements so the code is genuinely functional.
+
+Commands (paths relative to sandbox root, no pipes/redirects):
+- read_file <path> [start_line] [count]   reads a file with line numbers
+- cat, grep, sed, ls, head, tail, wc      standard tools
+- write_file <path>   creates/overwrites a file. Put the whole file in a ``` block on
+  the lines after the CMD line. Write code normally, no escaping.
+- patch_file <path>   edits a file. Put a SEARCH/REPLACE block after the CMD line.
+...
+"""
+
+-AFTER MAKING THIS ADJUSTMENT TO THE SOURCE CODE WE RAN THE SAME PROMPT AGAIN 
+
+#-------------------------SECOND PROMPT
+python sandbox_tool.py --agent "create a skill in python file skill.py. Perceive – The AI gathers environmental and internal states, Reason – Based on perception, it generates possible actions.Evaluate – Assigns scores to actions and picks the best one. Act – Executes the chosen action. Think – Runs the full pipeline."
+model> NOTE: Created a new file `skill.py` with the initial structure for the skill.
+CMD: write_file skill.py
+```python
+class Skill:
+    def __init__(self):
+        self.perception = None
+        self.reason = None
+        self.evaluate = None
+        self.act = None
+        self.think = None
+
+    def perceive(self):
+        # Placeholder for perception logic
+        self.perception = "Environmental and internal states gathered"
+
+    def reason(self):
+        # Placeholder for reason logic
+        self.reason = "Possible actions generated based on perception"
+
+    def evaluate(self):
+        # Placeholder for evaluation logic
+        self.evaluate = "Actions assigned scores and best one picked"
+
+    def act(self):
+        # Placeholder for act logic
+        self.act = "Chosen action executed"
+
+    def think(self):
+        # Placeholder for think logic
+        self.think = "Full pipeline executed"
+```
+tool>  [exit 0]
+Successfully wrote skill.py
+model> DONE: Created a skill class with placeholders for perception, reason, evaluate, act, and think methods.
+
+#-------------------------EXPLAIN 
+HERE WE SAW A MINOR IMPROVEMENT BUT STILL WASNT WRITING AN EXECUTABLE FILE. THIS IS WHEN GEMINI DECIDED
+WE NEEDED TO NOT ADJUST THE SOURCE CODE NECESSAIRILY BUT MAYBE WE NEEDED TO WRITE THE PROMPT MORE STRICT 
+SO WE ADJUSTED THE PROMPT EXPLAIN 
+
+#-------------------------THIRD PROMPT
+python sandbox_tool.py --agent "create a fully functional python file skill.py containing a Skill class. It must have state tracking (e.g. self.state = {}). perceive() must populate mock environmental metrics, reason() must generate 3 action choices, evaluate() must score them using a random or math metric and pick the highest, act() must print the chosen action, and think() must call all four sequentially in a loop with print statements showing the pipeline steps."
+model> NOTE: Created Skill class with state tracking, mock environmental metrics, action choices, scoring, and execution pipeline.
+CMD: write_file skill.py
+```python
+import random
+
+class Skill:
+    def __init__(self):
+        self.state = {}
+
+    def perceive(self):
+        # Mock environmental metrics
+        self.state['temperature'] = random.randint(10, 30)
+        self.state['humidity'] = random.randint(40, 80)
+        self.state['light'] = random.randint(0, 100)
+
+    def reason(self):
+        # Generate 3 action choices
+        return [
+            f"Action 1: Increase temperature by {random.randint(1, 5)} degrees",
+            f"Action 2: Decrease humidity by {random.randint(1, 10)}%",
+            f"Action 3: Increase light by {random.randint(1, 10)}%"
+        ]
+
+    def evaluate(self, actions):
+        # Score actions using a random metric
+        scores = []
+        for action in actions:
+            score = random.randint(1, 10)
+            scores.append((action, score))
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return scores[0][0]
+
+    def act(self, action):
+        # Print the chosen action
+        print(f"Executing: {action}")
+
+    def think(self):
+        # Call all four sequentially in a loop
+        for _ in range(3):
+            self.perceive()
+            actions = self.reason()
+            chosen_action = self.evaluate(actions)
+            self.act(chosen_action)
+            print(f"State after action: {self.state}")
+
+# Example usage
+skill = Skill()
+skill.think()
+```
+tool>  [exit 0]
+Successfully wrote skill.py
+model> DONE: Created Skill class with state tracking, mock environmental metrics, action choices, scoring, and execution pipeline.
+
+#-------------------------EXPLAIN 
+YOU SEE THE EVOLUTION IN THE OUTPUT IMMEDIATELY. A FILE WRITE THAT IS AN ACTIONABLE PYTHON CODE 
+
+#-------------------------FINAL STATEMENT 
+You just proved a fundamental truth of AI engineering: Small models aren't "dumb"—they are literal-minded.
+you give it exact implementation requirements inside the prompt itself.
+Try running it with a prompt that forces concrete logic rather than placeholders:
+EXAMPLE: python sandbox_tool.py --agent "create a fully functional python file skill.py containing a Skill class. It must have state tracking (e.g. self.state = {}). perceive() must populate mock environmental metrics, reason() must generate 3 action choices, evaluate() must score them using a random or math metric and pick the highest, act() must print the chosen action, and think() must call all four sequentially in a loop with print statements showing the pipeline steps."
+By explicitly commanding it to use dictionaries (self.state), generate choices, run a scoring metric, and include print() statements for every step, you strip away its ability to hide behind comments and placeholders.
+Gemini calls this "architectural contract"
+I Casey the human vouche for this technique when using smaller models and learned valuable understanding today in my build.

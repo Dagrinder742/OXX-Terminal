@@ -12,8 +12,12 @@ if (__name__ == "__main__" and sys.path
         and os.path.realpath(sys.path[0] or ".") == os.path.dirname(os.path.realpath(__file__))):
     sys.path.pop(0)
 
+import ast
 import glob
+import io
 import json
+import re
+import tokenize
 import shlex
 import subprocess
 import urllib.request
@@ -129,6 +133,143 @@ def _search_replace(body):
     if mid is None or end is None:
         raise Refused("malformed SEARCH/REPLACE block; expected <<<<<<< SEARCH, =======, >>>>>>> REPLACE")
     return "\n".join(lines[top + 1:mid]), "\n".join(lines[mid + 1:end])
+
+
+MAX_CHECK_BYTES = 200_000
+_PLACEHOLDER_RE = re.compile(r"\b(todo|fixme|placeholder)\b|implement\b.*\bhere\b", re.I)
+
+
+def _is_stub(fn) -> bool:
+    """True if a function body is only pass / ... / a docstring / raise NotImplementedError."""
+    body = list(fn.body)
+    if (body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)):
+        body = body[1:]
+    if not body:
+        return True  # docstring only
+    if len(body) != 1:
+        return False
+    s = body[0]
+    if isinstance(s, ast.Pass):
+        return True
+    if isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant) and s.value.value is Ellipsis:
+        return True
+    if isinstance(s, ast.Raise) and s.exc is not None:
+        e = s.exc.func if isinstance(s.exc, ast.Call) else s.exc
+        return isinstance(e, ast.Name) and e.id == "NotImplementedError"
+    return False
+
+
+def _arity(fn):
+    """(min, max) positional args a method accepts after self; max None = unlimited."""
+    a = fn.args
+    pos = a.posonlyargs + a.args
+    n = max(len(pos) - 1, 0)  # drop self
+    required = max(len(pos) - len(a.defaults) - 1, 0)
+    return required, (None if a.vararg else n)
+
+
+def check_python(source: str) -> list[str]:
+    """Static check only: the code is parsed, never executed. Returns problem lines.
+
+    Catches syntax errors, stub bodies, placeholder comments, methods shadowed by
+    self.<name> assignments, wrong argument counts on self.method() calls, and demo
+    code that runs on import. It does NOT prove the program works."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        text = (e.text or "").strip()
+        return [f"SYNTAX ERROR line {e.lineno}: {e.msg}" + (f"  -> {text}" if text else "")]
+
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _is_stub(node):
+            problems.append((node.lineno, f"def {node.name}() has no real logic (only pass/.../docstring). Write the actual code."))
+
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.COMMENT and _PLACEHOLDER_RE.search(tok.string):
+                problems.append((tok.start[0], f"placeholder comment: {tok.string.strip()[:60]}"))
+    except (tokenize.TokenError, IndentationError):
+        pass
+
+    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+        methods = {m.name: m for m in cls.body
+                   if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and not m.decorator_list}
+        for m in (m for m in cls.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))):
+            if m.decorator_list or not m.args.args:
+                continue
+            me = m.args.args[0].arg
+            for n in ast.walk(m):
+                targets = []
+                if isinstance(n, ast.Assign):
+                    targets = n.targets
+                elif isinstance(n, (ast.AugAssign, ast.AnnAssign)):
+                    targets = [n.target]
+                for t in targets:
+                    if (isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name)
+                            and t.value.id == me and t.attr in methods):
+                        problems.append((n.lineno, f"{me}.{t.attr} is assigned, but {t.attr}() is also a method of class "
+                                         f"{cls.name}. This replaces the method, so calling {me}.{t.attr}() will fail. Use another name."))
+                if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                        and isinstance(n.func.value, ast.Name) and n.func.value.id == me
+                        and n.func.attr in methods
+                        and not n.keywords and not any(isinstance(x, ast.Starred) for x in n.args)):
+                    lo, hi = _arity(methods[n.func.attr])
+                    got = len(n.args)
+                    if got < lo or (hi is not None and got > hi):
+                        want = f"{lo}" if lo == hi else f"{lo}-{hi if hi is not None else 'many'}"
+                        problems.append((n.lineno, f"{me}.{n.func.attr}() called with {got} argument(s) but "
+                                         f"def {n.func.attr} (line {methods[n.func.attr].lineno}) takes {want}."))
+
+    # Module-like files (they define something) should not run demo calls on import.
+    # A plain script with no defs, like print("hi"), is left alone.
+    module_like = any(isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for n in tree.body)
+    for stmt in tree.body if module_like else []:
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            problems.append((stmt.lineno, "this call runs when the file is imported. Put demo code under "
+                             "if __name__ == \"__main__\":"))
+
+    problems.sort(key=lambda p: p[0])
+    seen, out = set(), []
+    for ln, msg in problems:
+        if (ln, msg) not in seen:
+            seen.add((ln, msg))
+            out.append(f"line {ln}: {msg}")
+    return out
+
+
+def format_check(problems: list[str]) -> str:
+    if not problems:
+        return ("[check] no problems found by the static check. "
+                "The code was NOT executed, so this does not prove it runs correctly.")
+    return (f"[check] {len(problems)} problem(s) found. Fix them with patch_file:\n"
+            + "\n".join("  " + p for p in problems[:15]))
+
+
+def cmd_check_file(path_str: str) -> str:
+    """Static check of a .py file inside the sandbox. Never executes it."""
+    try:
+        _check_path(path_str)
+        target = SANDBOX / path_str
+        if target.suffix != ".py":
+            return "REFUSED: check_file only checks .py files"
+        if not target.is_file():
+            return f"ERROR: no such file: {path_str}"
+        if target.stat().st_size > MAX_CHECK_BYTES:
+            return f"REFUSED: file larger than {MAX_CHECK_BYTES} bytes"
+        return "[exit 0]\n" + format_check(check_python(target.read_text(errors="replace")))
+    except Refused as e:
+        return f"REFUSED: {e}"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def _with_check(result: str, path_str: str) -> str:
+    """Append the static check to a successful write/patch of a .py file."""
+    if not result.startswith("[exit 0]") or not path_str.endswith(".py"):
+        return result
+    return result + "\n" + cmd_check_file(path_str).removeprefix("[exit 0]\n")
 
 
 def log_to_index(filename: str, action: str):
@@ -249,7 +390,7 @@ def validate(argv: list[str]) -> list[str]:
         raise Refused("empty command")
     cmd, args = argv[0], argv[1:]
     if cmd not in POLICY:
-        raise Refused(f"command not allowed: {cmd} (allowed: {', '.join(POLICY)}, read_file, write_file, patch_file)")
+        raise Refused(f"command not allowed: {cmd} (allowed: {', '.join(POLICY)}, read_file, write_file, patch_file, check_file)")
     pol = POLICY[cmd]
     for a in args:
         if a in SHELL_TOKENS:
@@ -349,15 +490,19 @@ def run(command: str, body: str = "") -> str:
             except ValueError:
                 count = 150
             return cmd_read_file(path, start, count)
+        elif cmd == "check_file":
+            if len(parts) != 2:
+                return "REFUSED: usage: check_file <path.py>"
+            return cmd_check_file(parts[1])
         elif cmd == "write_file":
             if len(parts) < 2:
                 return "REFUSED: write_file requires <path>"
             block = _fenced_block(body)
             if block is not None:
-                return cmd_write_file(parts[1], block)
+                return _with_check(cmd_write_file(parts[1], block), parts[1])
             inline = " ".join(parts[2:])
             if inline and "\\n" not in inline:  # short single-line content is fine inline
-                return cmd_write_file(parts[1], inline)
+                return _with_check(cmd_write_file(parts[1], inline), parts[1])
             return ("REFUSED: no file contents received. The ``` block must come on the lines "
                     "AFTER the CMD line, not before it (no escaping needed)")
         elif cmd == "patch_file":
@@ -365,9 +510,9 @@ def run(command: str, body: str = "") -> str:
                 return "REFUSED: patch_file requires <path>"
             sr = _search_replace(body)
             if sr is not None:
-                return cmd_patch_file(parts[1], sr[0], sr[1])
+                return _with_check(cmd_patch_file(parts[1], sr[0], sr[1]), parts[1])
             if len(parts) >= 4 and "\\n" not in parts[2] + parts[3]:
-                return cmd_patch_file(parts[1], parts[2], parts[3])
+                return _with_check(cmd_patch_file(parts[1], parts[2], parts[3]), parts[1])
             return ("REFUSED: no edit received. The SEARCH/REPLACE block must come on the lines "
                     "AFTER the CMD line, not before it:\n"
                     "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE")
@@ -409,6 +554,51 @@ Commands (paths are relative to the sandbox root, no pipes or redirects):
 - write_file <path>   creates/overwrites a file. Put the whole file in a ``` block on
   the lines after the CMD line. Write code normally, no escaping.
 - patch_file <path>   edits a file. Put a SEARCH/REPLACE block after the CMD line.
+- check_file <path.py>   static check (syntax, stub bodies, shadowed methods, wrong
+  argument counts). It never runs the code. It also runs automatically after every
+  write_file/patch_file of a .py file: if it lists problems, fix them with patch_file
+  before you reply DONE.
+
+CODE RULES (when asked to write Python):
+- Write real, working logic. Never leave 'pass', '...', or '# TODO' bodies unless the
+  user asks for a skeleton.
+- Use the names, fields and behaviours the task spells out. If it names a state dict,
+  scoring rule or print messages, implement exactly those.
+- Never give an attribute the same name as a method (self.score = ... next to def score).
+- Put demo code under: if __name__ == "__main__":
+
+Example of the STYLE wanted (real logic, state, computed score, printed steps).
+Write code for the user's actual task, not this one:
+CMD: write_file stock.py
+```python
+class Stock:
+    def __init__(self):
+        self.state = {"items": {}, "log": []}
+
+    def load(self):
+        self.state["items"] = {"bolts": 40, "nuts": 5, "screws": 12}
+        print("load: items =", self.state["items"])
+
+    def rank(self):
+        ranked = sorted(self.state["items"].items(), key=lambda kv: kv[1])
+        print("rank: lowest first =", ranked)
+        return ranked
+
+    def pick(self, ranked):
+        name, qty = ranked[0]
+        print("pick: reorder", name, "(only", qty, "left)")
+        return name
+
+    def run(self):
+        for _ in range(2):
+            self.load()
+            choice = self.pick(self.rank())
+            self.state["log"].append(choice)
+
+
+if __name__ == "__main__":
+    Stock().run()
+```
 
 Example write_file:
 CMD: write_file hello.py
@@ -549,7 +739,7 @@ def agent(task: str, max_steps: int = 6) -> str:
                       "If the task is finished, reply: DONE: <answer>")
         else:
             result = run(cmd, body)
-            if is_block and result.startswith("[exit 0]"):
+            if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:
                 done_ok.add(key)
         print(f"tool>  {_preview(result)}")
 
@@ -562,7 +752,10 @@ def agent(task: str, max_steps: int = 6) -> str:
         # Nudge once per missed note; notes are what survives context pruning.
         nudge = "" if notes else "\n(Reminder: start your next reply with a one-line 'NOTE: <finding>'.)"
         if is_block and result.startswith("[exit 0]"):
-            nudge += "\n(Saved. If the task is finished, reply: DONE: <answer>. Do not repeat this command.)"
+            if "problem(s) found" in result:
+                nudge += "\n(Saved, but the check found problems. Fix them with patch_file, then reply DONE.)"
+            else:
+                nudge += "\n(Saved. If the task is finished, reply: DONE: <answer>. Do not repeat this command.)"
         msgs.append(("user", f"Here is the output from running '{cmd}':\n{result}{nudge}"))
 
     return "(stopped: step limit reached)"

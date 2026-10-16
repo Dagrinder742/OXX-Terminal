@@ -235,6 +235,93 @@ r = subprocess.run([sys.executable, "sandbox_tool.py", "ls"], cwd=shadow, captur
 check("PWNED_BY_SHADOW" not in r.stdout + r.stderr and r.returncode == 0,
       "shadow", "script-dir json.py is not imported", f"exit {r.returncode}")
 
+# ---- check_file: static check, never executes -------------------------------
+V1 = """class Skill:
+    def perceive(self):
+        # Implement perception logic here
+        pass
+"""
+V2 = """class Skill:
+    def __init__(self):
+        self.reason = None
+        self.think = None
+
+    def reason(self):
+        self.reason = "x"
+
+    def think(self):
+        self.reason()
+"""
+V3 = """import random
+
+class Skill:
+    def __init__(self):
+        self.state = {}
+
+    def evaluate(self, actions):
+        return max(actions)
+
+    def think(self):
+        self.evaluate()
+
+skill = Skill()
+skill.think()
+"""
+GOOD = T.SYSTEM.split("CMD: write_file stock.py\n```python\n")[1].split("\n```")[0]
+p1, p2, p3 = T.check_python(V1), T.check_python(V2), T.check_python(V3)
+check(any("no real logic" in x for x in p1) and any("placeholder comment" in x for x in p1),
+      "check", "stub body and placeholder comment found (your first run)", str(p1))
+check(any("replaces the method" in x for x in p2), "check", "attribute shadowing a method found (your second run)", str(p2))
+check(any("takes 1" in x and "0 argument" in x for x in p3), "check", "wrong argument count found", str(p3))
+check(any("runs when the file is imported" in x for x in p3), "check", "demo code outside __main__ guard found")
+check(T.check_python(GOOD) == [], "check", "the worked example in SYSTEM passes its own check", str(T.check_python(GOOD)))
+check(T.check_python('print("a\\nb")\n') == [], "check", "plain one-line script is not flagged")
+se = T.check_python("def f(:\n    pass\n")
+check(len(se) == 1 and se[0].startswith("SYNTAX ERROR line 1"), "check", "syntax error reported with line", str(se))
+check(T.check_python("class A:\n    def f(self, a, b=1, *c): pass\n    def g(self): self.f(1); self.f(1, 2, 3, 4)\n") != [] and
+      not any("argument" in x for x in T.check_python("class A:\n    def f(self, a, b=1, *c): return a\n    def g(self): self.f(1); self.f(1, 2, 3, 4)\n")),
+      "check", "defaults and *args are respected (no false positive)")
+check(not T.check_python("class A:\n    @property\n    def x(self): return 1\n    def set(self): self.y = 2\n"),
+      "check", "decorated methods and unrelated attributes not flagged")
+
+(SB / "bad.py").write_text(V2)
+(SB / "ok.py").write_text(GOOD + "\n")
+r = T.run("check_file bad.py")
+check(r.startswith("[exit 0]") and "problem(s) found" in r, "check", "check_file reports problems", first(r))
+r = T.run("check_file ok.py")
+check("no problems found" in r and "NOT executed" in r, "check", "clean file says it was not executed")
+check(T.run("check_file _t.txt").startswith("REFUSED: check_file only checks .py"), "check", "non-.py refused")
+check(T.run("check_file ../outside.txt").startswith("REFUSED"), "check", "outside path refused")
+check(T.run("check_file nope.py").startswith("ERROR: no such file"), "check", "missing file reported")
+check(T.run("check_file").startswith("REFUSED: usage"), "check", "missing argument refused")
+marker_file = SB / "ran.flag"
+(SB / "evil.py").write_text(f"open({str(marker_file)!r}, 'w').write('x')\n")
+T.run("check_file evil.py")
+check(not marker_file.exists(), "check", "check_file never executes the file")
+r = T.run("write_file auto.py", "```python\n" + V2 + "```")
+check(r.startswith("[exit 0]") and "Successfully wrote auto.py" in r and "problem(s) found" in r,
+      "check", "write_file of a .py reports problems automatically", first(r))
+r = T.run("write_file notes.txt", "```\nTODO later\n```")
+check("[check]" not in r, "check", "non-.py writes are not checked")
+r = T.run("patch_file auto.py", "<<<<<<< SEARCH\n        self.reason = None\n=======\n        self.reason_text = None\n>>>>>>> REPLACE")
+check("Successfully patched" in r or r.startswith("[exit 0]"), "check", "patch applies", first(r))
+check("[check]" in r, "check", "patch_file of a .py also reports", r.splitlines()[-1][:60])
+
+# agent: a failed check blocks the 'already done' shortcut and the model gets fix guidance
+scripted = iter([
+    "NOTE: writing\nCMD: write_file sk.py\n```python\n" + V2 + "```",
+    "NOTE: fixing\nCMD: patch_file sk.py\n<<<<<<< SEARCH\n        self.reason = None\n=======\n        self.reason_v = None\n>>>>>>> REPLACE",
+    "NOTE: done\nDONE: wrote and patched sk.py",
+])
+calls = []
+T.ask_model = lambda msgs: (calls.append(list(msgs)), next(scripted))[1]
+with redirect_stdout(io.StringIO()):
+    answer = T.agent("write sk.py")
+last_user = [c for role, c in calls[1] if role == "user"][-1]
+check("check found problems" in last_user and "Fix them with patch_file" in last_user,
+      "check", "agent tells the model to fix reported problems", last_user.splitlines()[-1][:70])
+check(answer == "wrote and patched sk.py", "check", "agent still finishes normally")
+
 # ---- CLI entry point: one final line only, and the chmod reminder -----------
 r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow,
                    capture_output=True, text=True, env={**os.environ, "SANDBOX_DIR": str(shadow)})

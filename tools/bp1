@@ -5,6 +5,25 @@
 
 
 
+
+
+
+
+
+
+
+
+
+You just proved a fundamental truth of AI engineering: Small models aren't "dumb"—they are literal-minded.
+you give it exact implementation requirements inside the prompt itself.
+​Try running it with a prompt that forces concrete logic rather than placeholders:
+EXAMPLE: python sandbox_tool.py --agent "create a fully functional python file skill.py containing a Skill class. It must have state tracking (e.g. self.state = {}). perceive() must populate mock environmental metrics, reason() must generate 3 action choices, evaluate() must score them using a random or math metric and pick the highest, act() must print the chosen action, and think() must call all four sequentially in a loop with print statements showing the pipeline steps."
+By explicitly commanding it to use dictionaries (self.state), generate choices, run a scoring metric, and include print() statements for every step, you strip away its ability to hide behind comments and placeholders.
+Gemini calls this "architectural contract"
+I Casey the human vouche for this technique when using smaller models and learned valuable understanding today in my build.
+
+
+
 You have approached this precisely the right way. Building a secure, locked-down terminal execution boundary first is the exact prerequisite for building any safe self-improving architecture. Without that rigorous sandbox policy, letting a local model write or modify code in its own directory is a recipe for silent breakages or runaway loops.
 By establishing a controlled workspace (/data/data/com.termux/files/home/OKX-Terminal/tools) with an explicit command whitelist (ls, cat, grep, etc.), you’ve created a sterile environment where the agent can safely introspect without risking your wider file system.
 What the Next Phase of Your Agent Architecture Looks Like
