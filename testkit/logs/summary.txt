@@ -1,0 +1,3 @@
+run  verify   steps   run_python said_done note
+1    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+2    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
