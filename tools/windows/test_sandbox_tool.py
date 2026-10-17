@@ -67,7 +67,12 @@ check(not esc.exists(), "escape", "nothing written outside sandbox")
 for c in ["cat _t.txt", "cat _t*.txt", "grep -n TODO _t.txt", "grep -rn hello .",
           "grep -ie todo _t.txt", "sed -n 's/hello/bye/p' _t.txt", "ls -la", "ls -R",
           "head -n 1 _t.txt", "tail -n 1 _t.txt", "wc -l _t.txt"]:
-    check(T.run(c).startswith("[exit 0]"), "allow", c)
+    cmd_name = c.split()[0]
+    out = T.run(c)
+    if shutil.which(cmd_name) is None:
+        check(out.startswith("ERROR: ") and "not installed" in out, "allow", c, f"binary '{cmd_name}' not installed on host")
+    else:
+        check(out.startswith("[exit 0]"), "allow", c)
 
 # ---- read_file --------------------------------------------------------------
 check(T.run("read_file /etc/passwd").startswith("REFUSED"), "refuse", "read_file /etc/passwd")
@@ -109,8 +114,14 @@ for c in ["write_file guarded.py x", "patch_file guarded.py policy x",
           "sed -i.bak s/policy/x/ g*.py"]:
     check(T.run(c).startswith("REFUSED"), "protected", c)
 check(guard.read_text() == "# policy\n", "protected", "guarded file unchanged")
-check(T.run("cat guarded.py").startswith("[exit 0]"), "protected", "protected file is still readable")
-check(T.run("sed -i s/hello/hi/ _t.txt").startswith("[exit 0]"), "protected", "sed -i on normal file ok")
+
+if shutil.which("cat") is not None:
+    check(T.run("cat guarded.py").startswith("[exit 0]"), "protected", "protected file is still readable via cat")
+else:
+    check(T.run("read_file guarded.py").startswith("[file:"), "protected", "protected file is still readable via read_file")
+
+if shutil.which("sed") is not None:
+    check(T.run("sed -i s/hello/hi/ _t.txt").startswith("[exit 0]"), "protected", "sed -i on normal file ok")
 
 # ---- agent output handling --------------------------------------------------
 kind, text, _b, _n = T.parse_reply("DONE: Intro:\n\n1. one\n2. two")
@@ -321,6 +332,49 @@ last_user = [c for role, c in calls[1] if role == "user"][-1]
 check("check found problems" in last_user and "Fix them with patch_file" in last_user,
       "check", "agent tells the model to fix reported problems", last_user.splitlines()[-1][:70])
 check(answer == "wrote and patched sk.py", "check", "agent still finishes normally")
+
+# ---- run_python: Phase 2 execution & AST safety tests -----------------------
+(SB / "safe_exec.py").write_text("""import json
+import os.path
+import sys
+from pathlib import Path
+
+data = {"status": "ok", "args": sys.argv[1:]}
+print("RESULT:", json.dumps(data))
+""")
+res = T.run("run_python safe_exec.py hello world")
+check(res.startswith("[exit 0]") and 'RESULT: {"status": "ok", "args": ["hello", "world"]}' in res,
+      "run_py", "safe script with json/os.path/pathlib executes successfully")
+
+(SB / "failing_exec.py").write_text("""x = 10 / 0\n""")
+res = T.run("run_python failing_exec.py")
+check(res.startswith("[exit 1]") and "ZeroDivisionError: division by zero" in res,
+      "run_py", "traceback captured on error for self-healing")
+
+# AST security checks intercepting forbidden execution calls
+(SB / "bad_os_system.py").write_text("import os\nos.system('ls')\n")
+res = T.run("run_python bad_os_system.py")
+check(res.startswith("REFUSED") and "prohibited execution call" in res,
+      "run_py", "os.system call blocked by AST check")
+
+(SB / "bad_subprocess.py").write_text("import subprocess\nsubprocess.run(['id'])\n")
+res = T.run("run_python bad_subprocess.py")
+check(res.startswith("REFUSED") and "prohibited execution call" in res,
+      "run_py", "subprocess.run call blocked by AST check")
+
+(SB / "bad_imported.py").write_text("from os import system\nsystem('whoami')\n")
+res = T.run("run_python bad_imported.py")
+check(res.startswith("REFUSED") and "prohibited execution call" in res,
+      "run_py", "from os import system call blocked by AST check")
+
+(SB / "bad_eval.py").write_text("eval('1 + 1')\n")
+res = T.run("run_python bad_eval.py")
+check(res.startswith("REFUSED") and "prohibited call 'eval()'" in res,
+      "run_py", "eval() call blocked by AST check")
+
+check(T.run("run_python ../outside.py").startswith("REFUSED"), "run_py", "outside file refused")
+check(T.run("run_python non_existent.py").startswith("ERROR"), "run_py", "missing file error")
+check(T.run("run_python _t.txt").startswith("REFUSED"), "run_py", "non-.py file refused")
 
 # ---- CLI entry point: one final line only, and the chmod reminder -----------
 r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow,

@@ -20,16 +20,17 @@ import re
 import tokenize
 import shlex
 import subprocess
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 SANDBOX = Path(os.environ.get(
-    "SANDBOX_DIR", "/data/data/com.termux/files/home/OKX-Terminal/tools")).resolve()
-TIMEOUT_S = 300
+    "SANDBOX_DIR", Path(__file__).resolve().parent)).resolve()
+TIMEOUT_S = 900
 MAX_OUTPUT = 8000
 MAX_GLOB = 200
 ALLOW_SED_INPLACE = True
-PREVIEW_LINES = int(os.environ.get("PREVIEW_LINES", "15"))  # 0 = show everything
+PREVIEW_LINES = int(os.environ.get("PREVIEW_LINES", "0"))  # 0 = show everything
 # Files the model may read but never modify (this script, if it lives in the sandbox).
 PROTECTED = {Path(__file__).resolve()}
 
@@ -106,14 +107,19 @@ def _check_writable(p: str):
 def _fenced_block(body):
     """Text of the ``` block in `body`, or None if there is no block.
 
-    The LAST closing fence ends the block, so file content may itself contain
-    fences (markdown). An unclosed block means the reply was probably cut off by
-    the token limit; refuse rather than write a truncated file."""
+    For code files, the first closing fence after start terminates the block.
+    For markdown files (```md), the last closing fence terminates it to allow inner blocks."""
     lines = (body or "").splitlines()
     start = next((i for i, l in enumerate(lines) if l.strip().startswith("```")), None)
     if start is None:
         return None
-    end = next((i for i in range(len(lines) - 1, start, -1) if lines[i].strip() == "```"), None)
+
+    start_tag = lines[start].strip().lower()
+    if start_tag in ("```md", "```markdown"):
+        end = next((i for i in range(len(lines) - 1, start, -1) if lines[i].strip() == "```"), None)
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].strip() == "```"), None)
+
     if end is None:
         raise Refused("code block is not closed (reply may have been cut off); "
                       "write a shorter file or split it into parts")
@@ -179,7 +185,10 @@ def check_python(source: str) -> list[str]:
         tree = ast.parse(source)
     except SyntaxError as e:
         text = (e.text or "").strip()
-        return [f"SYNTAX ERROR line {e.lineno}: {e.msg}" + (f"  -> {text}" if text else "")]
+        msg = e.msg
+        if "```" in text or "```" in (e.text or ""):
+            msg = "unexpected markdown fence ('```') in code. Remove the '```' line."
+        return [f"SYNTAX ERROR line {e.lineno}: {msg}" + (f"  -> {text}" if text else "")]
 
     problems = []
     for node in ast.walk(tree):
@@ -259,6 +268,102 @@ def cmd_check_file(path_str: str) -> str:
         if target.stat().st_size > MAX_CHECK_BYTES:
             return f"REFUSED: file larger than {MAX_CHECK_BYTES} bytes"
         return "[exit 0]\n" + format_check(check_python(target.read_text(errors="replace")))
+    except Refused as e:
+        return f"REFUSED: {e}"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+EXEC_TIMEOUT_S = 900
+DANGEROUS_EXEC_MODULES = {"subprocess", "os", "pty", "commands"}
+DANGEROUS_EXEC_CALLS = {
+    "os": {"system", "popen", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe",
+           "exec", "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp"},
+    "subprocess": {"run", "call", "check_call", "check_output", "Popen", "getstatusoutput", "getoutput"},
+    "pty": {"spawn"},
+    "commands": {"getoutput", "getstatusoutput"},
+}
+
+
+def check_python_execution_safety(source: str):
+    """AST safety check before execution. Intercepts dangerous execution calls like os.system or subprocess."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        return f"SYNTAX ERROR line {e.lineno}: {e.msg}"
+
+    module_map = {}
+    func_map = {}
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                as_name = alias.asname or alias.name
+                if alias.name in DANGEROUS_EXEC_MODULES:
+                    module_map[as_name] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            mod_name = node.module or ""
+            if mod_name in DANGEROUS_EXEC_MODULES:
+                for alias in node.names:
+                    as_name = alias.asname or alias.name
+                    if alias.name == "*":
+                        for fn in DANGEROUS_EXEC_CALLS.get(mod_name, set()):
+                            func_map[fn] = (mod_name, fn)
+                    else:
+                        func_map[as_name] = (mod_name, alias.name)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            lineno = node.lineno
+            if isinstance(node.func, ast.Name):
+                fn_name = node.func.id
+                if fn_name in func_map:
+                    mod_name, orig_fn = func_map[fn_name]
+                    if orig_fn in DANGEROUS_EXEC_CALLS.get(mod_name, set()):
+                        return f"prohibited execution call '{mod_name}.{orig_fn}' via '{fn_name}()' at line {lineno}"
+                if fn_name in ("eval", "exec"):
+                    return f"prohibited call '{fn_name}()' at line {lineno}"
+            elif isinstance(node.func, ast.Attribute):
+                attr_name = node.func.attr
+                if isinstance(node.func.value, ast.Name):
+                    var_name = node.func.value.id
+                    mod_name = module_map.get(var_name, var_name)
+                    if mod_name in DANGEROUS_EXEC_MODULES and attr_name in DANGEROUS_EXEC_CALLS.get(mod_name, set()):
+                        return f"prohibited execution call '{mod_name}.{attr_name}' at line {lineno}"
+
+    return None
+
+
+def cmd_run_python(path_str: str, args: list[str] = None) -> str:
+    """Executes a Python script inside the sandbox after AST safety check."""
+    try:
+        _check_path(path_str)
+        target = SANDBOX / path_str
+        if target.suffix != ".py":
+            return "REFUSED: run_python only runs .py files"
+        if not target.is_file():
+            return f"ERROR: no such file: {path_str}"
+
+        source = target.read_text(errors="replace")
+        safety_error = check_python_execution_safety(source)
+        if safety_error:
+            return f"REFUSED: AST safety check failed for {path_str}: {safety_error}"
+
+        cmd = [sys.executable, str(target)] + (args or [])
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SANDBOX)
+
+        r = subprocess.run(
+            cmd, cwd=SANDBOX, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=EXEC_TIMEOUT_S,
+            env=env
+        )
+        text = (r.stdout + r.stderr) or "(no output)"
+        if len(text) > MAX_OUTPUT:
+            text = text[:MAX_OUTPUT] + f"\n...[truncated at {MAX_OUTPUT} chars]"
+        return f"[exit {r.returncode}]\n{text}"
+    except subprocess.TimeoutExpired:
+        return f"ERROR: execution timed out after {EXEC_TIMEOUT_S}s"
     except Refused as e:
         return f"REFUSED: {e}"
     except Exception as e:
@@ -351,9 +456,15 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
         if not search_text:
             return "REFUSED: search text is empty"
         if search_text not in content:
-            return f"REFUSED: search text not found in {path_str} (it must match exactly, including indentation)"
+            return (f"REFUSED: search text not found in {path_str} (must match exactly, including indentation). "
+                    f"Use 'read_file {path_str}' to inspect the exact lines.")
         if content.count(search_text) > 1:
-            return f"REFUSED: search text is not unique in {path_str}; include more surrounding lines"
+            lines = content.splitlines()
+            first_line_search = search_text.splitlines()[0].strip() if search_text.splitlines() else search_text.strip()
+            matching_lines = [i + 1 for i, line in enumerate(lines) if first_line_search and first_line_search in line]
+            line_info = f" (found around lines {matching_lines[:5]})" if matching_lines else ""
+            return (f"REFUSED: search text is not unique in {path_str}{line_info}. "
+                    f"Use 'read_file {path_str}' to inspect exact surrounding lines and include unique context in SEARCH.")
 
         new_content = content.replace(search_text, replace_text)
         target.write_text(new_content)
@@ -494,6 +605,10 @@ def run(command: str, body: str = "") -> str:
             if len(parts) != 2:
                 return "REFUSED: usage: check_file <path.py>"
             return cmd_check_file(parts[1])
+        elif cmd in ("run_python", "python", "python3"):
+            if len(parts) < 2:
+                return "REFUSED: usage: run_python <path.py> [args...]"
+            return cmd_run_python(parts[1], parts[2:])
         elif cmd == "write_file":
             if len(parts) < 2:
                 return "REFUSED: write_file requires <path>"
@@ -558,6 +673,8 @@ Commands (paths are relative to the sandbox root, no pipes or redirects):
   argument counts). It never runs the code. It also runs automatically after every
   write_file/patch_file of a .py file: if it lists problems, fix them with patch_file
   before you reply DONE.
+- run_python <path.py> [args...]   executes a Python script inside the sandbox after AST
+  safety check. Returns stdout, stderr (including tracebacks for self-healing), and exit code.
 
 CODE RULES (when asked to write Python):
 - Write real, working logic. Never leave 'pass', '...', or '# TODO' bodies unless the
@@ -566,6 +683,14 @@ CODE RULES (when asked to write Python):
   scoring rule or print messages, implement exactly those.
 - Never give an attribute the same name as a method (self.score = ... next to def score).
 - Put demo code under: if __name__ == "__main__":
+
+Rule of Observation:
+- You are legally blind to the success of your code until you execute run_python and parse the output.
+  Do not declare success or patch a file without first reading a traceback or a confirmed exit code.
+
+Prompt Rule:
+- Never issue a DONE command immediately following a patch_file or write_file tool call. You must run run_python
+  at least once after modifying a file to verify an [exit 0] status before declaring completion."
 
 Example of the STYLE wanted (real logic, state, computed score, printed steps).
 Write code for the user's actual task, not this one:
@@ -619,7 +744,8 @@ claims about lines you have not seen (use the 'To continue' hint to read more).
 When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 
 MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
-SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8080/v1/chat/completions")
+SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8081/v1/chat/completions")
+LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))
 
 
 def ask_model(msgs) -> str:
@@ -655,12 +781,22 @@ def ask_model(msgs) -> str:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=300) as response:
+        with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             content = res_data["choices"][0]["message"]["content"]
             return content.strip()
+    except urllib.error.URLError as e:
+        reason_str = str(e)
+        if "refused" in reason_str.lower():
+            return (f"ERROR: Failed to connect to local llama-server at {SERVER_URL}: "
+                    f"connection refused. Please ensure llama-server is running on port 8081 "
+                    f"or set LLAMA_URL environment variable.")
+        elif "time" in reason_str.lower() or "timeout" in reason_str.lower():
+            return (f"ERROR: Failed to connect to local llama-server at {SERVER_URL}: "
+                    f"request timed out after {LLAMA_TIMEOUT}s. (You can increase this via LLAMA_TIMEOUT env var).")
+        return f"ERROR: Failed to connect to local llama-server at {SERVER_URL}: {e}"
     except Exception as e:
-        return f"ERROR: Failed to connect to local llama-server: {e}"
+        return f"ERROR: Failed to connect to local llama-server at {SERVER_URL}: {e}"
 
 BLOCK_CMDS = ("write_file", "patch_file")
 
@@ -694,6 +830,37 @@ def parse_reply(reply: str):
     return None, "", "", notes
 
 
+def build_clean_assistant_reply(reply: str, kind: str, text: str, body: str, notes: list[str]) -> str:
+    """Sanitizes an assistant reply so that only the single active command and its block content
+    are recorded in history, stripping any trailing hallucinated commands or fake DONE messages."""
+    note_line = f"NOTE: {notes[0]}" if notes else ""
+    if kind == "done":
+        prefix = (note_line + "\n") if note_line else ""
+        return f"{prefix}DONE: {text}"
+    elif kind == "cmd":
+        cmd_name = text.split(" ", 1)[0]
+        prefix = (note_line + "\n") if note_line else ""
+        if cmd_name == "write_file":
+            try:
+                block = _fenced_block(body)
+                if block is not None:
+                    return f"{prefix}CMD: {text}\n```python\n{block.strip()}\n```"
+            except Refused:
+                pass
+            return f"{prefix}CMD: {text}"
+        elif cmd_name == "patch_file":
+            try:
+                sr = _search_replace(body)
+                if sr is not None:
+                    return f"{prefix}CMD: {text}\n<<<<<<< SEARCH\n{sr[0]}\n=======\n{sr[1]}\n>>>>>>> REPLACE"
+            except Refused:
+                pass
+            return f"{prefix}CMD: {text}"
+        else:
+            return f"{prefix}CMD: {text}"
+    return reply
+
+
 def _preview(result: str) -> str:
     """Terminal display only. The model always receives the full result."""
     lines = result.splitlines()
@@ -709,17 +876,35 @@ def agent(task: str, max_steps: int = 6) -> str:
     consecutive_failures = 0
     last_key = None
     done_ok = set()  # write/patch commands that already succeeded
+    dirty = False    # Track whether code was modified without a post-patch run_python verification
 
     for step in range(max_steps):
         reply = ask_model(msgs)
         if reply.startswith("ERROR: Failed to connect"):
             return f"(stopped: {reply})"
-        msgs.append(("assistant", reply))
-        print(f"model> {reply}")
 
         kind, text, body, notes = parse_reply(reply)
+        clean_reply = build_clean_assistant_reply(reply, kind, text, body, notes)
+
         if kind == "done":
-            return text  # already shown above as the model> line
+            if dirty:
+                nudge_msg = ("REFUSED: Cannot declare DONE yet. You modified code but have not executed "
+                             "'run_python' to verify an [exit 0] status post-patch. Execute 'run_python' first.")
+                msgs.append(("assistant", clean_reply))
+                print(f"model> {clean_reply}")
+                print(f"tool>  {nudge_msg}")
+                msgs.append(("user", nudge_msg))
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    return "(stopped: aborted due to consecutive failures)"
+                continue
+
+            msgs.append(("assistant", clean_reply))
+            print(f"model> {clean_reply}")
+            return text
+
+        msgs.append(("assistant", clean_reply))
+        print(f"model> {clean_reply}")
 
         if kind != "cmd":
             msgs.append(("user", "Reply with 'CMD: <command>' or 'DONE: <answer>'."))
@@ -733,7 +918,8 @@ def agent(task: str, max_steps: int = 6) -> str:
             consecutive_failures = 0
             last_key = key
 
-        is_block = cmd.split(" ", 1)[0] in BLOCK_CMDS
+        cmd_name = cmd.split(" ", 1)[0]
+        is_block = cmd_name in BLOCK_CMDS
         if is_block and key in done_ok:  # don't redo a finished write/patch
             result = ("REFUSED: you already ran this exact command successfully. "
                       "If the task is finished, reply: DONE: <answer>")
@@ -741,6 +927,12 @@ def agent(task: str, max_steps: int = 6) -> str:
             result = run(cmd, body)
             if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:
                 done_ok.add(key)
+            elif cmd_name in ("run_python", "python", "python3"):
+                if result.startswith("[exit 0]"):
+                    dirty = False
+                else:
+                    dirty = True
+
         print(f"tool>  {_preview(result)}")
 
         if result.startswith(("REFUSED:", "ERROR:")):
