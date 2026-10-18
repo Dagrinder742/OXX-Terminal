@@ -2,6 +2,31 @@
 """
 sandbox_tool.py - lets a local GGUF model run a small allowlist of terminal
 commands and secure file modification tools inside one sandbox directory.
+
+SECURITY CONTRACT (what is enforced, and where):
+1. SANDBOX CONTAINMENT. Allowlisted commands and the built-ins (read_file, write_file,
+   patch_file, check_file) resolve every path with realpath and refuse anything outside
+   SANDBOX. run_python enforces the same thing at RUNTIME with an audit hook inside the
+   child process (reads, writes, deletes, listings, renames, chmod, links, subprocesses,
+   network, ctypes). A script cannot reach outside no matter how it is written, because
+   the hook watches what it DOES, not what it looks like. Obfuscation (base64, getattr,
+   aliases like e = exec) does not get around it.
+2. FILE PROTECTION. This script and refused.log are in PROTECTED: no tool and no
+   run_python script may modify them. chmod 444 / attrib +r is a second layer only; it
+   does NOT stop a rename-over or a chmod-back, so PROTECTED is the real defence.
+3. AUTHORIZED OVERRIDES. A human architect (or an external agent working for one) edits
+   this file with the permission bit toggled (chmod u+w / attrib -r), then re-locks it.
+   After ANY edit, run:  python test_sandbox_tool.py   It must print ALL OK. A change
+   that makes it fail has weakened the guard; do not ship it.
+4. EXECUTION SAFETY. Only run_python runs code. It is POSIX-only (Linux, Termux, WSL).
+   On Windows it is switched off, because the limits it relies on do not exist there.
+   There is no shell: pipes, redirects, chaining, python -c and base64 tricks do nothing.
+5. STATE VERIFICATION. The agent loop refuses DONE while a .py file was changed and not
+   run since, while its last run failed, or while a write/patch was refused and never
+   redone (REQUIRE_VERIFY=0 turns this off). exit 0 proves it ran, not that it is right.
+KNOWN GAPS: os.mkfifo / os.mknod / os.chroot have no audit event; a determined attacker
+using interpreter internals could still get out. This is a guard against a model's
+mistakes and tricks, not a container.
 """
 import os
 import sys
@@ -29,19 +54,22 @@ import time
 import urllib.request
 from pathlib import Path
 
+_TERMUX_SANDBOX = Path("/data/data/com.termux/files/home/OKX-Terminal/tools")
 SANDBOX = Path(os.environ.get(
-    "SANDBOX_DIR", "/data/data/com.termux/files/home/OKX-Terminal/tools")).resolve()
-TIMEOUT_S = 300
+    "SANDBOX_DIR", _TERMUX_SANDBOX if _TERMUX_SANDBOX.is_dir() else Path(__file__).resolve().parent)).resolve()
+TIMEOUT_S = 900
 MAX_OUTPUT = 8000
 MAX_GLOB = 200
 ALLOW_SED_INPLACE = True
-PREVIEW_LINES = int(os.environ.get("PREVIEW_LINES", "15"))  # 0 = show everything
+PREVIEW_LINES = int(os.environ.get("PREVIEW_LINES", "0"))  # 0 = show everything
 # Files the model may read but never modify (this script, if it lives in the sandbox).
 AUDIT_LOG = Path(os.environ.get("AUDIT_LOG", str(Path(__file__).resolve().with_name("refused.log"))))
 PROTECTED = {Path(__file__).resolve(), AUDIT_LOG.resolve()}
 # run_python limits (see the notes above cmd_run_python)
-RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0"
-RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "10"))
+RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # needs POSIX limits
+RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "60"))
+REQUIRE_VERIFY = os.environ.get("REQUIRE_VERIFY", "1") != "0"                 # block DONE until code was run
+REQUIRE_RUN_BEFORE_PATCH = os.environ.get("REQUIRE_RUN_BEFORE_PATCH", "0") == "1"  # strict mode for small models
 RUN_MEM_MB = int(os.environ.get("RUN_MEM_MB", "1024"))  # watched from outside; 0 = no limit
 RUN_MAX_FILE_MB = 20
 
@@ -191,7 +219,10 @@ def check_python(source: str) -> list[str]:
         tree = ast.parse(source)
     except SyntaxError as e:
         text = (e.text or "").strip()
-        return [f"SYNTAX ERROR line {e.lineno}: {e.msg}" + (f"  -> {text}" if text else "")]
+        msg = e.msg
+        if isinstance(e, IndentationError) or "indent" in msg.lower():
+            msg += ". Every line of a REPLACE block needs the file's exact leading spaces (4 per level)."
+        return [f"SYNTAX ERROR line {e.lineno}: {msg}" + (f"  -> {text}" if text else "")]
 
     problems = []
     for node in ast.walk(tree):
@@ -548,7 +579,8 @@ def cmd_run_python(path_str: str) -> str:
     """Run a .py file inside the sandbox under the audit-hook policy. Output and
     tracebacks come back to the model so it can fix its own code."""
     if not RUN_PYTHON:
-        return "REFUSED: run_python is switched off (RUN_PYTHON=0)"
+        return ("REFUSED: run_python is switched off (RUN_PYTHON=0, or this is Windows, "
+                "where its limits do not exist). Run it on Linux, Termux or WSL.")
     try:
         _check_path(path_str)
         target = Path(os.path.realpath(SANDBOX / path_str))
@@ -690,6 +722,52 @@ def cmd_write_file(path_str: str, content: str) -> str:
         return f"ERROR: {e}"
 
 
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" \t"))
+
+
+def _reindent_tail(content, idx, search_text, replace_text):
+    """A one-line SEARCH matched after the line's leading spaces, and REPLACE has several
+    lines written without that indent: add the file's indent to REPLACE lines 2+."""
+    if "\n" in search_text or "\n" not in replace_text:
+        return replace_text
+    line_start = content.rfind("\n", 0, idx) + 1
+    prefix = content[line_start:idx]
+    if not prefix or prefix.strip():
+        return replace_text
+    first, *rest = replace_text.split("\n")
+    body = [l for l in rest if l.strip()]
+    if not body or min(_indent(l) for l in body) >= len(prefix):
+        return replace_text  # already written with the file's indentation
+    return "\n".join([first] + [(prefix + l) if l.strip() else l for l in rest])
+
+
+def _fuzzy_replace(content, search_text, replace_text):
+    """Match SEARCH ignoring leading/trailing spaces on each line. Returns new content,
+    'AMBIGUOUS', or None. REPLACE is shifted by the difference in indentation."""
+    s_lines = search_text.split("\n")
+    if not any(l.strip() for l in s_lines):
+        return None
+    f_lines = content.split("\n")
+    n = len(s_lines)
+    hits = [i for i in range(len(f_lines) - n + 1)
+            if all(f_lines[i + k].strip() == s_lines[k].strip() for k in range(n))]
+    if not hits:
+        return None
+    if len(hits) > 1:
+        return "AMBIGUOUS"
+    i = hits[0]
+    f_ind, s_ind = _indent(f_lines[i]), _indent(s_lines[0])
+    pad = f_lines[i][:f_ind]
+    if f_ind >= s_ind:
+        base = pad[:f_ind - s_ind]
+        new = [(base + l) if l.strip() else l for l in replace_text.split("\n")]
+    else:  # model indented more than the file: strip the excess where present
+        cut = s_ind - f_ind
+        new = [(l[cut:] if l[:cut].strip() == "" else l) for l in replace_text.split("\n")]
+    return "\n".join(f_lines[:i] + new + f_lines[i + n:])
+
+
 def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
     """Safe built-in tool to patch an existing file via unique search/replace blocks."""
     try:
@@ -701,15 +779,31 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
 
         if not search_text:
             return "REFUSED: search text is empty"
-        if search_text not in content:
-            return f"REFUSED: search text not found in {path_str} (it must match exactly, including indentation)"
-        if content.count(search_text) > 1:
-            return f"REFUSED: search text is not unique in {path_str}; include more surrounding lines"
-
-        new_content = content.replace(search_text, replace_text)
+        if search_text == replace_text:
+            return ("REFUSED: SEARCH and REPLACE are identical, so nothing would change. "
+                    "Write the corrected lines in REPLACE (keep the file's leading spaces).")
+        note = ""
+        if search_text in content:
+            if content.count(search_text) > 1:
+                return f"REFUSED: search text is not unique in {path_str}; include more surrounding lines"
+            idx = content.index(search_text)
+            fixed = _reindent_tail(content, idx, search_text, replace_text)
+            if fixed != replace_text:
+                note = " (indentation of the new lines adjusted to match the file)"
+            new_content = content[:idx] + fixed + content[idx + len(search_text):]
+        else:
+            hit = _fuzzy_replace(content, search_text, replace_text)
+            if hit is None:
+                return (f"REFUSED: search text not found in {path_str} (it must match exactly, "
+                        f"including indentation). Use read_file {path_str} to copy the exact lines.")
+            if hit == "AMBIGUOUS":
+                return f"REFUSED: search text matches more than one place in {path_str}; include more surrounding lines"
+            new_content, note = hit, " (leading spaces adjusted to match the file)"
+        if new_content == content:
+            return "REFUSED: that edit would not change the file"
         target.write_text(new_content)
         log_to_index(path_str, "patched")
-        return f"[exit 0]\nSuccessfully patched {path_str}"
+        return f"[exit 0]\nSuccessfully patched {path_str}{note}"
     except Refused as e:
         return f"REFUSED: {e}"
     except Exception as e:
@@ -959,6 +1053,14 @@ FILES: never create or edit files with cat, echo, printf, heredocs, redirects, p
 base64 or any other trick. Those are refused. Only write_file and patch_file write files, and
 only run_python runs code.
 
+RULE OF OBSERVATION: you cannot know your code works until run_python has run it and you
+have read the output. Never declare success, and never patch, on a guess. After any
+write_file or patch_file of a .py file, run_python it before you reply DONE.
+
+A patch only counts when the tool answers "Successfully patched". If a patch or write was
+REFUSED, fix the problem and send it again before you say DONE. Every line you put in a
+REPLACE block needs the same leading spaces the file has.
+
 CODE RULES (when asked to write Python):
 - Write real, working logic. Never leave 'pass', '...', or '# TODO' bodies unless the
   user asks for a skeleton.
@@ -1021,6 +1123,7 @@ When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
 BACKEND = os.environ.get("BACKEND", "local").lower()      # local | gemini
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # slow phones: raise it, not the model
 SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8080/v1/chat/completions")
 
 
@@ -1092,7 +1195,7 @@ def _ask_local(trimmed_msgs) -> str:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=300) as response:
+        with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             content = res_data["choices"][0]["message"]["content"]
             return content.strip()
@@ -1141,21 +1244,78 @@ def _preview(result: str) -> str:
             + f"\n... [{hidden} more lines were sent to the model; PREVIEW_LINES=0 shows all]")
 
 
+def _local_imports(path_str: str, seen=None) -> set:
+    """Names of sandbox .py files that `path_str` imports (directly or through each other)."""
+    seen = seen if seen is not None else set()
+    try:
+        tree = ast.parse((SANDBOX / path_str).read_text(errors="replace"))
+    except (OSError, SyntaxError, ValueError):
+        return seen
+    for n in ast.walk(tree):
+        mods = ([a.name for a in n.names] if isinstance(n, ast.Import)
+                else [n.module] if isinstance(n, ast.ImportFrom) and n.module and not n.level else [])
+        for m in mods:
+            f = m.split(".")[0] + ".py"
+            if f not in seen and (SANDBOX / f).is_file():
+                seen.add(f)
+                _local_imports(f, seen)
+    return seen
+
+
+def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
+    """What goes into history. For an ordinary command keep only NOTE + CMD, so text the
+    model invented after the command (fake tool output, a fake DONE) is not remembered."""
+    if kind == "cmd" and text.split(" ", 1)[0] not in BLOCK_CMDS:
+        return (f"NOTE: {notes[0]}\n" if notes else "") + f"CMD: {text}"
+    return reply
+
+
+def _norm(path_str: str) -> str:
+    return os.path.normpath(path_str)
+
+
 def agent(task: str, max_steps: int = 10) -> str:
     msgs = [("system", SYSTEM), ("user", task)]
     consecutive_failures = 0
     last_key = None
-    done_ok = set()  # write/patch commands that already succeeded
+    done_ok = set()      # write/patch commands that already succeeded
+    # Verification state (the DONE gate). A claim of success needs evidence from run_python.
+    unverified = set()   # .py files changed since they were last run
+    last_exit = {}       # .py file -> exit code of its most recent run
+    refused_edit = {}    # file -> command that was REFUSED and not yet redone successfully
+    problems = set()     # .py files whose last static check listed problems
+    done_blocked = 0
 
     for step in range(max_steps):
         reply = ask_model(msgs)
         if reply.startswith("ERROR: Failed to connect"):
             return f"(stopped: {reply})"
-        msgs.append(("assistant", reply))
+        kind, text, body, notes = parse_reply(reply)
+        msgs.append(("assistant", _clean_reply(reply, kind, text, notes)))
         print(f"model> {reply}")
 
-        kind, text, body, notes = parse_reply(reply)
         if kind == "done":
+            why = []
+            if REQUIRE_VERIFY and RUN_PYTHON:
+                if unverified:
+                    why.append("you changed " + ", ".join(sorted(unverified)) +
+                               " and have not run it since: use run_python on it first")
+                bad = sorted(f for f, c in last_exit.items() if c != 0 and f not in unverified)
+                if bad:
+                    why.append("the last run of " + ", ".join(bad) + " failed; fix it with patch_file "
+                               "and run_python again")
+            if refused_edit:
+                why.append("these were REFUSED and never applied: " +
+                           "; ".join(f"{c}" for c in refused_edit.values()) +
+                           " (send them again, corrected)")
+            if why:
+                done_blocked += 1
+                msg = "REFUSED: cannot accept DONE yet: " + "; ".join(why) + "."
+                print(f"tool>  {msg}")
+                if done_blocked >= 3:
+                    return "(stopped: DONE was blocked 3 times; " + "; ".join(why) + ")"
+                msgs.append(("user", msg))
+                continue
             return text  # already shown above as the model> line
 
         if kind != "cmd":
@@ -1174,8 +1334,17 @@ def agent(task: str, max_steps: int = 10) -> str:
             consecutive_failures = 0
             last_key = key
 
-        is_block = cmd.split(" ", 1)[0] in BLOCK_CMDS
-        if is_block and key in done_ok:  # don't redo a finished write/patch
+        words = cmd.split()
+        name = words[0] if words else ""
+        target = _norm(words[1]) if len(words) > 1 else ""
+        is_block = name in BLOCK_CMDS
+        is_py = target.endswith(".py")
+
+        if (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
+                and target in unverified and target not in problems):
+            result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
+                      f"(A patch has to answer a real error or check problem.)")
+        elif is_block and key in done_ok:  # don't redo a finished write/patch
             result = ("REFUSED: you already ran this exact command successfully. "
                       "If the task is finished, reply: DONE: <answer>")
         else:
@@ -1183,6 +1352,25 @@ def agent(task: str, max_steps: int = 10) -> str:
             if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:
                 done_ok.add(key)
         print(f"tool>  {_preview(result)}")
+
+        ok = result.startswith("[exit 0]")
+        if is_block and target:
+            if ok:
+                refused_edit.pop(target, None)
+                if is_py:
+                    unverified.add(target)
+                    last_exit.pop(target, None)
+                    (problems.add if "problem(s) found" in result else problems.discard)(target)
+            elif result.startswith(("REFUSED:", "ERROR:")):
+                refused_edit[target] = f"{name} {target}"
+        elif name == "run_python" and is_py and result.startswith("[exit"):
+            code = int(result.split("]", 1)[0].split()[1]) if result.split("]", 1)[0].split()[1:] else 1
+            seen = {target} | _local_imports(target)
+            unverified -= seen
+            last_exit[target] = code
+            if code == 0:
+                for f in seen:  # a clean run of main.py also exercised the helpers it imports
+                    last_exit[f] = 0 if f in last_exit or f != target else last_exit.get(f, 0)
 
         if result.startswith(("REFUSED:", "ERROR:")):
             consecutive_failures += 1
@@ -1192,16 +1380,17 @@ def agent(task: str, max_steps: int = 10) -> str:
 
         # Nudge once per missed note; notes are what survives context pruning.
         nudge = "" if notes else "\n(Reminder: start your next reply with a one-line 'NOTE: <finding>'.)"
-        words = cmd.split()
-        if is_block and result.startswith("[exit 0]"):
+        if is_block and ok:
             if "problem(s) found" in result:
                 nudge += "\n(Saved, but the check found problems. Fix them with patch_file, then run_python it.)"
-            elif RUN_PYTHON and len(words) > 1 and words[1].endswith(".py"):
+            elif RUN_PYTHON and is_py:
                 nudge += f"\n(Saved. Verify it now: run_python {words[1]}. Do not repeat this command.)"
             else:
                 nudge += "\n(Saved. If the task is finished, reply: DONE: <answer>. Do not repeat this command.)"
-        elif words and words[0] == "run_python":
-            if result.startswith("[exit 0]"):
+        elif is_block and result.startswith("REFUSED:"):
+            nudge += "\n(Nothing was changed. Fix the problem named above and send the command again.)"
+        elif name == "run_python":
+            if ok:
                 nudge += "\n(It ran OK. If the output matches the task, reply DONE and say what you saw.)"
             elif result.startswith("[exit"):
                 nudge += "\n(It failed. Read the error, fix the file with patch_file, then run_python again.)"

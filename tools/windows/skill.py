@@ -1,48 +1,41 @@
-import random
-
 class Skill:
     def __init__(self):
-        self.state = {"environment": {}, "actions": []}
+        self.state = {"metrics": {}, "history": []}
 
     def perceive(self):
-        # Mock environmental metrics
-        self.state["environment"] = {
+        import random
+        self.state["metrics"] = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: Environment =", self.state["environment"])
+        print("Perceive:", self.state["metrics"])
+        return self.state["metrics"]
 
     def reason(self):
-        # Generate 3 action choices based on environmental metrics
-        actions = [
-            f"Action 1: Increase temperature to {self.state['environment']['temperature'] + 5}",
-            f"Action 2: Decrease humidity to {self.state['environment']['humidity'] - 10}",
-            f"Action 3: Increase light to {self.state['environment']['light'] + 20}"
-        ]
-        self.state["actions"] = actions
-        print("Reason: Actions =", self.state["actions"])
+        actions = ["move", "rest", "work"]
+        print("Reason:", actions)
+        return actions
 
-    def evaluate(self):
-        # Score actions using a random metric
-        scores = [(action, random.randint(1, 10)) for action in self.state["actions"]]
-        scores.sort(key=lambda x: x[1], reverse=True)
-        print("Evaluate: Scores =", scores)
-        return scores[0][0]
+    def evaluate(self, actions):
+        scores = {action: len(action) for action in actions}
+        max_score = max(scores.values())
+        best_action = [action for action, score in scores.items() if score == max_score][0]
+        print("Evaluate:", scores)
+        return best_action
 
-    def act(self, chosen_action):
-        # Print the chosen action
-        print("Act: Chosen Action =", chosen_action)
+    def act(self, action):
+        print("Act:", action)
+        return action
 
-    def think(self):
-        # Call all four sequentially
-        self.perceive()
-        self.reason()
-        scores = self.evaluate()
-        chosen_action = self.evaluate()
-        self.act(chosen_action)
-        print("Think: Pipeline steps completed")
+    def think(self, rounds=3):
+        for _ in range(rounds):
+            metrics = self.perceive()
+            actions = self.reason()
+            best_action = self.evaluate(actions)
+            self.act(best_action)
+            self.state["history"].append(best_action)
+        return self.state["history"]
 
 if __name__ == "__main__":
-    skill = Skill()
-    skill.think()
+    Skill().think()
