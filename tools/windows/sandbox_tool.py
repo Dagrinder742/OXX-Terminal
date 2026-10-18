@@ -2,6 +2,28 @@
 """
 sandbox_tool.py - lets a local GGUF model run a small allowlist of terminal
 commands and secure file modification tools inside one sandbox directory.
+
+---ADDITONAL INFORMATION REGARDING SECURITY OF THE SOURCE FILE AND AGENT REWRITES---
+
+sandbox_tool.py - Core Security Harness & Sandbox Supervisor.
+=============================================================================
+ARCHITECTURAL SECURITY CONTRACT (OS-LEVEL GOVERNANCE):
+1. SANDBOX CONTAINMENT: All file operations and python executions are strictly
+   enforced to stay within the SANDBOX root directory path. No path traversal
+   outside the sandbox is ever permitted.
+2. OS-LEVEL FILE PROTECTION: This script is protected against automated agent
+   writes via file system permissions (e.g., `chmod 444` on Linux/Termux or
+   `attrib +r` on Windows).
+3. AUTHORIZED ARCHITECTURAL OVERRIDES: When structural changes or harness
+   upgrades are required by the human architect or advanced external agents
+   (such as Claude or Android Studio Gemini), permissions must be explicitly
+   toggled (`chmod u+w` or `attrib -r`) and re-locked immediately after.
+4. EXECUTION SAFETY: Python execution requires prior AST safety checks to block
+   dangerous system calls (e.g., subprocess, os.system, eval, exec). Shell
+   chaining, pipes, and redirects are strictly prohibited.
+5. STATE VERIFICATION: Code modifications require explicit post-patch execution
+   and a verified [exit 0] status before completion can be declared.
+=============================================================================
 """
 import os
 import sys
@@ -183,10 +205,16 @@ def check_python(source: str) -> list[str]:
     code that runs on import. It does NOT prove the program works."""
     try:
         tree = ast.parse(source)
+    except IndentationError as e:
+        text = (e.text or "").strip()
+        msg = f"IndentationError: {e.msg}. Ensure your SEARCH/REPLACE block preserves exact leading indentation."
+        return [f"SYNTAX ERROR line {e.lineno}: {msg}" + (f"  -> {text}" if text else "")]
     except SyntaxError as e:
         text = (e.text or "").strip()
         msg = e.msg
-        if "```" in text or "```" in (e.text or ""):
+        if "expected an indented block" in msg.lower() or "indent" in msg.lower():
+            msg = f"{e.msg}. Ensure your SEARCH/REPLACE block preserves exact leading indentation."
+        elif "```" in text or "```" in (e.text or ""):
             msg = "unexpected markdown fence ('```') in code. Remove the '```' line."
         return [f"SYNTAX ERROR line {e.lineno}: {msg}" + (f"  -> {text}" if text else "")]
 
@@ -334,6 +362,9 @@ def check_python_execution_safety(source: str):
     return None
 
 
+EXECUTED_FILES = set()
+
+
 def cmd_run_python(path_str: str, args: list[str] = None) -> str:
     """Executes a Python script inside the sandbox after AST safety check."""
     try:
@@ -358,6 +389,11 @@ def cmd_run_python(path_str: str, args: list[str] = None) -> str:
             capture_output=True, text=True, timeout=EXEC_TIMEOUT_S,
             env=env
         )
+        EXECUTED_FILES.add(path_str)
+        # Also mark any local imported python files in sandbox as executed
+        for p in SANDBOX.glob("*.py"):
+            EXECUTED_FILES.add(p.name)
+
         text = (r.stdout + r.stderr) or "(no output)"
         if len(text) > MAX_OUTPUT:
             text = text[:MAX_OUTPUT] + f"\n...[truncated at {MAX_OUTPUT} chars]"
@@ -437,6 +473,7 @@ def cmd_write_file(path_str: str, content: str) -> str:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content)  # written exactly as given: no unescaping
         log_to_index(path_str, "created")
+        EXECUTED_FILES.discard(path_str)
         return f"[exit 0]\nSuccessfully wrote {path_str}"
     except Refused as e:
         return f"REFUSED: {e}"
@@ -451,6 +488,7 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
         target = SANDBOX / path_str
         if not target.exists():
             return f"REFUSED: file does not exist: {path_str}"
+
         content = target.read_text()
 
         if not search_text:
@@ -469,6 +507,7 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
         new_content = content.replace(search_text, replace_text)
         target.write_text(new_content)
         log_to_index(path_str, "patched")
+        EXECUTED_FILES.discard(path_str)
         return f"[exit 0]\nSuccessfully patched {path_str}"
     except Refused as e:
         return f"REFUSED: {e}"
@@ -877,6 +916,7 @@ def agent(task: str, max_steps: int = 6) -> str:
     last_key = None
     done_ok = set()  # write/patch commands that already succeeded
     dirty = False    # Track whether code was modified without a post-patch run_python verification
+    EXECUTED_FILES.clear()
 
     for step in range(max_steps):
         reply = ask_model(msgs)
@@ -918,9 +958,15 @@ def agent(task: str, max_steps: int = 6) -> str:
             consecutive_failures = 0
             last_key = key
 
-        cmd_name = cmd.split(" ", 1)[0]
+        cmd_parts = cmd.split()
+        cmd_name = cmd_parts[0]
+        target_py = cmd_parts[1] if len(cmd_parts) > 1 else ""
         is_block = cmd_name in BLOCK_CMDS
-        if is_block and key in done_ok:  # don't redo a finished write/patch
+
+        if cmd_name == "patch_file" and target_py.endswith(".py") and target_py not in EXECUTED_FILES:
+            result = (f"REFUSED: You cannot run 'patch_file' on '{target_py}' yet. "
+                      f"You must execute 'run_python' first to observe runtime execution or tracebacks.")
+        elif is_block and key in done_ok:  # don't redo a finished write/patch
             result = ("REFUSED: you already ran this exact command successfully. "
                       "If the task is finished, reply: DONE: <answer>")
         else:
