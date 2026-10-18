@@ -23,6 +23,10 @@ class Skill:
             f"adjust_temperature_to_{t}",
             f"regulate_humidity_to_{h}",
             f"set_lighting_level_{l}",
+        actions = [
+            f"adjust_temperature_to_{self.state['metrics']['temperature']}",
+            f"regulate_humidity_to_{self.state['metrics']['humidity']}",
+            f"calibrate_light_level_to_{self.state['metrics']['light']}",
         ]
         print("Reason:", actions)
         return actions
@@ -32,6 +36,7 @@ class Skill:
         print("Evaluate:", scores)
         best_action = max(actions, key=len)
         return best_action
+        return max(actions, key=len)
 
     def act(self, action):
         print("Act:", action)
