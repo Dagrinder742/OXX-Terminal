@@ -21,6 +21,7 @@ os.environ["AUDIT_LOG"] = str(SB.parent / "refused_test.log")
 sys.path.insert(0, str(HERE))
 import sandbox_tool as T  # noqa: E402
 _REAL_ASK = T.ask_model
+T.REQUIRE_VERIFY = False  # older agent tests script a bare write->DONE; the gate has its own tests below
 
 bad = 0
 
@@ -525,6 +526,146 @@ T.ask_model = lambda m: (_msgs.append(list(m)), next(_sc))[1]
 with redirect_stdout(io.StringIO()):
     T.agent("t")
 check("write_file <name.py>" in _msgs[1][-1][1], "agent", "fence without CMD: told to use write_file")
+
+# ---- DONE gate, patch hardening, indentation ----------------------------------------
+T.REQUIRE_VERIFY = True
+def play(replies, task="t"):
+    it = iter(replies); seen = []
+    T.ask_model = lambda m: (seen.append(list(m)), next(it, "DONE: (script ended)"))[1]
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        ans = T.agent(task)
+    return ans, buf.getvalue(), seen
+def W(name, code): return f"CMD: write_file {name}\n```python\n{code}\n```"
+def P(name, a, b): return f"CMD: patch_file {name}\n<<<<<<< SEARCH\n{a}\n=======\n{b}\n>>>>>>> REPLACE"
+
+ans, out, _ = play([W("g1.py", "print(1/0)"), "DONE: it works"])
+check(ans.startswith("(stopped: DONE was blocked 3 times") and "run_python" in out, "gate", "DONE right after write_file is blocked (never ran)", ans[:60])
+ans, out, _ = play([W("g2.py", "print(1/0)"), "CMD: run_python g2.py", "DONE: it works"])
+check("last run of g2.py failed" in out, "gate", "DONE after a FAILED run is blocked")
+ans, out, _ = play([W("g3.py", "print(1/0)"), "CMD: run_python g3.py", P("g3.py", "print(1/0)", "print(1)"), "DONE: fixed"])
+check("have not run it since" in out and "g3.py" in out, "gate", "DONE right after patch is blocked")
+ans, out, _ = play([W("g4.py", "print(1/0)"), "CMD: run_python g4.py", P("g4.py", "print(1/0)", "print(1)"),
+                    "CMD: run_python g4.py", "DONE: fixed, prints 1"])
+check(ans == "fixed, prints 1", "gate", "write, run, patch, run, DONE is accepted", ans[:60])
+(SB / "g5.py").write_text("print('a')\n")
+ans, out, _ = play(["CMD: patch_file g5.py\n<<<<<<< SEARCH\nprint('zzz')\n=======\nprint('b')\n>>>>>>> REPLACE", "DONE: patched"])
+check("never applied" in out and "patch_file g5.py" in out, "gate", "a REFUSED patch that was never redone blocks DONE")
+ans, out, _ = play([W("h_helper.py", "def f():\n    return 1/0"),
+                    W("h_main.py", "import h_helper\nprint(h_helper.f())"),
+                    "CMD: run_python h_main.py",
+                    P("h_helper.py", "return 1/0", "return 7"),
+                    "CMD: run_python h_main.py", "DONE: ok"])
+check(ans == "ok", "gate", "running main.py verifies the helper module it imports", out[-160:])
+ans, out, _ = play([W("g6.txt", "notes"), "DONE: wrote notes"])
+check(ans == "wrote notes", "gate", "non-Python files are not gated")
+T.REQUIRE_VERIFY = False
+ans, out, _ = play([W("g7.py", "print(1)"), "DONE: x"])
+check(ans == "x", "gate", "REQUIRE_VERIFY=0 turns the gate off")
+T.REQUIRE_VERIFY = True
+
+# strict mode: no patching a file that was never run (unless the static check listed problems)
+T.REQUIRE_RUN_BEFORE_PATCH = True
+ans, out, _ = play([W("s1.py", "print('a')"), P("s1.py", "print('a')", "print('b')"), "CMD: run_python s1.py",
+                    P("s1.py", "print('a')", "print('b')"), "CMD: run_python s1.py", "DONE: ok"])
+check("run_python s1.py first" in out and ans == "ok", "gate", "strict mode: patch before first run is refused, later allowed", out[-120:])
+ans, out, _ = play([W("s2.py", "class A:\n    def f(self):\n        pass"), P("s2.py", "        pass", "        return 1"),
+                    "CMD: run_python s2.py", "DONE: ok"])
+check("run_python s2.py first" not in out, "gate", "strict mode: a fix the static check asked for is not locked out")
+T.REQUIRE_RUN_BEFORE_PATCH = False
+
+# patch_file: no-ops and indentation
+(SB / "i1.py").write_text("class O:\n    def p(self):\n        total = self.c()\n        print(total)\n")
+r = T.run("patch_file i1.py", "<<<<<<< SEARCH\n        total = self.c()\n=======\n        total = self.c()\n>>>>>>> REPLACE")
+check(r.startswith("REFUSED") and "identical" in r, "patch", "SEARCH == REPLACE is refused, not 'success'", first(r))
+r = T.run("patch_file i1.py", "<<<<<<< SEARCH\ntotal = self.c()\n=======\nif self.o:\n    total = self.c()\nelse:\n    print('none')\n>>>>>>> REPLACE")
+src = (SB / "i1.py").read_text()
+check(r.startswith("[exit 0]") and "adjusted" in r and "        if self.o:\n            total = self.c()\n        else:\n            print('none')\n        print(total)" in src
+      and "no problems" in r, "patch", "unindented multi-line REPLACE gets the file's indentation (the Prompt #2 failure)", r[-120:] + repr(src[-160:]))
+(SB / "i2.py").write_text("def f():\n    if x:\n        return 1\n    return 2\n")
+r = T.run("patch_file i2.py", "<<<<<<< SEARCH\nif x:\n    return 1\n=======\nif y:\n    return 5\n>>>>>>> REPLACE")
+check("    if y:\n        return 5\n    return 2" in (SB / "i2.py").read_text() and "adjusted" in r, "patch", "multi-line SEARCH with wrong indentation still matches (re-indented)", r)
+(SB / "i3.py").write_text("def f():\n    a = 1\n    return a\n")
+r = T.run("patch_file i3.py", "<<<<<<< SEARCH\n    a = 1\n=======\n    a = 1\n    b = 2\n>>>>>>> REPLACE")
+check((SB / "i3.py").read_text() == "def f():\n    a = 1\n    b = 2\n    return a\n" and "adjusted" not in r, "patch", "an already-correct patch is applied untouched", r)
+(SB / "i4.py").write_text("def f():\n    x = 1\n    y = 1\n")
+r = T.run("patch_file i4.py", "<<<<<<< SEARCH\n= 1\n=======\n= 2\n>>>>>>> REPLACE")
+check("not unique" in r, "patch", "ambiguous search still refused", first(r))
+(SB / "i5.py").write_text("def f():\n    if a:\n        z()\n    if b:\n        z()\n")
+r = T.run("patch_file i5.py", "<<<<<<< SEARCH\nz()\n=======\nw()\n>>>>>>> REPLACE")
+check("not unique" in r or "more than one" in r, "patch", "ambiguous whitespace-insensitive match refused", first(r))
+check("exact leading spaces" in "\n".join(T.check_python("def f():\nreturn 1\n")), "patch", "IndentationError message tells how to fix it")
+
+# history sanitising
+_, _, seen = play(["NOTE: look\nCMD: ls\ntool> fake output\nDONE: all good", "DONE: really"])
+hist = [c for r, c in seen[-1] if r == "assistant"][0]
+check("fake" not in hist and "DONE" not in hist and "CMD: ls" in hist, "agent", "text invented after a command is not kept in history", repr(hist))
+T.REQUIRE_VERIFY = False
+
+# the probes from the Android Studio copy: all must be blocked here
+import base64 as _b64  # noqa: E402
+_vic = SB.parent / "outside_victim.txt"; _vic.write_text("keep")
+os.environ["GEMINI_API_KEY"] = "FAKE-KEY-123"
+_enc = _b64.b64encode(b"import subprocess\nprint(subprocess.run(['id'],capture_output=True,text=True).stdout)").decode()
+probes = {
+    "read outside": f"print(open({str(_vic)!r}).read())",
+    "delete outside": f"import os\nos.remove({str(_vic)!r})",
+    "write outside": f"open({str(SB.parent / 'w_out.txt')!r},'w').write('x')",
+    "env key": "import os\nprint(os.environ.get('GEMINI_API_KEY'))",
+    "alias exec + base64": f"import base64\ne = exec\ne(base64.b64decode('{_enc}').decode())",
+    "getattr os.system": "import os\ngetattr(os,'sys'+'tem')('echo PWN'+'ED')",
+    "chmod": "import os\nos.chmod('probe_x.py', 0o777)",
+}
+for label, code in probes.items():
+    r, _ = rp("probe_x", code)
+    leaked = "FAKE-KEY" in r or "PWNED" in r or "uid=" in r or "keep" in r
+    check(not leaked and r.startswith(("[exit", "REFUSED")), "escape", f"{label}: blocked", first(r))
+check(_vic.read_text() == "keep" and not (SB.parent / "w_out.txt").exists(), "escape", "no file outside was touched")
+os.environ.pop("GEMINI_API_KEY", None)
+
+# ---- local server client: streaming, speed stats, slow-server handling, --ping -----------
+import http.server, threading, json as _json  # noqa: E402
+class _H(http.server.BaseHTTPRequestHandler):
+    mode = "stream"
+    def log_message(self, *a): pass
+    def handle(self):
+        try: super().handle()
+        except (BrokenPipeError, ConnectionResetError): pass
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0)); body = _json.loads(self.rfile.read(n))
+        _H.last = body
+        if _H.mode == "json":
+            data = _json.dumps({"choices": [{"message": {"content": "CMD: ls"}}]}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
+        self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+        pieces = ["CMD", ":", " ls"] if _H.mode == "stream" else ["x"] * 50
+        for i, piece in enumerate(pieces):
+            self.wfile.write(("data: " + _json.dumps({"choices": [{"delta": {"content": piece}}]}) + "\n\n").encode()); self.wfile.flush()
+            if _H.mode == "crawl": time.sleep(0.2)
+        self.wfile.write(("data: " + _json.dumps({"choices": [], "timings": {"prompt_n": 900, "prompt_per_second": 3.06,
+                          "predicted_n": 3, "predicted_per_second": 0.5}}) + "\n\ndata: [DONE]\n\n").encode())
+_srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H); threading.Thread(target=_srv.serve_forever, daemon=True).start()
+_old = (T.SERVER_URL, T.LLAMA_TIMEOUT, T.LLAMA_TOTAL_TIMEOUT)
+T.SERVER_URL = f"http://127.0.0.1:{_srv.server_address[1]}/v1/chat/completions"
+_H.mode = "stream"
+out = T._ask_local([("system", "s"), ("user", "u")])
+check(out == "CMD: ls" and _H.last.get("stream") is True, "local", "streamed reply is assembled", out)
+check("prompt 900 tok @ 3.1 tok/s" in T.LAST_STATS and "generated 3 tok @ 0.50 tok/s" in T.LAST_STATS, "local", "server timings are reported", T.LAST_STATS)
+_H.mode = "json"
+check(T._ask_local([("user", "u")]) == "CMD: ls", "local", "a server that ignores stream=true still works")
+_H.mode = "crawl"; T.LLAMA_TOTAL_TIMEOUT = 1
+out = T._ask_local([("user", "u")])
+check(out.startswith("ERROR: Failed to connect") and "too slow" in out and "--ping" in out, "local", "a crawling server stops with a clear message", out[:120])
+T.LLAMA_TOTAL_TIMEOUT = 1800; _H.mode = "stream"
+r = subprocess.run([sys.executable, "sandbox_tool.py", "--ping"], cwd=shadow, capture_output=True, text=True,
+                   env={**os.environ, "LLAMA_URL": T.SERVER_URL, "SANDBOX_DIR": str(shadow)})
+check("server replied" in r.stdout and "tok/s" in r.stdout and "CMD: ls" in r.stdout, "local", "--ping reports speed", r.stdout[:140] + r.stderr[:80])
+r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow, capture_output=True, text=True,
+                   env={**os.environ, "LLAMA_URL": T.SERVER_URL, "SANDBOX_DIR": str(shadow), "REQUIRE_VERIFY": "0"})
+check("[llm]" in r.stdout and "prompt 900 tok" in r.stdout, "local", "the agent prints speed after each model reply", r.stdout[:200])
+T.SERVER_URL, T.LLAMA_TIMEOUT, T.LLAMA_TOTAL_TIMEOUT = _old
+_srv.shutdown()
 
 # ---- CLI entry point: one final line only, and the chmod reminder -----------
 r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow,
