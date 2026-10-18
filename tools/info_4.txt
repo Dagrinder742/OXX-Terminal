@@ -1011,6 +1011,34 @@ NOT carried over from the Android Studio version, on purpose:
  RUN_TIMEOUT_S (10), RUN_MEM_MB (1024), REQUIRE_VERIFY (1), REQUIRE_RUN_BEFORE_PATCH (0), AUDIT_LOG, PREVIEW_LINES (15).
 
 
+<<<<<<< HEAD
+=======
+#-----------------------UPDATE 2 FROM CLAUDE (2026-10-18, AFTER A LOCAL-MODEL TIMEOUT REPORT)
+SYMPTOM (human): BACKEND=local run ends with "(stopped: ERROR: Failed to connect to local llama-server: timed out)".
+WHAT THE llama-server LOG SHOWS (facts):
+  - prompt processing ran at 3.06 tokens/second (1036 of ~1350 prompt tokens took 339 s).
+  - the client gave up exactly 15:00 after the request started = LLAMA_TIMEOUT=900. The server was still working.
+  - second run: prompt was fully cached (sim_best = 1.000) yet n_tokens went 1338 -> 1414 in 900 s, i.e. roughly 75
+    generated tokens in 15 minutes (~0.08 tok/s). That figure is INFERRED from the token counts, not measured.
+  - So the tool is not broken: the server on the phone is running 10-100x slower than a 3B model normally does.
+    LIKELY CAUSES (UNVERIFIED, check in this order): leftover llama-server/llama-cli processes still running;
+    CPU thermal/battery throttling; Termux not holding a wake lock / in the background; low free RAM and swapping;
+    too many threads (-t above the number of fast cores) or too many slots (-np 4 splits memory);
+    the model file no longer in the page cache.
+  - Prompt size: SYSTEM is ~1050 tokens (measured len/4) + prompt_v4 ~313 = ~1366, matching the log's 1338-1368.
+    SYSTEM grew each round (rules, workflow, FILES, Rule of Observation). It is only paid once per run at the
+    start (the server reuses its cache after that), but at 3 tok/s that first read alone is ~7 minutes.
+CHANGES (tests: 251 checks, ALL OK on Linux):
+  1. Local client now STREAMS. LLAMA_TIMEOUT is the longest SILENCE from the server (default 900 s), not the
+     total. LLAMA_TOTAL_TIMEOUT (default 1800 s) caps one reply and fails with "too slow: N tokens in S s".
+  2. After every local reply the agent prints  [llm] <seconds> total, prompt N tok @ X tok/s, generated M tok @ Y tok/s
+     (from the server's timings), so a slow server is visible immediately. A live token counter shows on a terminal.
+  3. New:  python sandbox_tool.py --ping   sends one real-sized request (the full SYSTEM prompt, 24 tokens out)
+     and reports the speed. Run it BEFORE an agent run. Timeout errors now point to it.
+  4. Servers that ignore stream=true still work (tested).
+STILL UNVERIFIED: none of this has been run on the phone. The streaming client was tested against a stub server.
+Report the --ping output here. If prompt speed stays near 3 tok/s, the fix is on the server/phone side, not in this file.
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 
 
 # =========================================================
@@ -2151,7 +2179,12 @@ When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
 BACKEND = os.environ.get("BACKEND", "local").lower()      # local | gemini
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+<<<<<<< HEAD
 LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # slow phones: raise it, not the model
+=======
+LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # longest SILENCE from the server (prompt reading counts)
+LLAMA_TOTAL_TIMEOUT = int(os.environ.get("LLAMA_TOTAL_TIMEOUT", "1800"))  # cap for one whole reply
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8080/v1/chat/completions")
 
 
@@ -2204,6 +2237,7 @@ def _ask_gemini(msgs) -> str:
             time.sleep(wait)
 
 
+<<<<<<< HEAD
 def _ask_local(trimmed_msgs) -> str:
     formatted_messages = [
         {"role": role, "content": content} for role, content in trimmed_msgs
@@ -2229,6 +2263,94 @@ def _ask_local(trimmed_msgs) -> str:
             return content.strip()
     except Exception as e:
         return f"ERROR: Failed to connect to local llama-server: {e}"
+=======
+LAST_STATS = ""   # one line about the last local model call (speed), shown after each reply
+
+
+def _ask_local(trimmed_msgs, max_tokens=1024) -> str:
+    """Local llama-server, streamed. LLAMA_TIMEOUT is the longest the server may stay
+    SILENT (a slow phone can need minutes to read the prompt before the first token);
+    LLAMA_TOTAL_TIMEOUT caps the whole reply so a crawling model fails with a clear message."""
+    global LAST_STATS
+    LAST_STATS = ""
+    payload = {
+        "model": MODEL,
+        "messages": [{"role": role, "content": content} for role, content in trimmed_msgs],
+        "temperature": 0.2,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    req = urllib.request.Request(
+        SERVER_URL, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    t0, t_first, n, timings, parts = time.time(), None, 0, None, []
+    try:
+        with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as r:
+            if "event-stream" not in (r.headers.get("Content-Type") or ""):  # server ignored stream
+                data = json.loads(r.read().decode("utf-8"))
+                timings = data.get("timings")
+                parts.append(data["choices"][0]["message"]["content"])
+            else:
+                for raw in r:
+                    line = raw.decode("utf-8", "replace").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    chunk = line[5:].strip()
+                    if chunk == "[DONE]":
+                        break
+                    d = json.loads(chunk)
+                    timings = d.get("timings") or timings
+                    for c in d.get("choices", []):
+                        piece = (c.get("delta") or {}).get("content")
+                        if piece:
+                            if t_first is None:
+                                t_first = time.time()
+                            parts.append(piece)
+                            n += 1
+                            if n % 5 == 0 and sys.stderr.isatty():
+                                rate = n / max(time.time() - t_first, 1e-6)
+                                sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
+                                sys.stderr.flush()
+                    if time.time() - t0 > LLAMA_TOTAL_TIMEOUT:
+                        raise TimeoutError(
+                            f"too slow: {n} tokens in {int(time.time() - t0)}s (limit "
+                            f"LLAMA_TOTAL_TIMEOUT={LLAMA_TOTAL_TIMEOUT}s). Run: python sandbox_tool.py --ping")
+    except Exception as e:
+        hint = ""
+        if "timed out" in str(e) or isinstance(e, TimeoutError):
+            hint = "  (the server is too slow or stuck; run: python sandbox_tool.py --ping)"
+        return f"ERROR: Failed to connect to local llama-server: {e}{hint}"
+    finally:
+        if sys.stderr.isatty():
+            sys.stderr.write("\r" + " " * 60 + "\r")
+    total = time.time() - t0
+    bits = [f"{total:.0f}s total"]
+    if timings:
+        if timings.get("prompt_n"):
+            bits.append(f"prompt {timings['prompt_n']} tok @ {timings.get('prompt_per_second', 0):.1f} tok/s")
+        if timings.get("predicted_n"):
+            bits.append(f"generated {timings['predicted_n']} tok @ {timings.get('predicted_per_second', 0):.2f} tok/s")
+    elif t_first and n > 1:
+        bits.append(f"generated ~{n} tok @ {(n - 1) / max(time.time() - t_first, 1e-6):.2f} tok/s")
+    LAST_STATS = ", ".join(bits)
+    return "".join(parts).strip()
+
+
+def ping() -> str:
+    """Time one real-sized request so you can see how fast the local server is."""
+    msgs = [("system", SYSTEM), ("user", "Reply with exactly: CMD: ls")]
+    t0 = time.time()
+    out = _ask_local(msgs, max_tokens=24)
+    if out.startswith("ERROR:"):
+        return out
+    est = LAST_STATS
+    return (f"server replied in {time.time() - t0:.0f}s: {out!r}\n[llm] {est}\n"
+            "Rule of thumb: the first agent step reads the whole system prompt "
+            f"(~{len(SYSTEM) // 4} tokens) once; later steps reuse the server's cache. "
+            "Below ~1 tok/s generation, check CPU throttling, free RAM, leftover llama processes, "
+            "and the -t (threads) / -np (slots) server flags.")
+
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 
 BLOCK_CMDS = ("write_file", "patch_file")
 
@@ -2315,9 +2437,19 @@ def agent(task: str, max_steps: int = 10) -> str:
     done_blocked = 0
 
     for step in range(max_steps):
+<<<<<<< HEAD
         reply = ask_model(msgs)
         if reply.startswith("ERROR: Failed to connect"):
             return f"(stopped: {reply})"
+=======
+        global LAST_STATS
+        LAST_STATS = ""
+        reply = ask_model(msgs)
+        if reply.startswith("ERROR: Failed to connect"):
+            return f"(stopped: {reply})"
+        if LAST_STATS:
+            print(f"[llm] {LAST_STATS}")
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
         kind, text, body, notes = parse_reply(reply)
         msgs.append(("assistant", _clean_reply(reply, kind, text, notes)))
         print(f"model> {reply}")
@@ -2444,8 +2576,16 @@ if __name__ == "__main__":
         result = agent(" ".join(sys.argv[2:]))
         if result.startswith("(stopped:"):  # a DONE answer was already printed as model>
             print("final>", result)
+<<<<<<< HEAD
+=======
+    elif len(sys.argv) == 2 and sys.argv[1] == "--ping":
+        print(ping())
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
     elif len(sys.argv) >= 2:
         print(run(" ".join(sys.argv[1:])))
     else:
         print(__doc__)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78

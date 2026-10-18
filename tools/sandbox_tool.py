@@ -57,7 +57,11 @@ from pathlib import Path
 _TERMUX_SANDBOX = Path("/data/data/com.termux/files/home/OKX-Terminal/tools")
 SANDBOX = Path(os.environ.get(
     "SANDBOX_DIR", _TERMUX_SANDBOX if _TERMUX_SANDBOX.is_dir() else Path(__file__).resolve().parent)).resolve()
+<<<<<<< HEAD
 TIMEOUT_S = 900
+=======
+TIMEOUT_S = 300
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 MAX_OUTPUT = 8000
 MAX_GLOB = 200
 ALLOW_SED_INPLACE = True
@@ -67,7 +71,11 @@ AUDIT_LOG = Path(os.environ.get("AUDIT_LOG", str(Path(__file__).resolve().with_n
 PROTECTED = {Path(__file__).resolve(), AUDIT_LOG.resolve()}
 # run_python limits (see the notes above cmd_run_python)
 RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # needs POSIX limits
+<<<<<<< HEAD
 RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "60"))
+=======
+RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "10"))
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 REQUIRE_VERIFY = os.environ.get("REQUIRE_VERIFY", "1") != "0"                 # block DONE until code was run
 REQUIRE_RUN_BEFORE_PATCH = os.environ.get("REQUIRE_RUN_BEFORE_PATCH", "0") == "1"  # strict mode for small models
 RUN_MEM_MB = int(os.environ.get("RUN_MEM_MB", "1024"))  # watched from outside; 0 = no limit
@@ -1123,7 +1131,12 @@ When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
 BACKEND = os.environ.get("BACKEND", "local").lower()      # local | gemini
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+<<<<<<< HEAD
 LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # slow phones: raise it, not the model
+=======
+LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # longest SILENCE from the server (prompt reading counts)
+LLAMA_TOTAL_TIMEOUT = int(os.environ.get("LLAMA_TOTAL_TIMEOUT", "1800"))  # cap for one whole reply
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8080/v1/chat/completions")
 
 
@@ -1176,31 +1189,99 @@ def _ask_gemini(msgs) -> str:
             time.sleep(wait)
 
 
-def _ask_local(trimmed_msgs) -> str:
-    formatted_messages = [
-        {"role": role, "content": content} for role, content in trimmed_msgs
-    ]
+LAST_STATS = ""   # one line about the last local model call (speed), shown after each reply
 
+
+def _ask_local(trimmed_msgs, max_tokens=1024) -> str:
+    """Local llama-server, streamed. LLAMA_TIMEOUT is the longest the server may stay
+    SILENT (a slow phone can need minutes to read the prompt before the first token);
+    LLAMA_TOTAL_TIMEOUT caps the whole reply so a crawling model fails with a clear message."""
+    global LAST_STATS
+    LAST_STATS = ""
     payload = {
         "model": MODEL,
-        "messages": formatted_messages,
+        "messages": [{"role": role, "content": content} for role, content in trimmed_msgs],
         "temperature": 0.2,
-        "max_tokens": 1024
+        "max_tokens": max_tokens,
+        "stream": True,
     }
-
     req = urllib.request.Request(
-        SERVER_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-
+        SERVER_URL, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    t0, t_first, n, timings, parts = time.time(), None, 0, None, []
     try:
+<<<<<<< HEAD
         with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             content = res_data["choices"][0]["message"]["content"]
             return content.strip()
+=======
+        with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as r:
+            if "event-stream" not in (r.headers.get("Content-Type") or ""):  # server ignored stream
+                data = json.loads(r.read().decode("utf-8"))
+                timings = data.get("timings")
+                parts.append(data["choices"][0]["message"]["content"])
+            else:
+                for raw in r:
+                    line = raw.decode("utf-8", "replace").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    chunk = line[5:].strip()
+                    if chunk == "[DONE]":
+                        break
+                    d = json.loads(chunk)
+                    timings = d.get("timings") or timings
+                    for c in d.get("choices", []):
+                        piece = (c.get("delta") or {}).get("content")
+                        if piece:
+                            if t_first is None:
+                                t_first = time.time()
+                            parts.append(piece)
+                            n += 1
+                            if n % 5 == 0 and sys.stderr.isatty():
+                                rate = n / max(time.time() - t_first, 1e-6)
+                                sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
+                                sys.stderr.flush()
+                    if time.time() - t0 > LLAMA_TOTAL_TIMEOUT:
+                        raise TimeoutError(
+                            f"too slow: {n} tokens in {int(time.time() - t0)}s (limit "
+                            f"LLAMA_TOTAL_TIMEOUT={LLAMA_TOTAL_TIMEOUT}s). Run: python sandbox_tool.py --ping")
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
     except Exception as e:
-        return f"ERROR: Failed to connect to local llama-server: {e}"
+        hint = ""
+        if "timed out" in str(e) or isinstance(e, TimeoutError):
+            hint = "  (the server is too slow or stuck; run: python sandbox_tool.py --ping)"
+        return f"ERROR: Failed to connect to local llama-server: {e}{hint}"
+    finally:
+        if sys.stderr.isatty():
+            sys.stderr.write("\r" + " " * 60 + "\r")
+    total = time.time() - t0
+    bits = [f"{total:.0f}s total"]
+    if timings:
+        if timings.get("prompt_n"):
+            bits.append(f"prompt {timings['prompt_n']} tok @ {timings.get('prompt_per_second', 0):.1f} tok/s")
+        if timings.get("predicted_n"):
+            bits.append(f"generated {timings['predicted_n']} tok @ {timings.get('predicted_per_second', 0):.2f} tok/s")
+    elif t_first and n > 1:
+        bits.append(f"generated ~{n} tok @ {(n - 1) / max(time.time() - t_first, 1e-6):.2f} tok/s")
+    LAST_STATS = ", ".join(bits)
+    return "".join(parts).strip()
+
+
+def ping() -> str:
+    """Time one real-sized request so you can see how fast the local server is."""
+    msgs = [("system", SYSTEM), ("user", "Reply with exactly: CMD: ls")]
+    t0 = time.time()
+    out = _ask_local(msgs, max_tokens=24)
+    if out.startswith("ERROR:"):
+        return out
+    est = LAST_STATS
+    return (f"server replied in {time.time() - t0:.0f}s: {out!r}\n[llm] {est}\n"
+            "Rule of thumb: the first agent step reads the whole system prompt "
+            f"(~{len(SYSTEM) // 4} tokens) once; later steps reuse the server's cache. "
+            "Below ~1 tok/s generation, check CPU throttling, free RAM, leftover llama processes, "
+            "and the -t (threads) / -np (slots) server flags.")
+
 
 BLOCK_CMDS = ("write_file", "patch_file")
 
@@ -1287,9 +1368,16 @@ def agent(task: str, max_steps: int = 10) -> str:
     done_blocked = 0
 
     for step in range(max_steps):
+        global LAST_STATS
+        LAST_STATS = ""
         reply = ask_model(msgs)
         if reply.startswith("ERROR: Failed to connect"):
             return f"(stopped: {reply})"
+<<<<<<< HEAD
+=======
+        if LAST_STATS:
+            print(f"[llm] {LAST_STATS}")
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
         kind, text, body, notes = parse_reply(reply)
         msgs.append(("assistant", _clean_reply(reply, kind, text, notes)))
         print(f"model> {reply}")
@@ -1416,8 +1504,9 @@ if __name__ == "__main__":
         result = agent(" ".join(sys.argv[2:]))
         if result.startswith("(stopped:"):  # a DONE answer was already printed as model>
             print("final>", result)
+    elif len(sys.argv) == 2 and sys.argv[1] == "--ping":
+        print(ping())
     elif len(sys.argv) >= 2:
         print(run(" ".join(sys.argv[1:])))
     else:
         print(__doc__)
-

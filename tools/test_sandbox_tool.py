@@ -623,6 +623,53 @@ for label, code in probes.items():
 check(_vic.read_text() == "keep" and not (SB.parent / "w_out.txt").exists(), "escape", "no file outside was touched")
 os.environ.pop("GEMINI_API_KEY", None)
 
+<<<<<<< HEAD
+=======
+# ---- local server client: streaming, speed stats, slow-server handling, --ping -----------
+import http.server, threading, json as _json  # noqa: E402
+class _H(http.server.BaseHTTPRequestHandler):
+    mode = "stream"
+    def log_message(self, *a): pass
+    def handle(self):
+        try: super().handle()
+        except (BrokenPipeError, ConnectionResetError): pass
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0)); body = _json.loads(self.rfile.read(n))
+        _H.last = body
+        if _H.mode == "json":
+            data = _json.dumps({"choices": [{"message": {"content": "CMD: ls"}}]}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
+        self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+        pieces = ["CMD", ":", " ls"] if _H.mode == "stream" else ["x"] * 50
+        for i, piece in enumerate(pieces):
+            self.wfile.write(("data: " + _json.dumps({"choices": [{"delta": {"content": piece}}]}) + "\n\n").encode()); self.wfile.flush()
+            if _H.mode == "crawl": time.sleep(0.2)
+        self.wfile.write(("data: " + _json.dumps({"choices": [], "timings": {"prompt_n": 900, "prompt_per_second": 3.06,
+                          "predicted_n": 3, "predicted_per_second": 0.5}}) + "\n\ndata: [DONE]\n\n").encode())
+_srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H); threading.Thread(target=_srv.serve_forever, daemon=True).start()
+_old = (T.SERVER_URL, T.LLAMA_TIMEOUT, T.LLAMA_TOTAL_TIMEOUT)
+T.SERVER_URL = f"http://127.0.0.1:{_srv.server_address[1]}/v1/chat/completions"
+_H.mode = "stream"
+out = T._ask_local([("system", "s"), ("user", "u")])
+check(out == "CMD: ls" and _H.last.get("stream") is True, "local", "streamed reply is assembled", out)
+check("prompt 900 tok @ 3.1 tok/s" in T.LAST_STATS and "generated 3 tok @ 0.50 tok/s" in T.LAST_STATS, "local", "server timings are reported", T.LAST_STATS)
+_H.mode = "json"
+check(T._ask_local([("user", "u")]) == "CMD: ls", "local", "a server that ignores stream=true still works")
+_H.mode = "crawl"; T.LLAMA_TOTAL_TIMEOUT = 1
+out = T._ask_local([("user", "u")])
+check(out.startswith("ERROR: Failed to connect") and "too slow" in out and "--ping" in out, "local", "a crawling server stops with a clear message", out[:120])
+T.LLAMA_TOTAL_TIMEOUT = 1800; _H.mode = "stream"
+r = subprocess.run([sys.executable, "sandbox_tool.py", "--ping"], cwd=shadow, capture_output=True, text=True,
+                   env={**os.environ, "LLAMA_URL": T.SERVER_URL, "SANDBOX_DIR": str(shadow)})
+check("server replied" in r.stdout and "tok/s" in r.stdout and "CMD: ls" in r.stdout, "local", "--ping reports speed", r.stdout[:140] + r.stderr[:80])
+r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow, capture_output=True, text=True,
+                   env={**os.environ, "LLAMA_URL": T.SERVER_URL, "SANDBOX_DIR": str(shadow), "REQUIRE_VERIFY": "0"})
+check("[llm]" in r.stdout and "prompt 900 tok" in r.stdout, "local", "the agent prints speed after each model reply", r.stdout[:200])
+T.SERVER_URL, T.LLAMA_TIMEOUT, T.LLAMA_TOTAL_TIMEOUT = _old
+_srv.shutdown()
+
+>>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 # ---- CLI entry point: one final line only, and the chmod reminder -----------
 r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow,
                    capture_output=True, text=True, env={**os.environ, "SANDBOX_DIR": str(shadow)})
