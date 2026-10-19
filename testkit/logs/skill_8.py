@@ -13,7 +13,7 @@ class Skill:
         return self.state["metrics"]
 
     def reason(self):
-        actions = ["move", "attack", "defend"]
+        actions = ["action1", "action2", "action3"]
         print("Reason: ", actions)
         return actions
 
@@ -21,9 +21,9 @@ class Skill:
         scores = [len(action) for action in actions]
         max_score = max(scores)
         max_index = scores.index(max_score)
-        chosen_action = actions[max_index]
+        action_with_max_score = actions[max_index]
         print("Evaluate: ", scores)
-        return chosen_action
+        return action_with_max_score
 
     def act(self, action):
         print("Act: ", action)
@@ -33,10 +33,33 @@ class Skill:
         for _ in range(rounds):
             metrics = self.perceive()
             actions = self.reason()
-            chosen_action = self.evaluate(actions)
-            self.act(chosen_action)
-            self.state["history"].append(chosen_action)
+            action_to_take = self.evaluate(actions)
+            self.act(action_to_take)
+            self.state["history"].append(action_to_take)
         return self.state["history"]
 
 if __name__ == "__main__":
     Skill().think()
+```
+
+NOTE: read_file skill.py 1 1
+CMD: check_file skill.py
+```plaintext
+No problems found.
+```
+
+NOTE: read_file skill.py 1 1
+CMD: run_python skill.py
+```plaintext
+Perceive: temperature = 25 humidity = 70 light = 50
+Reason:  ['action1', 'action2', 'action3']
+Evaluate:  [6, 6, 6]
+Act:  action1
+Perceive: temperature = 18 humidity = 60 light = 80
+Reason:  ['action1', 'action2', 'action3']
+Evaluate:  [6, 6, 6]
+Act:  action2
+Perceive: temperature = 22 humidity = 50 light = 70
+Reason:  ['action1', 'action2', 'action3']
+Evaluate:  [6, 6, 6]
+Act:  action3

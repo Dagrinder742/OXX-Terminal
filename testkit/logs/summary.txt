@@ -1,2 +1,19 @@
 run  verify   steps   run_python said_done note
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
 1    PASS     4       5          yes        stopped: (stopped: ERROR: Failed to connect to Gemini API: 429
+=======
+=======
+>>>>>>> Stashed changes
+1    PASS     5       2          yes       
+2    PASS     3       1          yes       
+3    PASS     3       1          yes       
+4    PASS     3       1          yes       
+5    PASS     4       1          yes       
+6    PASS     3       1          yes       
+7    PASS     3       1          yes       
+8    FAIL     3       3          yes       CLAIMED DONE BUT FAILED stopped: (stopped: aborted due to consecutive failures)
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes

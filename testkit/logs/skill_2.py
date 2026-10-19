@@ -13,17 +13,16 @@ class Skill:
         return self.state["metrics"]
 
     def reason(self):
-        actions = ["run", "jump", "swim"]
+        actions = ["move", "attack", "defend"]
         print("Reason: ", actions)
         return actions
 
     def evaluate(self, actions):
-        scores = [len(action) for action in actions]
-        max_score = max(scores)
-        max_index = scores.index(max_score)
-        action_with_max_score = actions[max_index]
+        scores = {action: len(action) for action in actions}
+        max_score = max(scores.values())
+        best_action = [action for action, score in scores.items() if score == max_score][0]
         print("Evaluate: ", scores)
-        return action_with_max_score
+        return best_action
 
     def act(self, action):
         print("Act: ", action)
@@ -33,9 +32,9 @@ class Skill:
         for _ in range(rounds):
             metrics = self.perceive()
             actions = self.reason()
-            action = self.evaluate(actions)
-            action = self.act(action)
-            self.state["history"].append(action)
+            best_action = self.evaluate(actions)
+            self.act(best_action)
+            self.state["history"].append(best_action)
         return self.state["history"]
 
 if __name__ == "__main__":
