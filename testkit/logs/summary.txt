@@ -17,3 +17,7 @@ run  verify   steps   run_python said_done note
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
+9    PASS     3       1          yes       
+10   PASS     3       1          yes       
+---
+verified PASS: 9 / 10     claimed DONE but verify FAILED: 1
