@@ -1,3 +1,13 @@
 run  verify   steps   run_python said_done note
 1    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
 2    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+3    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+4    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+5    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+6    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+7    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+8    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+9    FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+10   FAIL     0       0          no         stopped: (stopped: ERROR: Failed to connect to local llama-ser
+---
+verified PASS: 0 / 10     claimed DONE but verify FAILED: 0

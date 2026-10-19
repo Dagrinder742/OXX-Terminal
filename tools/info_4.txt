@@ -1011,8 +1011,6 @@ NOT carried over from the Android Studio version, on purpose:
  RUN_TIMEOUT_S (10), RUN_MEM_MB (1024), REQUIRE_VERIFY (1), REQUIRE_RUN_BEFORE_PATCH (0), AUDIT_LOG, PREVIEW_LINES (15).
 
 
-<<<<<<< HEAD
-=======
 #-----------------------UPDATE 2 FROM CLAUDE (2026-10-18, AFTER A LOCAL-MODEL TIMEOUT REPORT)
 SYMPTOM (human): BACKEND=local run ends with "(stopped: ERROR: Failed to connect to local llama-server: timed out)".
 WHAT THE llama-server LOG SHOWS (facts):
@@ -1038,7 +1036,29 @@ CHANGES (tests: 251 checks, ALL OK on Linux):
   4. Servers that ignore stream=true still work (tested).
 STILL UNVERIFIED: none of this has been run on the phone. The streaming client was tested against a stub server.
 Report the --ping output here. If prompt speed stays near 3 tok/s, the fix is on the server/phone side, not in this file.
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
+
+
+#-----------------------UPDATE 3 FROM CLAUDE (2026-10-18 EVENING, --ping JSON ERROR)
+HUMAN REPORT: after restarting llama-server cleanly (-t 4 -np 1), plain curl works, but
+  python3 sandbox_tool.py --ping  ->  "ERROR: Failed to connect to local llama-server: Expecting value: line 1 column 1 (char 0)"
+SERVER NOW HEALTHY (from the curl timings in the screenshots): prompt ~5.5 tok/s (26 tokens), generation ~4.7 tok/s.
+  Generation went from ~0.08 tok/s to ~4.7 tok/s after the clean restart; the earlier slowness was the server/phone state.
+  Prompt speed is still modest: the first agent step reads ~1370 tokens, so expect a few minutes ONCE per run.
+DIAGNOSIS: "Expecting value: line 1 column 1 (char 0)" is what json.loads('') says: the client tried to parse EMPTY text.
+  I reproduced the exact message with three server behaviours: (a) an SSE stream containing an empty "data:" line,
+  (b) an SSE body sent with a JSON content-type, (c) an empty body. I could NOT see which one llama-server sent
+  (the screenshots show only the non-streaming curl). My streaming client from Update 2 was not tolerant of them.
+FIX (tests: 260 checks, ALL OK on Linux, against stub servers that send each variant):
+  1. The stream parser skips blank "data:" lines, comments, CRLF and non-JSON chunks.
+  2. An SSE body under a JSON content-type is detected and parsed.
+  3. If the streamed reply is unreadable or empty, the client retries ONCE as a plain (non-stream) request, the same
+     request curl makes. Errors now quote what the server actually sent, e.g. unreadable reply: '<html>oops</html>'.
+  4. LLAMA_STREAM=0 forces plain requests (use this if streaming is ever the problem).
+IF --ping STILL FAILS, send this output (it shows the raw streaming reply):
+  curl -sN http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"x","messages":[{"role":"user","content":"hi"}],"max_tokens":5,"stream":true}' | head -c 600
+UNVERIFIED: not yet run on the phone. Record the --ping output below.
+SECURITY NOTE FOR THE HUMAN: a .bashrc screenshot shared in chat showed the Gemini API key in plain text. Treat that key as
+  exposed: create a new key in Google AI Studio, delete the old one, and keep the new one out of screenshots and shared files.
 
 
 # =========================================================
@@ -2179,12 +2199,8 @@ When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
 BACKEND = os.environ.get("BACKEND", "local").lower()      # local | gemini
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
-<<<<<<< HEAD
-LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # slow phones: raise it, not the model
-=======
 LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # longest SILENCE from the server (prompt reading counts)
 LLAMA_TOTAL_TIMEOUT = int(os.environ.get("LLAMA_TOTAL_TIMEOUT", "1800"))  # cap for one whole reply
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 SERVER_URL = os.environ.get("LLAMA_URL", "http://localhost:8080/v1/chat/completions")
 
 
@@ -2237,84 +2253,100 @@ def _ask_gemini(msgs) -> str:
             time.sleep(wait)
 
 
-<<<<<<< HEAD
-def _ask_local(trimmed_msgs) -> str:
-    formatted_messages = [
-        {"role": role, "content": content} for role, content in trimmed_msgs
-    ]
-
-    payload = {
-        "model": MODEL,
-        "messages": formatted_messages,
-        "temperature": 0.2,
-        "max_tokens": 1024
-    }
-
-    req = urllib.request.Request(
-        SERVER_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            content = res_data["choices"][0]["message"]["content"]
-            return content.strip()
-    except Exception as e:
-        return f"ERROR: Failed to connect to local llama-server: {e}"
-=======
 LAST_STATS = ""   # one line about the last local model call (speed), shown after each reply
+LLAMA_STREAM = os.environ.get("LLAMA_STREAM", "1") != "0"   # 0 = plain request, like curl
 
 
-def _ask_local(trimmed_msgs, max_tokens=1024) -> str:
-    """Local llama-server, streamed. LLAMA_TIMEOUT is the longest the server may stay
-    SILENT (a slow phone can need minutes to read the prompt before the first token);
-    LLAMA_TOTAL_TIMEOUT caps the whole reply so a crawling model fails with a clear message."""
+class _BadReply(Exception):
+    """The server answered, but not in a form we can read."""
+
+
+def _read_sse(lines, show_progress=True):
+    """Parse server-sent-event lines. Tolerates blank 'data:' lines, comments, CRLF and
+    chunks that are not JSON. Returns (text, n_pieces, t_first, timings, skipped)."""
+    parts, n, t_first, timings, skipped = [], 0, None, None, []
+    t0 = time.time()
+    for raw in lines:
+        line = (raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw).strip()
+        if not line.startswith("data:"):
+            continue
+        chunk = line[5:].strip()
+        if not chunk:
+            continue
+        if chunk == "[DONE]":
+            break
+        try:
+            d = json.loads(chunk)
+        except ValueError:
+            skipped.append(chunk[:120])
+            continue
+        if not isinstance(d, dict):
+            continue
+        if "error" in d and not d.get("choices"):
+            raise _BadReply(f"server error: {str(d['error'])[:200]}")
+        timings = d.get("timings") or timings
+        for c in d.get("choices") or []:
+            piece = (c.get("delta") or {}).get("content") or (c.get("message") or {}).get("content")
+            if piece:
+                if t_first is None:
+                    t_first = time.time()
+                parts.append(piece)
+                n += 1
+                if show_progress and n % 5 == 0 and sys.stderr.isatty():
+                    rate = n / max(time.time() - t_first, 1e-6)
+                    sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
+                    sys.stderr.flush()
+        if time.time() - t0 > LLAMA_TOTAL_TIMEOUT:
+            raise TimeoutError(
+                f"too slow: {n} tokens in {int(time.time() - t0)}s (limit "
+                f"LLAMA_TOTAL_TIMEOUT={LLAMA_TOTAL_TIMEOUT}s). Run: python sandbox_tool.py --ping")
+    return "".join(parts), n, t_first, timings, skipped
+
+
+def _ask_local(trimmed_msgs, max_tokens=1024, stream=None) -> str:
+    """Local llama-server. Streamed by default: LLAMA_TIMEOUT is the longest the server may
+    stay SILENT (a slow phone can need minutes to read the prompt before the first token),
+    and LLAMA_TOTAL_TIMEOUT caps one whole reply. If the streamed reply cannot be read, it
+    asks again once without streaming (the plain request curl uses)."""
     global LAST_STATS
     LAST_STATS = ""
+    stream = LLAMA_STREAM if stream is None else stream
     payload = {
         "model": MODEL,
         "messages": [{"role": role, "content": content} for role, content in trimmed_msgs],
         "temperature": 0.2,
         "max_tokens": max_tokens,
-        "stream": True,
     }
+    if stream:
+        payload["stream"] = True
     req = urllib.request.Request(
         SERVER_URL, data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"})
-    t0, t_first, n, timings, parts = time.time(), None, 0, None, []
+    t0, t_first, n, timings, text = time.time(), None, 0, None, ""
     try:
         with urllib.request.urlopen(req, timeout=LLAMA_TIMEOUT) as r:
-            if "event-stream" not in (r.headers.get("Content-Type") or ""):  # server ignored stream
-                data = json.loads(r.read().decode("utf-8"))
-                timings = data.get("timings")
-                parts.append(data["choices"][0]["message"]["content"])
+            if stream:
+                text, n, t_first, timings, skipped = _read_sse(r)
+                if not text:  # the body may be a plain JSON reply, or an SSE body sent as JSON
+                    raise _BadReply("empty streamed reply" + (f" (unreadable chunk: {skipped[0]!r})" if skipped else ""))
             else:
-                for raw in r:
-                    line = raw.decode("utf-8", "replace").strip()
-                    if not line.startswith("data:"):
-                        continue
-                    chunk = line[5:].strip()
-                    if chunk == "[DONE]":
-                        break
-                    d = json.loads(chunk)
-                    timings = d.get("timings") or timings
-                    for c in d.get("choices", []):
-                        piece = (c.get("delta") or {}).get("content")
-                        if piece:
-                            if t_first is None:
-                                t_first = time.time()
-                            parts.append(piece)
-                            n += 1
-                            if n % 5 == 0 and sys.stderr.isatty():
-                                rate = n / max(time.time() - t_first, 1e-6)
-                                sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
-                                sys.stderr.flush()
-                    if time.time() - t0 > LLAMA_TOTAL_TIMEOUT:
-                        raise TimeoutError(
-                            f"too slow: {n} tokens in {int(time.time() - t0)}s (limit "
-                            f"LLAMA_TOTAL_TIMEOUT={LLAMA_TOTAL_TIMEOUT}s). Run: python sandbox_tool.py --ping")
+                body = r.read().decode("utf-8", "replace")
+                if not body.strip():
+                    raise _BadReply("the server sent an empty reply")
+                if body.lstrip().startswith("data:"):
+                    text, n, t_first, timings, _ = _read_sse(body.splitlines())
+                else:
+                    try:
+                        data = json.loads(body)
+                        text = data["choices"][0]["message"]["content"] or ""
+                        timings = data.get("timings")
+                    except (ValueError, KeyError, IndexError, TypeError):
+                        raise _BadReply(f"unreadable reply from the server: {body[:200]!r}")
+    except _BadReply as e:
+        if stream:   # one more try the plain way, before giving up
+            sys.stderr.write(f"[llm] streamed reply unreadable ({e}); retrying without streaming\n")
+            return _ask_local(trimmed_msgs, max_tokens, stream=False)
+        return f"ERROR: Failed to connect to local llama-server: {e}"
     except Exception as e:
         hint = ""
         if "timed out" in str(e) or isinstance(e, TimeoutError):
@@ -2333,7 +2365,7 @@ def _ask_local(trimmed_msgs, max_tokens=1024) -> str:
     elif t_first and n > 1:
         bits.append(f"generated ~{n} tok @ {(n - 1) / max(time.time() - t_first, 1e-6):.2f} tok/s")
     LAST_STATS = ", ".join(bits)
-    return "".join(parts).strip()
+    return text.strip()
 
 
 def ping() -> str:
@@ -2350,7 +2382,6 @@ def ping() -> str:
             "Below ~1 tok/s generation, check CPU throttling, free RAM, leftover llama processes, "
             "and the -t (threads) / -np (slots) server flags.")
 
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
 
 BLOCK_CMDS = ("write_file", "patch_file")
 
@@ -2437,11 +2468,6 @@ def agent(task: str, max_steps: int = 10) -> str:
     done_blocked = 0
 
     for step in range(max_steps):
-<<<<<<< HEAD
-        reply = ask_model(msgs)
-        if reply.startswith("ERROR: Failed to connect"):
-            return f"(stopped: {reply})"
-=======
         global LAST_STATS
         LAST_STATS = ""
         reply = ask_model(msgs)
@@ -2449,7 +2475,6 @@ def agent(task: str, max_steps: int = 10) -> str:
             return f"(stopped: {reply})"
         if LAST_STATS:
             print(f"[llm] {LAST_STATS}")
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
         kind, text, body, notes = parse_reply(reply)
         msgs.append(("assistant", _clean_reply(reply, kind, text, notes)))
         print(f"model> {reply}")
@@ -2576,16 +2601,10 @@ if __name__ == "__main__":
         result = agent(" ".join(sys.argv[2:]))
         if result.startswith("(stopped:"):  # a DONE answer was already printed as model>
             print("final>", result)
-<<<<<<< HEAD
-=======
     elif len(sys.argv) == 2 and sys.argv[1] == "--ping":
         print(ping())
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
     elif len(sys.argv) >= 2:
         print(run(" ".join(sys.argv[1:])))
     else:
         print(__doc__)
-<<<<<<< HEAD
 
-=======
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78

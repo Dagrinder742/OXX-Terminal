@@ -623,8 +623,6 @@ for label, code in probes.items():
 check(_vic.read_text() == "keep" and not (SB.parent / "w_out.txt").exists(), "escape", "no file outside was touched")
 os.environ.pop("GEMINI_API_KEY", None)
 
-<<<<<<< HEAD
-=======
 # ---- local server client: streaming, speed stats, slow-server handling, --ping -----------
 import http.server, threading, json as _json  # noqa: E402
 class _H(http.server.BaseHTTPRequestHandler):
@@ -669,7 +667,45 @@ check("[llm]" in r.stdout and "prompt 900 tok" in r.stdout, "local", "the agent 
 T.SERVER_URL, T.LLAMA_TIMEOUT, T.LLAMA_TOTAL_TIMEOUT = _old
 _srv.shutdown()
 
->>>>>>> 566e165fde8f24ddb6310b68eddbdeeccda38f78
+# server replies that used to give "Expecting value: line 1 column 1 (char 0)"
+_ok = _json.dumps({"choices": [{"delta": {"content": "CMD: ls"}}]}).encode()
+_plain = _json.dumps({"choices": [{"message": {"content": "CMD: ls"}}], "timings": {"prompt_n": 5, "prompt_per_second": 5.0, "predicted_n": 2, "predicted_per_second": 4.7}}).encode()
+class _H2(http.server.BaseHTTPRequestHandler):
+    variants = {
+        "empty data line": (b"data: \n\ndata: " + _ok + b"\n\ndata: [DONE]\n\n", "text/event-stream"),
+        "SSE under json type": (b"data: " + _ok + b"\n\ndata: [DONE]\n\n", "application/json"),
+        "keepalive comment": (b": keep-alive\n\ndata: " + _ok + b"\n\ndata: [DONE]\n\n", "text/event-stream"),
+        "CRLF lines": (b"data: " + _ok + b"\r\n\r\ndata: [DONE]\r\n\r\n", "text/event-stream"),
+        "junk chunk": (b"data: not-json\n\ndata: " + _ok + b"\n\ndata: [DONE]\n\n", "text/event-stream"),
+        "empty body": (b"", "application/json"),
+        "garbage body": (b"<html>oops</html>", "text/html"),
+    }
+    def log_message(self, *a): pass
+    def handle(self):
+        try: super().handle()
+        except (BrokenPipeError, ConnectionResetError): pass
+    def do_POST(self):
+        req = _json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+        _H2.calls.append(bool(req.get("stream")))
+        body, ct = _H2.variants[_H2.mode] if req.get("stream") or _H2.mode in ("garbage body",) else (_plain, "application/json")
+        if _H2.mode == "empty body" and req.get("stream"): body, ct = b"", "application/json"
+        self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(body)))
+        self.end_headers(); self.wfile.write(body)
+_srv2 = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H2); threading.Thread(target=_srv2.serve_forever, daemon=True).start()
+T.SERVER_URL = f"http://127.0.0.1:{_srv2.server_address[1]}/v1/chat/completions"
+for mode in ("empty data line", "SSE under json type", "keepalive comment", "CRLF lines", "junk chunk", "empty body"):
+    _H2.mode, _H2.calls = mode, []
+    out = T._ask_local([("user", "u")])
+    check(out == "CMD: ls", "local", f"server reply variant readable: {mode}", f"{out[:80]} calls={_H2.calls}")
+_H2.mode, _H2.calls = "empty body", []; T._ask_local([("user", "u")])
+check(_H2.calls == [True, False], "local", "unreadable stream is retried once without streaming", str(_H2.calls))
+_H2.mode = "garbage body"; out = T._ask_local([("user", "u")], stream=False)
+check(out.startswith("ERROR: Failed to connect") and "oops" in out, "local", "a non-JSON reply says what the server sent", out[:100])
+T.LLAMA_STREAM = False; _H2.mode, _H2.calls = "empty data line", []
+check(T._ask_local([("user", "u")]) == "CMD: ls" and _H2.calls == [False], "local", "LLAMA_STREAM=0 sends a plain request")
+T.LLAMA_STREAM = True
+_srv2.shutdown()
+
 # ---- CLI entry point: one final line only, and the chmod reminder -----------
 r = subprocess.run([sys.executable, "sandbox_tool.py", "--agent", "hi"], cwd=shadow,
                    capture_output=True, text=True, env={**os.environ, "SANDBOX_DIR": str(shadow)})

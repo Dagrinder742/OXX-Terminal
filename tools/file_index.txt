@@ -1,1 +1,3 @@
 skill.py (created)
+stock.py (created)
+skill.py (patched)
