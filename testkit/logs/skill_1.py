@@ -1,43 +1,50 @@
 import random
 
+
 class Skill:
     def __init__(self):
         self.state = {"metrics": {}, "history": []}
 
     def perceive(self):
-        temperature = random.randint(10, 30)
-        humidity = random.randint(40, 80)
-        light = random.randint(0, 100)
-        self.state["metrics"] = {"temperature": temperature, "humidity": humidity, "light": light}
-        print("Perceive: temperature =", temperature, "humidity =", humidity, "light =", light)
+        self.state["metrics"] = {
+            "temperature": random.randint(10, 30),
+            "humidity": random.randint(40, 80),
+            "light": random.randint(0, 100),
+        }
+        print("Perceive:", self.state["metrics"])
         return self.state["metrics"]
 
     def reason(self):
-        actions = ["move", "attack", "defend"]
-        random.shuffle(actions)
-        print("Reason: ", actions)
+        temp = self.state["metrics"].get("temperature", 20)
+        hum = self.state["metrics"].get("humidity", 60)
+        light = self.state["metrics"].get("light", 50)
+        actions = [
+            f"set_temperature_{temp}C",
+            f"regulate_humidity_{hum}pct",
+            f"adjust_illumination_{light}lux",
+        ]
+        print("Reason:", actions)
         return actions
 
     def evaluate(self, actions):
-        scores = [len(action) for action in actions]
-        max_score = max(scores)
-        max_index = scores.index(max_score)
-        chosen_action = actions[max_index]
-        print("Evaluate: ", scores)
-        return chosen_action
+        scores = {action: len(action) for action in actions}
+        print("Evaluate:", scores)
+        best_action = max(actions, key=len)
+        return best_action
 
     def act(self, action):
-        print("Act: ", action)
+        print("Act:", action)
         return action
 
     def think(self, rounds=3):
         for _ in range(rounds):
-            metrics = self.perceive()
+            self.perceive()
             actions = self.reason()
-            chosen_action = self.evaluate(actions)
-            self.act(chosen_action)
-            self.state["history"].append(chosen_action)
+            best = self.evaluate(actions)
+            chosen = self.act(best)
+            self.state["history"].append(chosen)
         return self.state["history"]
+
 
 if __name__ == "__main__":
     Skill().think()
