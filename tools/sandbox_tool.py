@@ -146,17 +146,26 @@ def _check_writable(p: str):
 def _fenced_block(body):
     """Text of the ``` block in `body`, or None if there is no block.
 
-    The LAST closing fence ends the block, so file content may itself contain
-    fences (markdown). An unclosed block means the reply was probably cut off by
-    the token limit; refuse rather than write a truncated file."""
+    The block ends at the first closing fence that is followed by nothing, or by a
+    protocol line (NOTE:/CMD:/DONE:). That keeps file content free to contain its own
+    fences (markdown), but stops at the model's real closing fence when the model keeps
+    writing and invents the next steps (fake tool output, more CMD lines) after it.
+    If no closing fence qualifies, the LAST bare fence ends the block (older behaviour).
+    An unclosed block means the reply was probably cut off by the token limit; refuse
+    rather than write a truncated file."""
     lines = (body or "").splitlines()
     start = next((i for i, l in enumerate(lines) if l.strip().startswith("```")), None)
     if start is None:
         return None
-    end = next((i for i in range(len(lines) - 1, start, -1) if lines[i].strip() == "```"), None)
-    if end is None:
+    closers = [i for i in range(start + 1, len(lines)) if lines[i].strip() == "```"]
+    if not closers:
         raise Refused("code block is not closed (reply may have been cut off); "
                       "write a shorter file or split it into parts")
+
+    def _ends_reply(i):
+        nxt = next((l.strip() for l in lines[i + 1:] if l.strip()), "")
+        return not nxt or nxt.startswith(("NOTE:", "CMD:", "DONE:"))
+    end = next((i for i in closers if _ends_reply(i)), closers[-1])
     return "\n".join(lines[start + 1:end]) + "\n"
 
 
@@ -1057,6 +1066,9 @@ RULE OF OBSERVATION: you cannot know your code works until run_python has run it
 have read the output. Never declare success, and never patch, on a guess. After any
 write_file or patch_file of a .py file, run_python it before you reply DONE.
 
+When you see a NameError for a standard library module, always place the import statement 
+at the very top of the file (module scope), not inline.
+
 A patch only counts when the tool answers "Successfully patched". If a patch or write was
 REFUSED, fix the problem and send it again before you say DONE. Every line you put in a
 REPLACE block needs the same leading spaces the file has.
@@ -1282,8 +1294,11 @@ def _ask_local(trimmed_msgs, max_tokens=1024, stream=None) -> str:
     total = time.time() - t0
     bits = [f"{total:.0f}s total"]
     if timings:
-        if timings.get("prompt_n"):
-            bits.append(f"prompt {timings['prompt_n']} tok @ {timings.get('prompt_per_second', 0):.1f} tok/s")
+        pn = timings.get("prompt_n") or 0
+        if 0 < pn < 20 and timings.get("cache_n"):   # almost all of the prompt came from the server's cache
+            bits.append(f"prompt cached ({timings['cache_n']} tok reused, {pn} new; read speed not measured)")
+        elif pn:
+            bits.append(f"prompt {pn} tok @ {timings.get('prompt_per_second', 0):.1f} tok/s")
         if timings.get("predicted_n"):
             bits.append(f"generated {timings['predicted_n']} tok @ {timings.get('predicted_per_second', 0):.2f} tok/s")
     elif t_first and n > 1:
@@ -1301,6 +1316,7 @@ def ping() -> str:
         return out
     est = LAST_STATS
     return (f"server replied in {time.time() - t0:.0f}s: {out!r}\n[llm] {est}\n"
+            "If it says 'prompt cached', the server already had this prompt, so only generation speed was measured.\n"
             "Rule of thumb: the first agent step reads the whole system prompt "
             f"(~{len(SYSTEM) // 4} tokens) once; later steps reuse the server's cache. "
             "Below ~1 tok/s generation, check CPU throttling, free RAM, leftover llama processes, "

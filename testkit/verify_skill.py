@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Acceptance check for the v4 skill.py contract.
+"""Acceptance check for the v4.1 skill.py contract.
 
 Usage:  python verify_skill.py [path/to/skill.py]      (default: ./skill.py)
 
@@ -94,7 +94,10 @@ def t_no_stubs():
 def t_state():
     s = load().Skill()
     assert isinstance(s.state, dict), "state is not a dict"
-    assert "metrics" in s.state and "history" in s.state, f"state keys are {sorted(s.state)}"
+    expected_keys = {"metrics", "history", "energy", "cycles"}
+    assert expected_keys.issubset(s.state.keys()), f"state keys missing or incorrect: {sorted(s.state.keys())}"
+    assert s.state["energy"] == 100, f"initial energy should be 100, got {s.state['energy']}"
+    assert s.state["cycles"] == 0, f"initial cycles should be 0, got {s.state['cycles']}"
 
 
 def t_perceive():
@@ -110,15 +113,22 @@ def t_perceive():
 
 def t_reason():
     Skill = load().Skill
-    for i in range(150):
-        s = Skill()
-        quiet(s.perceive)
-        acts, out = quiet(s.reason)
-        assert isinstance(acts, list), f"returned {type(acts).__name__}, expected list"
-        assert len(acts) == 3, f"returned {len(acts)} actions on try {i + 1}: {acts!r}"
-        assert all(isinstance(a, str) and a for a in acts), f"actions must be non-empty strings: {acts!r}"
-        assert len(set(acts)) == 3, f"actions are not all different: {acts!r}"
-    assert "Reason:" in out, "did not print 'Reason:'"
+    # Test high temp trigger
+    s1 = Skill()
+    acts1, out1 = quiet(s1.reason, {"temperature": 28, "humidity": 50, "light": 50})
+    assert isinstance(acts1, list) and len(acts1) == 3, f"reason() expected 3 actions, got {acts1!r}"
+    assert "cool_down" in acts1, f"reason() with temp > 25 must include 'cool_down', got {acts1!r}"
+    assert "Reason:" in out1, "did not print 'Reason:'"
+
+    # Test low light trigger
+    s2 = Skill()
+    acts2, _ = quiet(s2.reason, {"temperature": 20, "humidity": 50, "light": 10})
+    assert "illuminate" in acts2, f"reason() with light < 20 must include 'illuminate', got {acts2!r}"
+
+    # Test nominal case
+    s3 = Skill()
+    acts3, _ = quiet(s3.reason, {"temperature": 20, "humidity": 50, "light": 50})
+    assert len(acts3) == 3 and len(set(acts3)) == 3, f"actions must be 3 distinct strings: {acts3!r}"
 
 
 def t_evaluate():
@@ -132,9 +142,13 @@ def t_evaluate():
 
 def t_act():
     s = load().Skill()
-    r, out = quiet(s.act, "zzz")
-    assert r == "zzz", f"returned {r!r}, expected the action"
-    assert "Act:" in out and "zzz" in out, "did not print 'Act: zzz'"
+    initial_energy = s.state["energy"]
+    initial_cycles = s.state["cycles"]
+    r, out = quiet(s.act, "cool_down")
+    assert r == "cool_down", f"returned {r!r}, expected the action"
+    assert s.state["energy"] == initial_energy - 15, f"energy did not drop by 15: got {s.state['energy']}"
+    assert s.state["cycles"] == initial_cycles + 1, f"cycles did not increment: got {s.state['cycles']}"
+    assert "Act:" in out and "cool_down" in out, "did not print 'Act: cool_down'"
 
 
 def t_think():
@@ -143,8 +157,22 @@ def t_think():
     h, _ = quiet(s.think)
     assert isinstance(h, list) and len(h) == 3 and all(isinstance(x, str) for x in h), f"think() returned {h!r}"
     assert s.state["history"] == h, "state['history'] does not match the returned list"
-    h5, _ = quiet(Skill().think, rounds=5)
-    assert len(h5) == 5, f"think(rounds=5) returned {len(h5)} items"
+    
+    # Test energy exhaustion / early stop
+    s_exhausted = Skill()
+    s_exhausted.state["energy"] = 10
+    h_ex, _ = quiet(s_exhausted.think, rounds=3)
+    assert len(h_ex) < 3, f"think() should stop early when energy hits 0, but completed {len(h_ex)} rounds"
+
+
+def t_report():
+    s = load().Skill()
+    quiet(s.think)
+    rep, out = quiet(s.report)
+    assert isinstance(rep, dict), f"report() returned {type(rep).__name__}, expected dict"
+    for k in ("total_cycles", "remaining_energy", "actions_taken"):
+        assert k in rep, f"report() dict missing key: {k}"
+    assert "Report:" in out, "did not print 'Report:'"
 
 
 if not os.path.isfile(PATH):
@@ -153,11 +181,11 @@ else:
     check("file imports without error", t_import)
     importable = results[-1][0]
     for name, fn in (("script runs and exits 0", t_runs), ("script prints each stage 3 times", t_stages),
-                     ("no stub bodies or TODO", t_no_stubs), ("state has metrics + history", t_state),
-                     ("perceive() contract", t_perceive), ("reason() always returns 3 different actions", t_reason),
-                     ("evaluate() picks the longest, first on ties", t_evaluate), ("act() prints and returns", t_act),
-                     ("think() loops, records history", t_think)):
-        if name.startswith(("state", "perceive", "reason", "evaluate", "act", "think")) and not importable:
+                     ("no stub bodies or TODO", t_no_stubs), ("state has metrics, history, energy, cycles", t_state),
+                     ("perceive() contract", t_perceive), ("reason(metrics) conditional triggers", t_reason),
+                     ("evaluate() picks the longest, first on ties", t_evaluate), ("act() energy/cycle tracking", t_act),
+                     ("think() loops, records history, respects energy limit", t_think), ("report() summary contract", t_report)):
+        if name.startswith(("state", "perceive", "reason", "evaluate", "act", "think", "report")) and not importable:
             results.append((False, name, "skipped: the file does not import"))
         else:
             check(name, fn)
@@ -167,3 +195,4 @@ for ok, name, detail in results:
 good = sum(1 for r in results if r[0])
 print(f"VERIFY: {'PASS' if good == len(results) else 'FAIL'} ({good}/{len(results)})")
 sys.exit(0 if good == len(results) else 1)
+

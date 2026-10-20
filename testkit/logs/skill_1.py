@@ -1,93 +1,68 @@
 import random
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 
-
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 class Skill:
     def __init__(self):
-        self.state = {"metrics": {}, "history": []}
+        self.state = {
+            "metrics": {},
+            "history": [],
+            "energy": 100,
+            "cycles": 0
+        }
 
     def perceive(self):
-        self.state["metrics"] = {
+        metrics = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            "light": random.randint(0, 100),
-        }
-        print("Perceive:", self.state["metrics"])
-=======
             "light": random.randint(0, 100)
         }
-        print("Perceive: ", self.state["metrics"])
->>>>>>> Stashed changes
-=======
-            "light": random.randint(0, 100)
-        }
-        print("Perceive: ", self.state["metrics"])
->>>>>>> Stashed changes
-        return self.state["metrics"]
+        print("Perceive: ", metrics)
+        return metrics
 
-    def reason(self):
-        temp = self.state["metrics"].get("temperature", 20)
-        hum = self.state["metrics"].get("humidity", 60)
-        light = self.state["metrics"].get("light", 50)
-        actions = [
-            f"set_temperature_{temp}C",
-            f"regulate_humidity_{hum}pct",
-            f"adjust_illumination_{light}lux",
-        ]
-        print("Reason:", actions)
+    def reason(self, metrics):
+        actions = []
+        if metrics["temperature"] > 25:
+            actions.append("cool_down")
+        if metrics["light"] < 20:
+            actions.append("illuminate")
+        else:
+            actions.extend(["scout", "patrol", "rest"])
+        print("Reason: ", actions)
         return actions
 
     def evaluate(self, actions):
         scores = {action: len(action) for action in actions}
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        print("Evaluate:", scores)
-        best_action = max(actions, key=len)
-        return best_action
-=======
-=======
->>>>>>> Stashed changes
         max_score = max(scores.values())
-        action_with_max_score = [action for action, score in scores.items() if score == max_score][0]
+        best_action = [action for action, score in scores.items() if score == max_score][0]
         print("Evaluate: ", scores)
-        return action_with_max_score
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
+        return best_action
 
     def act(self, action):
-        print("Act:", action)
+        self.state["energy"] = max(0, self.state["energy"] - 15)
+        self.state["cycles"] += 1
+        print("Act: ", action, "remaining energy:", self.state["energy"])
         return action
 
     def think(self, rounds=3):
         for _ in range(rounds):
-            self.perceive()
-            actions = self.reason()
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            best = self.evaluate(actions)
-            chosen = self.act(best)
-            self.state["history"].append(chosen)
-=======
-            action = self.evaluate(actions)
-            action = self.act(action)
-            self.state["history"].append(action)
->>>>>>> Stashed changes
-=======
-            action = self.evaluate(actions)
-            action = self.act(action)
-            self.state["history"].append(action)
->>>>>>> Stashed changes
+            metrics = self.perceive()
+            actions = self.reason(metrics)
+            best_action = self.evaluate(actions)
+            self.act(best_action)
+            self.state["history"].append(best_action)
+            if self.state["energy"] == 0:
+                break
         return self.state["history"]
 
+    def report(self):
+        report = {
+            "total_cycles": self.state["cycles"],
+            "remaining_energy": self.state["energy"],
+            "actions_taken": len(self.state["history"])
+        }
+        print("Report: ", report)
+        return report
 
 if __name__ == "__main__":
-    Skill().think()
+    s = Skill()
+    s.think()
+    s.report()

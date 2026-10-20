@@ -2,20 +2,30 @@ import random
 
 class Skill:
     def __init__(self):
-        self.state = {"metrics": {}, "history": []}
+        self.state = {
+            "metrics": {},
+            "history": [],
+            "energy": 100,
+            "cycles": 0
+        }
 
     def perceive(self):
-        self.state["metrics"] = {
+        metrics = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: ", self.state["metrics"])
-        return self.state["metrics"]
+        print("Perceive: ", metrics)
+        return metrics
 
-    def reason(self):
-        actions = ["move", "attack", "defend"]
-        random.shuffle(actions)
+    def reason(self, metrics):
+        actions = []
+        if metrics["temperature"] > 25:
+            actions.append("cool_down")
+        if metrics["light"] < 20:
+            actions.append("illuminate")
+        else:
+            actions.extend(["scout", "patrol", "rest"])
         print("Reason: ", actions)
         return actions
 
@@ -27,17 +37,32 @@ class Skill:
         return best_action
 
     def act(self, action):
-        print("Act: ", action)
+        self.state["energy"] = max(0, self.state["energy"] - 15)
+        self.state["cycles"] += 1
+        print("Act: ", action, "remaining energy:", self.state["energy"])
         return action
 
     def think(self, rounds=3):
         for _ in range(rounds):
             metrics = self.perceive()
-            actions = self.reason()
+            actions = self.reason(metrics)
             best_action = self.evaluate(actions)
             self.act(best_action)
             self.state["history"].append(best_action)
+            if self.state["energy"] == 0:
+                break
         return self.state["history"]
 
+    def report(self):
+        report = {
+            "total_cycles": self.state["cycles"],
+            "remaining_energy": self.state["energy"],
+            "actions_taken": len(self.state["history"])
+        }
+        print("Report: ", report)
+        return report
+
 if __name__ == "__main__":
-    Skill().think()
+    s = Skill()
+    s.think()
+    s.report()

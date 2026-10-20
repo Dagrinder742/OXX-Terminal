@@ -134,6 +134,24 @@ check(T.run("write_file blk.py", body).startswith("[exit 0]")
 md = "# T\n```python\nx = 1\n```\nend"
 check(T.run("write_file doc.md", "```md\n" + md + "\n```").startswith("[exit 0]")
       and (SB / "doc.md").read_text() == md + "\n", "block", "content may contain inner fences")
+# model keeps writing after its closing fence and invents tool output / more steps (seen in run10 run 8)
+tail = ("\nNOTE: read_file skill.py 1 1\nCMD: check_file skill.py\n```plaintext\nNo problems found.\n```\n"
+        "\nNOTE: x\nCMD: run_python skill.py\n```plaintext\nfake output\n```\n\nDONE: The code works.")
+r = T.run("write_file tail1.py", "```python\n" + code + "\n```" + tail)
+check(r.startswith("[exit 0]") and (SB / "tail1.py").read_text() == code + "\n",
+      "block", "invented steps after the closing fence are not written into the file")
+r = T.run("write_file tail2.py", "```python\n" + code + "\n```\n\nDONE: The code works.")
+check(r.startswith("[exit 0]") and (SB / "tail2.py").read_text() == code + "\n",
+      "block", "DONE after the closing fence is not written into the file")
+md2 = "# T\n```python\nx = 1\n```\nmiddle\n```sh\nls\n```\nend"
+r = T.run("write_file doc2.md", "```md\n" + md2 + "\n```" + tail)
+check(r.startswith("[exit 0]") and (SB / "doc2.md").read_text() == md2 + "\n",
+      "block", "inner fences kept AND invented tail dropped")
+# the exact reply shape from the phone: write block, then invented check_file/run_python steps
+k, txt, bd, _n = T.parse_reply("NOTE: read_file skill.py 1 1\nCMD: write_file skill.py\n```python\nx = 1\n```\n"
+                               "\nNOTE: read_file skill.py 1 1\nCMD: check_file skill.py\n```plaintext\nNo problems found.\n```\n")
+check(k == "cmd" and txt == "write_file skill.py" and T._fenced_block(bd) == "x = 1\n",
+      "block", "parse_reply + _fenced_block take only the first block")
 check(T.run("write_file cut.py", "```python\nprint('unfinished'").startswith("REFUSED")
       and not (SB / "cut.py").exists(), "block", "unclosed block (cut-off reply) is not written")
 check(T.run("write_file nofence.py", "just prose").startswith("REFUSED"), "block", "no block, no content")

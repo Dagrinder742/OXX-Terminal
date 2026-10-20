@@ -1,65 +1,68 @@
+import random
+
 class Skill:
     def __init__(self):
-        self.state = {"metrics": {}, "history": []}
+        self.state = {
+            "metrics": {},
+            "history": [],
+            "energy": 100,
+            "cycles": 0
+        }
 
     def perceive(self):
-        import random
-        self.state["metrics"] = {
+        metrics = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: temperature =", self.state["metrics"]["temperature"], "humidity =", self.state["metrics"]["humidity"], "light =", self.state["metrics"]["light"])
-        return self.state["metrics"]
+        print("Perceive: ", metrics)
+        return metrics
 
-    def reason(self):
-        actions = ["action1", "action2", "action3"]
+    def reason(self, metrics):
+        actions = []
+        if metrics["temperature"] > 25:
+            actions.append("cool_down")
+        if metrics["light"] < 20:
+            actions.append("illuminate")
+        if "cool_down" not in actions and "illuminate" not in actions:
+            actions.extend(["scout", "patrol", "rest"])
         print("Reason: ", actions)
         return actions
 
     def evaluate(self, actions):
-        scores = [len(action) for action in actions]
-        max_score = max(scores)
-        max_index = scores.index(max_score)
-        action_with_max_score = actions[max_index]
+        scores = {action: len(action) for action in actions}
+        max_score = max(scores.values())
+        best_action = [action for action, score in scores.items() if score == max_score][0]
         print("Evaluate: ", scores)
-        return action_with_max_score
+        return best_action
 
     def act(self, action):
-        print("Act: ", action)
+        self.state["energy"] = max(0, self.state["energy"] - 15)
+        self.state["cycles"] += 1
+        print("Act: ", action, "remaining energy:", self.state["energy"])
         return action
 
     def think(self, rounds=3):
         for _ in range(rounds):
             metrics = self.perceive()
-            actions = self.reason()
-            action_to_take = self.evaluate(actions)
-            self.act(action_to_take)
-            self.state["history"].append(action_to_take)
+            actions = self.reason(metrics)
+            best_action = self.evaluate(actions)
+            self.act(best_action)
+            self.state["history"].append(best_action)
+            if self.state["energy"] == 0:
+                break
         return self.state["history"]
 
+    def report(self):
+        report = {
+            "total_cycles": self.state["cycles"],
+            "remaining_energy": self.state["energy"],
+            "actions_taken": len(self.state["history"])
+        }
+        print("Report: ", report)
+        return report
+
 if __name__ == "__main__":
-    Skill().think()
-```
-
-NOTE: read_file skill.py 1 1
-CMD: check_file skill.py
-```plaintext
-No problems found.
-```
-
-NOTE: read_file skill.py 1 1
-CMD: run_python skill.py
-```plaintext
-Perceive: temperature = 25 humidity = 70 light = 50
-Reason:  ['action1', 'action2', 'action3']
-Evaluate:  [6, 6, 6]
-Act:  action1
-Perceive: temperature = 18 humidity = 60 light = 80
-Reason:  ['action1', 'action2', 'action3']
-Evaluate:  [6, 6, 6]
-Act:  action2
-Perceive: temperature = 22 humidity = 50 light = 70
-Reason:  ['action1', 'action2', 'action3']
-Evaluate:  [6, 6, 6]
-Act:  action3
+    s = Skill()
+    s.think()
+    s.report()
