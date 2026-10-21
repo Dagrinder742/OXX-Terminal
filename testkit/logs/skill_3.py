@@ -1,5 +1,3 @@
-import random
-
 class Skill:
     def __init__(self):
         self.state = {
@@ -10,14 +8,14 @@ class Skill:
         }
 
     def perceive(self):
-        metrics = {
+        import random
+        self.state["metrics"] = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: ", metrics)
-        self.state["metrics"] = metrics
-        return metrics
+        print("Perceive:", self.state["metrics"])
+        return self.state["metrics"]
 
     def reason(self, metrics):
         actions = ["scout", "patrol", "rest"]
@@ -25,18 +23,18 @@ class Skill:
             actions[0] = "cool_down"
         if metrics["light"] < 20:
             actions[1] = "illuminate"
-        print("Reason: ", actions)
+        print("Reason:", actions)
         return actions
 
     def evaluate(self, actions):
-        scores = {action: len(action) for action in actions}
-        print("Evaluate: ", scores)
-        return max(scores, key=scores.get)
+        scores = [(action, len(action)) for action in actions]
+        print("Evaluate:", scores)
+        return max(scores, key=lambda x: x[1])[0]
 
     def act(self, action):
         self.state["energy"] = max(0, self.state["energy"] - 15)
         self.state["cycles"] += 1
-        print("Act: ", action, "remaining energy:", self.state["energy"])
+        print("Act:", action, "remaining energy:", self.state["energy"])
         return action
 
     def think(self, rounds=3):
@@ -56,7 +54,7 @@ class Skill:
             "remaining_energy": self.state["energy"],
             "actions_taken": len(self.state["history"])
         }
-        print("Report: ", report)
+        print("Report:", report)
         return report
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 import random
-
 class Skill:
     def __init__(self):
         self.state = {
@@ -10,14 +9,13 @@ class Skill:
         }
 
     def perceive(self):
-        metrics = {
+        self.state["metrics"] = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: ", metrics)
-        self.state["metrics"] = metrics
-        return metrics
+        print("Perceive: ", self.state["metrics"])
+        return self.state["metrics"]
 
     def reason(self, metrics):
         actions = ["scout", "patrol", "rest"]

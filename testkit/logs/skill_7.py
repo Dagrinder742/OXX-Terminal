@@ -30,10 +30,8 @@ class Skill:
 
     def evaluate(self, actions):
         scores = {action: len(action) for action in actions}
-        highest_score = max(scores.values())
-        highest_action = [action for action, score in scores.items() if score == highest_score][0]
         print("Evaluate:", scores)
-        return highest_action
+        return max(scores, key=scores.get)
 
     def act(self, action):
         self.state["energy"] = max(0, self.state["energy"] - 15)

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Runs the agent N times on prompt_v4.txt and judges each result with verify_skill.py.
 # Usage:  bash run10.sh [N]          (default 10)
-# Env:    TOOLS=<sandbox folder>     default ~/OKX-Terminal/tools
+# Env:    TOOLS=<sandbox folder>     default /c/Users/krayz/AndroidStudioProjects/OXXTerminal/app/src/main/Python/tools
 #         PY=<python command>        default python
 # Logs go to ./logs next to this script (outside the sandbox, so the model cannot see them).
 set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
-TOOLS="${TOOLS:-$HOME/OKX-Terminal/tools}"
+TOOLS="${TOOLS:-/c/Users/krayz/AndroidStudioProjects/OXXTerminal/app/src/main/Python/tools}"
 PY="${PY:-python}"
 N="${1:-10}"
 LOGS="$KIT/logs"

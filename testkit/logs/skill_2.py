@@ -1,4 +1,5 @@
 import random
+
 class Skill:
     def __init__(self):
         self.state = {
@@ -29,10 +30,10 @@ class Skill:
 
     def evaluate(self, actions):
         scores = {action: len(action) for action in actions}
-        max_score = max(scores.values())
-        best_action = [action for action, score in scores.items() if score == max_score][0]
+        highest_score = max(scores.values())
+        highest_action = [action for action, score in scores.items() if score == highest_score][0]
         print("Evaluate:", scores)
-        return best_action
+        return highest_action
 
     def act(self, action):
         self.state["energy"] = max(0, self.state["energy"] - 15)
@@ -44,9 +45,9 @@ class Skill:
         for _ in range(rounds):
             metrics = self.perceive()
             actions = self.reason(metrics)
-            best_action = self.evaluate(actions)
-            self.act(best_action)
-            self.state["history"].append(best_action)
+            action = self.evaluate(actions)
+            self.act(action)
+            self.state["history"].append(action)
             if self.state["energy"] == 0:
                 break
         return self.state["history"]
