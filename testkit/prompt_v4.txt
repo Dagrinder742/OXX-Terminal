@@ -7,9 +7,9 @@ State: __init__ sets self.state = {
     "cycles": 0
 }.
 
-perceive(): fill self.state["metrics"] with three random integers: temperature (10 to 30), humidity (40 to 80), light (0 to 100). Print "Perceive: " followed by the metrics. Return the metrics dict.
+perceive(): set self.state["metrics"] to a dictionary containing three random integers: temperature (10 to 30), humidity (40 to 80), light (0 to 100). Print "Perceive: " followed by this metrics dict. Return self.state["metrics"].
 
-reason(metrics): accept the metrics dict from perceive(). Return a list of 3 distinct action strings. If metrics["temperature"] > 25, the list MUST include "cool_down". If metrics["light"] < 20, the list MUST include "illuminate". Otherwise, return ["scout", "patrol", "rest"]. Print "Reason: " followed by the list.
+reason(metrics): accept the metrics dict from perceive(). Start with a base list of 3 actions: ["scout", "patrol", "rest"]. If metrics["temperature"] > 25, replace the first action with "cool_down". If metrics["light"] < 20, replace the second action with "illuminate". Ensure the list always contains exactly 3 items. Print "Reason: " followed by the list. Return the list.
 
 evaluate(actions): score each action in `actions` with len(action). Return the action string with the highest score. If tied, return the first one. Print "Evaluate: " followed by the scores list or dict.
 

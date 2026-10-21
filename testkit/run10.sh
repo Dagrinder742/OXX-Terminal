@@ -37,7 +37,10 @@ for i in $(seq 1 "$N"); do
   if tail -n 1 "$LOGS/verify_$i.log" | grep -q "VERIFY: PASS"; then v=PASS; pass=$((pass+1)); else v=FAIL; fi
   steps=$(grep -c '^model>' "$LOGS/run_$i.log")
   rp=$(grep -c 'CMD: run_python' "$LOGS/run_$i.log")
-  if grep -q 'DONE:' "$LOGS/run_$i.log"; then said=yes; else said=no; fi
+  # "said_done" = the run ENDED because the tool accepted a DONE. A DONE the model merely wrote
+  # inside a longer reply (invented steps) while the run was later stopped does not count.
+  if grep -q '^final>' "$LOGS/run_$i.log"; then said=no
+  elif grep -q 'DONE:' "$LOGS/run_$i.log"; then said=yes; else said=no; fi
   note=""
   if [ ! -f "$LOGS/skill_$i.py" ]; then
     note="no skill.py was written"

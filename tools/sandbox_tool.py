@@ -38,6 +38,7 @@ if (__name__ == "__main__" and sys.path
     sys.path.pop(0)
 
 import ast
+import builtins
 import glob
 import io
 import json
@@ -218,6 +219,48 @@ def _arity(fn):
     return required, (None if a.vararg else n)
 
 
+_STDLIB = getattr(sys, "stdlib_module_names", frozenset(
+    "abc argparse ast asyncio base64 collections copy csv datetime decimal enum functools "
+    "glob hashlib heapq io itertools json logging math operator os pathlib pickle queue random "
+    "re shutil sqlite3 statistics string struct subprocess sys tempfile textwrap threading time "
+    "typing unittest uuid warnings".split()))
+
+
+def _missing_imports(tree, source: str) -> list:
+    """(line, message) for stdlib modules used as `name.attr` that are never bound in the file."""
+    bound = set(dir(builtins))
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            bound.add(n.id)
+        elif isinstance(n, ast.arg):
+            bound.add(n.arg)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(n.name)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                bound.add((a.asname or a.name).split(".")[0])
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            bound.add(n.name)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            bound.update(n.names)
+    first = next((l.rstrip() for l in source.splitlines() if l.strip()), "")
+    firstuse = {}
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                and n.value.id in _STDLIB and not n.value.id.startswith("_")
+                and n.value.id not in bound):
+            firstuse[n.value.id] = min(firstuse.get(n.value.id, n.lineno), n.lineno)
+    out = []
+    for name, line in sorted(firstuse.items(), key=lambda kv: kv[1]):
+        fix = (f"Add `import {name}` as the very FIRST line of the file (line 1), above everything else, "
+               f"never inside a class, function or dict.")
+        if first and not first.startswith((" ", "\t")):
+            fix += (f" With patch_file: SEARCH = `{first[:70]}`, REPLACE = `import {name}`, "
+                    f"an empty line, then `{first[:70]}`.")
+        out.append((line, f"`{name}` is used but never imported, so this will fail with NameError. {fix}"))
+    return out
+
+
 def check_python(source: str) -> list[str]:
     """Static check only: the code is parsed, never executed. Returns problem lines.
 
@@ -273,6 +316,10 @@ def check_python(source: str) -> list[str]:
                         want = f"{lo}" if lo == hi else f"{lo}-{hi if hi is not None else 'many'}"
                         problems.append((n.lineno, f"{me}.{n.func.attr}() called with {got} argument(s) but "
                                          f"def {n.func.attr} (line {methods[n.func.attr].lineno}) takes {want}."))
+
+    # A standard-library module used as name.attr but never imported or assigned anywhere
+    # (the classic NameError a small model forgets: random.randint with no `import random`).
+    problems += _missing_imports(tree, source)
 
     # Module-like files (they define something) should not run demo calls on import.
     # A plain script with no defs, like print("hi"), is left alone.
@@ -810,6 +857,21 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
             new_content, note = hit, " (leading spaces adjusted to match the file)"
         if new_content == content:
             return "REFUSED: that edit would not change the file"
+        if path_str.endswith(".py"):
+            try:
+                ast.parse(content)
+            except SyntaxError:
+                pass  # the file was already broken: let the model repair it step by step
+            else:
+                try:
+                    ast.parse(new_content)
+                except SyntaxError as e:
+                    bad = (e.text or "").strip()
+                    return (f"REFUSED: this patch would leave {path_str} with a syntax error "
+                            f"(line {e.lineno}: {e.msg}{'  -> ' + bad if bad else ''}), so it was NOT applied and the file "
+                            f"is unchanged. A REPLACE must keep the brackets, quotes and indentation balanced: if SEARCH "
+                            f"opens a '{{' or '(' then REPLACE must close it too. Use read_file {path_str} to copy the "
+                            f"exact lines, then send a corrected patch.")
         target.write_text(new_content)
         log_to_index(path_str, "patched")
         return f"[exit 0]\nSuccessfully patched {path_str}{note}"
@@ -1066,7 +1128,7 @@ RULE OF OBSERVATION: you cannot know your code works until run_python has run it
 have read the output. Never declare success, and never patch, on a guess. After any
 write_file or patch_file of a .py file, run_python it before you reply DONE.
 
-When you see a NameError for a standard library module, always place the import statement 
+When you see a NameError for a standard library module, always place the import statement
 at the very top of the file (module scope), not inline.
 
 A patch only counts when the tool answers "Successfully patched". If a patch or write was

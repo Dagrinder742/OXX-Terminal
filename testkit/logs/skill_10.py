@@ -16,16 +16,15 @@ class Skill:
             "light": random.randint(0, 100)
         }
         print("Perceive: ", metrics)
+        self.state["metrics"] = metrics
         return metrics
 
     def reason(self, metrics):
-        actions = []
+        actions = ["scout", "patrol", "rest"]
         if metrics["temperature"] > 25:
-            actions.append("cool_down")
+            actions[0] = "cool_down"
         if metrics["light"] < 20:
-            actions.append("illuminate")
-        else:
-            actions.extend(["scout", "patrol", "rest"])
+            actions[1] = "illuminate"
         print("Reason: ", actions)
         return actions
 

@@ -16,25 +16,22 @@ class Skill:
             "light": random.randint(0, 100)
         }
         print("Perceive: ", metrics)
+        self.state["metrics"] = metrics
         return metrics
 
     def reason(self, metrics):
-        actions = []
+        actions = ["scout", "patrol", "rest"]
         if metrics["temperature"] > 25:
-            actions.append("cool_down")
+            actions[0] = "cool_down"
         if metrics["light"] < 20:
-            actions.append("illuminate")
-        else:
-            actions.extend(["scout", "patrol", "rest"])
+            actions[1] = "illuminate"
         print("Reason: ", actions)
         return actions
 
     def evaluate(self, actions):
         scores = {action: len(action) for action in actions}
-        max_score = max(scores.values())
-        best_action = next(action for action, score in scores.items() if score == max_score)
         print("Evaluate: ", scores)
-        return best_action
+        return max(scores, key=scores.get)
 
     def act(self, action):
         self.state["energy"] = max(0, self.state["energy"] - 15)
@@ -46,9 +43,9 @@ class Skill:
         for _ in range(rounds):
             metrics = self.perceive()
             actions = self.reason(metrics)
-            best_action = self.evaluate(actions)
-            self.act(best_action)
-            self.state["history"].append(best_action)
+            action = self.evaluate(actions)
+            self.act(action)
+            self.state["history"].append(action)
             if self.state["energy"] == 0:
                 break
         return self.state["history"]

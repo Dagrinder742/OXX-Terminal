@@ -152,6 +152,47 @@ k, txt, bd, _n = T.parse_reply("NOTE: read_file skill.py 1 1\nCMD: write_file sk
                                "\nNOTE: read_file skill.py 1 1\nCMD: check_file skill.py\n```plaintext\nNo problems found.\n```\n")
 check(k == "cmd" and txt == "write_file skill.py" and T._fenced_block(bd) == "x = 1\n",
       "block", "parse_reply + _fenced_block take only the first block")
+# ---- missing stdlib import (run10: NameError for `random` killed 3 of 20 runs) ----------
+_noimp = "class Skill:\n    def go(self):\n        return random.randint(1, 3)\n"
+_p = T.check_python(_noimp)
+check(len(_p) == 1 and "random" in _p[0] and "FIRST line" in _p[0] and "class Skill:" in _p[0] and _p[0].startswith("line 3:"),
+      "import", "missing `import random` is reported with the line and a ready patch", str(_p)[:120])
+check(T.check_python("import random\nclass A:\n    def f(self):\n        return random.random()\n") == [],
+      "import", "no warning when the import is there")
+check(T.check_python("import os.path\nx = os.getcwd()\n") == [], "import", "import os.path counts as os")
+check(T.check_python("def f(time):\n    return time.sleep\n") == [], "import", "a parameter named like a module is not flagged")
+check(T.check_python("string = object()\nprint(string.x)\n") == [], "import", "an assigned name is not flagged")
+check(T.check_python("from random import randint\nprint(random.x)\n") != [], "import",
+      "`from random import randint` does not import `random`")
+check(len(T.check_python("class A:\n  def f(self):\n    return random.x + time.y + random.z\n")) == 2,
+      "import", "two missing modules reported once each")
+(SB / "imp.py").write_text(_noimp)
+_r = T.run("check_file imp.py")
+check("never imported" in _r, "import", "check_file shows it")
+_r = T.run("patch_file imp.py", "<<<<<<< SEARCH\nclass Skill:\n=======\nimport random\n\nclass Skill:\n>>>>>>> REPLACE\n")
+check(_r.startswith("[exit 0]") and "no problems" in _r and (SB / "imp.py").read_text().startswith("import random\n\nclass Skill:"),
+      "import", "the ready-made patch from the hint works and clears the problem", _r[:120])
+
+# ---- patch_file never turns a working .py file into a broken one (run10: file wrecked in 3 runs) ----
+(SB / "wreck.py").write_text('class A:\n    def __init__(self):\n        self.s = {\n            "a": 1,\n            "b": 2\n        }\n')
+_orig = (SB / "wreck.py").read_text()
+_r = T.run("patch_file wreck.py", "<<<<<<< SEARCH\n        self.s = {\n=======\n        self.s = {}\n>>>>>>> REPLACE\n")
+check(_r.startswith("REFUSED") and "syntax error" in _r and "NOT applied" in _r and (SB / "wreck.py").read_text() == _orig,
+      "patchguard", "a patch that breaks the syntax is refused and the file is unchanged", _r[:100])
+_r = T.run("patch_file wreck.py", "<<<<<<< SEARCH\n            \"b\": 2\n=======\n            \"b\": 3\n>>>>>>> REPLACE\n")
+check(_r.startswith("[exit 0]") and '"b": 3' in (SB / "wreck.py").read_text(), "patchguard", "a good patch still applies")
+(SB / "broken.py").write_text("def f(:\n    pass\n")
+_r = T.run("patch_file broken.py", "<<<<<<< SEARCH\ndef f(:\n=======\ndef f(x):\n>>>>>>> REPLACE\n")
+check(_r.startswith("[exit 0]") and (SB / "broken.py").read_text().startswith("def f(x):"),
+      "patchguard", "an already-broken file can still be repaired", _r[:100])
+(SB / "notes.txt").write_text("a {\n")
+_r = T.run("patch_file notes.txt", "<<<<<<< SEARCH\na {\n=======\nb (\n>>>>>>> REPLACE\n")
+check(_r.startswith("[exit 0]"), "patchguard", "non-.py files are not syntax-checked")
+# the exact bad patch from run10 (import placed inside the dict)
+(SB / "run3.py").write_text('class Skill:\n    def perceive(self):\n        m = {\n            "t": random.randint(1, 2),\n        }\n        return m\n')
+_r = T.run("patch_file run3.py", '<<<<<<< SEARCH\n"t": random.randint(1, 2),\n=======\nimport random\n"t": random.randint(1, 2),\n>>>>>>> REPLACE\n')
+check(_r.startswith("REFUSED") and "import random" not in (SB / "run3.py").read_text(), "patchguard",
+      "the real run-3 patch (import inside a dict) is refused", _r[:90])
 check(T.run("write_file cut.py", "```python\nprint('unfinished'").startswith("REFUSED")
       and not (SB / "cut.py").exists(), "block", "unclosed block (cut-off reply) is not written")
 check(T.run("write_file nofence.py", "just prose").startswith("REFUSED"), "block", "no block, no content")

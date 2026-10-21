@@ -1,13 +1,13 @@
 run  verify   steps   run_python said_done note
-1    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-2    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-3    FAIL     4       1          yes       CLAIMED DONE BUT FAILED
-4    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-5    FAIL     4       0          yes       CLAIMED DONE BUT FAILED stopped: (stopped: DONE was blocked 3 times; you changed skill
-6    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-7    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-8    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-9    FAIL     3       1          yes       CLAIMED DONE BUT FAILED
-10   FAIL     3       1          yes       CLAIMED DONE BUT FAILED
+1    FAIL     6       5          no         stopped: (stopped: aborted due to consecutive failures)
+2    PASS     5       2          yes       
+3    PASS     3       1          yes       
+4    PASS     3       1          yes       
+5    PASS     3       1          yes       
+6    PASS     3       1          yes       
+7    PASS     3       1          yes       
+8    PASS     3       1          yes       
+9    PASS     3       1          yes       
+10   PASS     3       1          yes       
 ---
-verified PASS: 0 / 10     claimed DONE but verify FAILED: 10
+verified PASS: 9 / 10     claimed DONE but verify FAILED: 0

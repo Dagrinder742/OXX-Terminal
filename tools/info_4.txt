@@ -1083,6 +1083,37 @@ OTHER OBSERVATIONS FROM RUN 8 (unchanged behaviour, worth knowing):
 - Pass rate for the whole 10 rounds: see Casey's logs/summary.txt (not yet analysed when this entry was written).
 
 
+#-----------------------
+UPDATE 5 (2026-10-20 EVENING) FROM CLAUDE: RESULTS OF CASEY'S TWO 10-ROUND BATCHES, AND WHAT WAS CHANGED
+Data (all local Qwen2.5-Coder-3B on the phone, ~2.4-2.7 tok/s generation, prompt cache reused after run 1):
+  v4 prompt, before the SYSTEM NameError line ........ 7/10   (fails: runs 3 and 5 forgot `import random`; run 10 perceive() never updated self.state)
+  v4 prompt, after the SYSTEM NameError line ......... 10/10
+  v4.1 prompt (energy/cycles/report, conditional reason) 0/10  (perceive() did not update state; reason() returned 1 or 4 actions)
+  v4.2 prompt (Gemini's rewrite with explicit recipe)   9/10   (run 1: forgot the import, then a patch broke the file)
+CAUTION FOR READERS: each batch is 10 samples. 7/10 vs 10/10 is suggestive, not proof. The 0/10 -> 9/10 jump changed the
+TASK prompt (explicit recipe for reason() and perceive()), not only the SYSTEM line, so it cannot be credited to the NameError line.
+The model does not learn between runs (weights are frozen; every run starts from a blank conversation). Later runs look faster
+because llama-server keeps the system prompt in its cache ("prompt cached (1369 tok reused)"); generation speed stayed ~2.5 tok/s.
+
+Failure patterns seen in the logs and what the tool now does about them:
+ 1. Forgot `import random` (3 of 20 runs). New static check: "`random` is used but never imported ... add it as the FIRST line",
+    with a ready-made patch_file (SEARCH = file's first line). Runs automatically after write_file/patch_file, so the model is told
+    BEFORE it runs the code. Casey's NameError rule is now part of SYSTEM (kept, it appears to help prevent the omission).
+ 2. A patch put `import random` inside a dict literal, or replaced `self.state = {` with `self.state = {}` leaving the rest of the dict:
+    the file became unparseable and the 3B model could not recover (runs 3, 5 and v4.2 run 1). New guard: patch_file on a .py file is
+    REFUSED, file unchanged, if the patch would turn a parseable file into a syntax error. Already-broken files can still be repaired.
+ 3. SEARCH == REPLACE with the new line placed AFTER the >>>>>>> marker in a fence (run 5): still refused with the existing message.
+ 4. perceive() returning a local dict instead of filling self.state["metrics"] (v4 run 10, v4.1 x10): a SEMANTIC miss. Nothing in the
+    tool can see it; only a task-specific verifier (verify_skill.py) does. The DONE gate checks "ran with exit 0", not "is correct".
+ 5. run10.sh labelled a run "CLAIMED DONE" if the text DONE: appeared anywhere in the log, including steps the model invented that the
+    tool never accepted. It now counts a DONE only when the run ended without a final> stop line.
+Checked and NOT a bug: the "you already ran this exact command successfully" refusal in v4 run 3 (the model repeated a patch that had
+already been applied).
+Tests: 278 checks, ALL OK (Linux). New: 9 import checks + 5 patch-guard checks. Not yet run on Termux.
+UNVERIFIED: whether the import hint + patch guard raise the real pass rate. Re-run `bash run10.sh 10` on v4.2 and compare with 9/10.
+
+
+
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
 # =========================================================
@@ -1137,6 +1168,7 @@ if (__name__ == "__main__" and sys.path
     sys.path.pop(0)
 
 import ast
+import builtins
 import glob
 import io
 import json
@@ -1317,6 +1349,48 @@ def _arity(fn):
     return required, (None if a.vararg else n)
 
 
+_STDLIB = getattr(sys, "stdlib_module_names", frozenset(
+    "abc argparse ast asyncio base64 collections copy csv datetime decimal enum functools "
+    "glob hashlib heapq io itertools json logging math operator os pathlib pickle queue random "
+    "re shutil sqlite3 statistics string struct subprocess sys tempfile textwrap threading time "
+    "typing unittest uuid warnings".split()))
+
+
+def _missing_imports(tree, source: str) -> list:
+    """(line, message) for stdlib modules used as `name.attr` that are never bound in the file."""
+    bound = set(dir(builtins))
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            bound.add(n.id)
+        elif isinstance(n, ast.arg):
+            bound.add(n.arg)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(n.name)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                bound.add((a.asname or a.name).split(".")[0])
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            bound.add(n.name)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            bound.update(n.names)
+    first = next((l.rstrip() for l in source.splitlines() if l.strip()), "")
+    firstuse = {}
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                and n.value.id in _STDLIB and not n.value.id.startswith("_")
+                and n.value.id not in bound):
+            firstuse[n.value.id] = min(firstuse.get(n.value.id, n.lineno), n.lineno)
+    out = []
+    for name, line in sorted(firstuse.items(), key=lambda kv: kv[1]):
+        fix = (f"Add `import {name}` as the very FIRST line of the file (line 1), above everything else, "
+               f"never inside a class, function or dict.")
+        if first and not first.startswith((" ", "\t")):
+            fix += (f" With patch_file: SEARCH = `{first[:70]}`, REPLACE = `import {name}`, "
+                    f"an empty line, then `{first[:70]}`.")
+        out.append((line, f"`{name}` is used but never imported, so this will fail with NameError. {fix}"))
+    return out
+
+
 def check_python(source: str) -> list[str]:
     """Static check only: the code is parsed, never executed. Returns problem lines.
 
@@ -1372,6 +1446,10 @@ def check_python(source: str) -> list[str]:
                         want = f"{lo}" if lo == hi else f"{lo}-{hi if hi is not None else 'many'}"
                         problems.append((n.lineno, f"{me}.{n.func.attr}() called with {got} argument(s) but "
                                          f"def {n.func.attr} (line {methods[n.func.attr].lineno}) takes {want}."))
+
+    # A standard-library module used as name.attr but never imported or assigned anywhere
+    # (the classic NameError a small model forgets: random.randint with no `import random`).
+    problems += _missing_imports(tree, source)
 
     # Module-like files (they define something) should not run demo calls on import.
     # A plain script with no defs, like print("hi"), is left alone.
@@ -1909,6 +1987,21 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
             new_content, note = hit, " (leading spaces adjusted to match the file)"
         if new_content == content:
             return "REFUSED: that edit would not change the file"
+        if path_str.endswith(".py"):
+            try:
+                ast.parse(content)
+            except SyntaxError:
+                pass  # the file was already broken: let the model repair it step by step
+            else:
+                try:
+                    ast.parse(new_content)
+                except SyntaxError as e:
+                    bad = (e.text or "").strip()
+                    return (f"REFUSED: this patch would leave {path_str} with a syntax error "
+                            f"(line {e.lineno}: {e.msg}{'  -> ' + bad if bad else ''}), so it was NOT applied and the file "
+                            f"is unchanged. A REPLACE must keep the brackets, quotes and indentation balanced: if SEARCH "
+                            f"opens a '{{' or '(' then REPLACE must close it too. Use read_file {path_str} to copy the "
+                            f"exact lines, then send a corrected patch.")
         target.write_text(new_content)
         log_to_index(path_str, "patched")
         return f"[exit 0]\nSuccessfully patched {path_str}{note}"
@@ -2164,6 +2257,9 @@ only run_python runs code.
 RULE OF OBSERVATION: you cannot know your code works until run_python has run it and you
 have read the output. Never declare success, and never patch, on a guess. After any
 write_file or patch_file of a .py file, run_python it before you reply DONE.
+
+When you see a NameError for a standard library module, always place the import statement
+at the very top of the file (module scope), not inline.
 
 A patch only counts when the tool answers "Successfully patched". If a patch or write was
 REFUSED, fix the problem and send it again before you say DONE. Every line you put in a

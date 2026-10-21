@@ -1,5 +1,3 @@
-import random
-
 class Skill:
     def __init__(self):
         self.state = {
@@ -10,22 +8,21 @@ class Skill:
         }
 
     def perceive(self):
-        metrics = {
+        import random
+        self.state["metrics"] = {
             "temperature": random.randint(10, 30),
             "humidity": random.randint(40, 80),
             "light": random.randint(0, 100)
         }
-        print("Perceive: ", metrics)
-        return metrics
+        print("Perceive: ", self.state["metrics"])
+        return self.state["metrics"]
 
     def reason(self, metrics):
-        actions = []
+        actions = ["scout", "patrol", "rest"]
         if metrics["temperature"] > 25:
-            actions.append("cool_down")
+            actions[0] = "cool_down"
         if metrics["light"] < 20:
-            actions.append("illuminate")
-        else:
-            actions.extend(["scout", "patrol", "rest"])
+            actions[1] = "illuminate"
         print("Reason: ", actions)
         return actions
 
