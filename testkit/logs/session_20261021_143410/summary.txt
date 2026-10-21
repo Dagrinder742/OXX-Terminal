@@ -1,0 +1,6 @@
+run  verify   steps   run_python said_done note
+1    FAIL     0       0          no        no skill.py was written stopped: (stopped: ERROR: Failed to connect to local llama-ser
+2    FAIL     0       0          no        no skill.py was written stopped: (stopped: ERROR: Failed to connect to local llama-ser
+3    FAIL     0       0          no        no skill.py was written stopped: (stopped: ERROR: Failed to connect to local llama-ser
+---
+verified PASS: 0 / 3     claimed DONE but verify FAILED: 0

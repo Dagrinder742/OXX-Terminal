@@ -1,13 +1,4 @@
 run  verify   steps   run_python said_done note
-1    PASS     3       0          yes       
-2    PASS     2       0          yes       
-3    PASS     2       0          yes       
-4    PASS     2       0          yes       
-5    PASS     2       0          yes       
-6    PASS     2       0          yes       
-7    PASS     2       0          yes       
-8    PASS     2       0          yes       
-9    PASS     2       0          yes       
-10   PASS     8       4          no         stopped: (stopped: aborted due to consecutive failures)
----
-verified PASS: 10 / 10     claimed DONE but verify FAILED: 0
+1    PASS     3       1          yes       
+2    PASS     3       1          yes       
+3    PASS     3       1          yes       

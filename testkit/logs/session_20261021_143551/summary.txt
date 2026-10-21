@@ -1,0 +1,6 @@
+run  verify   steps   run_python said_done note
+1    PASS     3       2          yes       
+2    PASS     3       1          yes       
+3    PASS     3       1          yes       
+---
+verified PASS: 3 / 3     claimed DONE but verify FAILED: 0
