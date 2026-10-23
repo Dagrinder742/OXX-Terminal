@@ -1114,6 +1114,52 @@ UNVERIFIED: whether the import hint + patch guard raise the real pass rate. Re-r
 
 
 
+#-----------------------
+UPDATE 6 (2026-10-20 NIGHT) FROM CLAUDE: TESTKIT v2 (bench.py), TASK BANK, AUTOMATIC CAPTURE
+New in testkit/ (shipped as testkit_v2.zip; nothing existing is overwritten): bench.py, test_bench.py, README.txt, tasks/.
+ - Task bank (6 tasks, each = prompt.txt + verify.py + optional fixture files + selftest references):
+   wordcount(1) stack(1) csv_total(2, reads a fixture, verifier uses DIFFERENT data so a hard-coded answer fails)
+   skill_v4(2, Claude's prompt) skill_v42(3, Gemini's rewrite) bugfix(3, three bugs in a fixture, must be fixed with patch_file).
+ - `bench.py selftest` checks the verifiers themselves (22 known-good/known-bad files, all behave on Linux).
+ - `bench.py run -t <tasks> -n N --label X --note "..."`: every run in a FRESH sandbox folder; captures run.log, the output file,
+   verify.log, transcript.json (full conversation), result.json (verdict, steps, commands, seconds, ended-how, tok/s,
+   failed check names, claimed_false = tool accepted DONE but verifier said FAIL), refused.log; writes ONE report file
+   (reports/<session>.txt) = summary table + your notes + each run's log, file and verify log in the old `cat` order.
+ - `bench.py note "text" [--run task/i]` adds notes while a run is in progress; `report` rebuilds; `show task/i` replaces the cat chain;
+   `stats` compares sessions (with tool/SYSTEM hashes); `export` writes verified passes to JSONL (seed data, NOT a training set).
+ - sandbox_tool.py got two small env hooks: AGENT_TRANSCRIPT=<file> (saves the conversation as JSON, never inside the sandbox
+   unless pointed there) and AGENT_MAX_STEPS=<n>. Both are inert when unset.
+ - Honesty rules built in: refuses to start on a missing/empty prompt; PASS only if the verifier printed VERIFY: PASS; missing output,
+   dead server, blocked constructs (verifier will not execute them), hang and crash are recorded as FAIL with the reason.
+   The verifier does run model-written code OUTSIDE the sandbox guard (timeout + CPU/file-size limits only): not a sandbox.
+ - Tests: test_bench.py (fake model server, 38+ checks incl. fixtures, notes, report rebuild, export, dead server, hang);
+   test_sandbox_tool.py now 281 checks. All pass on Linux. NOT yet run on Termux/with a real model.
+ - Task prompts / verifiers for skill_v4 and skill_v42 are copies of Casey's files (v4.2 verifier extracted verbatim from his upload).
+UNVERIFIED: real-model behaviour of the 4 new tasks (difficulty levels are my guesses), speed of a full 18-run session on the phone
+(~5 min per run), bench.py on Termux.
+
+
+
+#-----------------------
+UPDATE 7 (2026-10-21) FROM CLAUDE: PACKAGED FOR GITHUB (sandbox-tool-repo.zip). THE SOURCE BLOCK BELOW IS NOW THE PACKAGED FILE.
+Layout: src/sandbox_tool.py, tests/ (test_sandbox_tool.py, pytest wrapper), bench/ (bench.py + tasks), pyproject.toml, README.md,
+LICENSE (MIT, holder is a placeholder: YOUR NAME HERE), SECURITY.md, .gitignore, .github/workflows/tests.yml. Console command: sandbox-tool.
+BEHAVIOUR CHANGES in sandbox_tool.py (everything else is unchanged):
+ 1. No hard-coded paths. SANDBOX is $SANDBOX_DIR, else ./sandbox under the current folder (created). It used to be "the Termux
+    OKX-Terminal/tools folder if it exists, else the folder holding the script". FOR THE AUTHOR'S PHONE: export SANDBOX_DIR=<your tools
+    folder>, otherwise the sandbox silently becomes ./sandbox wherever you run the tool from.
+ 2. The sandbox may not be / or the home folder (or a parent of it); a SANDBOX_DIR that does not exist stops (no stray folders).
+ 3. AUDIT_LOG defaults to <sandbox>.refused.log NEXT TO the sandbox (was refused.log beside the script). Still PROTECTED.
+ 4. Child PATH is computed (existing system folders + $PREFIX/bin + the folder of the running Python) instead of a Termux literal.
+ 5. LLAMA_MODEL env (default "local-model") replaces the hard-coded Qwen model name. llama-server ignored the name anyway.
+ 6. main() with --version, --help; __version__ = "0.1.0". Entry point: sandbox-tool = sandbox_tool:main.
+Tests: tests/test_sandbox_tool.py 293 checks (12 new "package" checks) and bench/test_bench.py all pass on Linux under Python 3.11, 3.12
+and 3.13. UNVERIFIED: Python 3.10 (CI covers it), macOS, a real `pip install` with the committed pyproject (needs setuptools>=77 for the
+SPDX license field; verified only with an equivalent older-style pyproject on Python 3.11: installs, console script works from an
+unrelated folder, cannot see its own file), the full suite on Termux for this packaged build.
+
+
+
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
 # =========================================================
@@ -1141,12 +1187,12 @@ SECURITY CONTRACT (what is enforced, and where):
    network, ctypes). A script cannot reach outside no matter how it is written, because
    the hook watches what it DOES, not what it looks like. Obfuscation (base64, getattr,
    aliases like e = exec) does not get around it.
-2. FILE PROTECTION. This script and refused.log are in PROTECTED: no tool and no
+2. FILE PROTECTION. This script and the refused-commands log are in PROTECTED: no tool and no
    run_python script may modify them. chmod 444 / attrib +r is a second layer only; it
    does NOT stop a rename-over or a chmod-back, so PROTECTED is the real defence.
 3. AUTHORIZED OVERRIDES. A human architect (or an external agent working for one) edits
    this file with the permission bit toggled (chmod u+w / attrib -r), then re-locks it.
-   After ANY edit, run:  python test_sandbox_tool.py   It must print ALL OK. A change
+   After ANY edit, run:  python tests/test_sandbox_tool.py   It must print ALL OK. A change
    that makes it fail has weakened the guard; do not ship it.
 4. EXECUTION SAFETY. Only run_python runs code. It is POSIX-only (Linux, Termux, WSL).
    On Windows it is switched off, because the limits it relies on do not exist there.
@@ -1185,16 +1231,39 @@ import time
 import urllib.request
 from pathlib import Path
 
-_TERMUX_SANDBOX = Path("/data/data/com.termux/files/home/OKX-Terminal/tools")
-SANDBOX = Path(os.environ.get(
-    "SANDBOX_DIR", _TERMUX_SANDBOX if _TERMUX_SANDBOX.is_dir() else Path(__file__).resolve().parent)).resolve()
+__version__ = "0.1.0"
+
+
+def _default_sandbox() -> Path:
+    """SANDBOX_DIR if set, otherwise ./sandbox under the folder you run the tool from.
+
+    Never the folder this file lives in: if the package is installed that would be
+    site-packages. The folder is created by main() when it is the default."""
+    env = os.environ.get("SANDBOX_DIR")
+    return (Path(env).expanduser() if env else Path.cwd() / "sandbox").resolve()
+
+
+SANDBOX = _default_sandbox()
+
+
+def _safe_path() -> str:
+    """PATH for child processes: standard system folders plus the folder of the running
+    Python (on Termux that is $PREFIX/bin, where cat/grep/sed live). Nothing machine-specific
+    is written into this file."""
+    parts = [os.path.join(os.environ["PREFIX"], "bin")] if os.environ.get("PREFIX") else []
+    parts += [os.path.dirname(os.path.realpath(sys.executable)), "/usr/local/bin", "/usr/bin", "/bin"]
+    return os.pathsep.join(p for p in dict.fromkeys(parts) if os.path.isdir(p))
+
+
+SAFE_PATH = _safe_path()
 TIMEOUT_S = 300
 MAX_OUTPUT = 8000
 MAX_GLOB = 200
 ALLOW_SED_INPLACE = True
 PREVIEW_LINES = int(os.environ.get("PREVIEW_LINES", "15"))  # 0 = show everything
 # Files the model may read but never modify (this script, if it lives in the sandbox).
-AUDIT_LOG = Path(os.environ.get("AUDIT_LOG", str(Path(__file__).resolve().with_name("refused.log"))))
+# Refusals are logged next to (not inside) the sandbox, e.g. ./sandbox.refused.log
+AUDIT_LOG = Path(os.environ.get("AUDIT_LOG", str(SANDBOX.parent / f"{SANDBOX.name}.refused.log"))).resolve()
 PROTECTED = {Path(__file__).resolve(), AUDIT_LOG.resolve()}
 # run_python limits (see the notes above cmd_run_python)
 RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # needs POSIX limits
@@ -1792,7 +1861,7 @@ def cmd_run_python(path_str: str) -> str:
         "protected": [str(p) for p in PROTECTED], "read_roots": _read_roots(),
         "cpu": RUN_TIMEOUT_S + 2, "fsize": RUN_MAX_FILE_MB * 1024 * 1024,
     }
-    env = {"PATH": "/data/data/com.termux/files/usr/bin:/usr/bin:/bin", "HOME": str(SANDBOX),
+    env = {"PATH": SAFE_PATH, "HOME": str(SANDBOX),
            "LC_ALL": "C.UTF-8", "TMPDIR": tmp}
     try:
         proc = subprocess.Popen(
@@ -2209,7 +2278,7 @@ def _run(command: str, body: str = "") -> str:
         r = subprocess.run(
             argv, cwd=SANDBOX, stdin=subprocess.DEVNULL,
             capture_output=True, text=True, timeout=TIMEOUT_S,
-            env={"PATH": "/data/data/com.termux/files/usr/bin:/usr/bin:/bin",
+            env={"PATH": SAFE_PATH,
                  "HOME": str(SANDBOX), "LC_ALL": "C.UTF-8"},
         )
     except subprocess.TimeoutExpired:
@@ -2324,7 +2393,7 @@ If a file is longer than what you read, say which lines you reviewed and make no
 claims about lines you have not seen (use the 'To continue' hint to read more).
 When done, reply: DONE: <answer>   (build the answer from your NOTE lines)"""
 
-MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
+MODEL = os.environ.get("LLAMA_MODEL", "local-model")  # llama-server ignores the name; LM Studio/Ollama need the real one
 BACKEND = os.environ.get("BACKEND", "local").lower()      # local | gemini
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 LLAMA_TIMEOUT = int(os.environ.get("LLAMA_TIMEOUT", "900"))  # longest SILENCE from the server (prompt reading counts)
@@ -2587,8 +2656,32 @@ def _norm(path_str: str) -> str:
     return os.path.normpath(path_str)
 
 
+def _dump_transcript(task: str, result: str, msgs: list) -> None:
+    """If AGENT_TRANSCRIPT=<file> is set, save the whole conversation there as JSON (for the
+    testkit's reports and training export). Never raises; the file is written by this
+    process, not by the model, and is not inside the sandbox unless you point it there."""
+    path = os.environ.get("AGENT_TRANSCRIPT")
+    if not path:
+        return
+    try:
+        Path(path).write_text(json.dumps({
+            "task": task, "result": result, "stopped": result.startswith("(stopped:"),
+            "messages": [{"role": r, "content": c} for r, c in msgs]}, indent=1))
+    except Exception:
+        pass
+
+
 def agent(task: str, max_steps: int = 10) -> str:
     msgs = [("system", SYSTEM), ("user", task)]
+    result = "(stopped: crashed)"
+    try:
+        result = _agent_loop(task, max_steps, msgs)
+        return result
+    finally:
+        _dump_transcript(task, result, msgs)
+
+
+def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
     consecutive_failures = 0
     last_key = None
     done_ok = set()      # write/patch commands that already succeeded
@@ -2727,16 +2820,57 @@ def _warn_if_guard_writable():
         pass
 
 
-if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "--agent":
+USAGE = """sandbox-tool: run an LLM agent inside a restricted folder.
+
+  sandbox-tool --agent "task text"   run the agent loop on a task
+  sandbox-tool --ping                check that the model server answers (and how fast)
+  sandbox-tool "ls -la"              run ONE allowlisted command by hand (what the agent can do)
+  sandbox-tool --version
+
+The sandbox folder is $SANDBOX_DIR, or ./sandbox in the current folder if that is not set.
+Set BACKEND=gemini (and GEMINI_API_KEY) for Gemini, otherwise a local OpenAI-compatible
+server (e.g. llama.cpp's llama-server) at $LLAMA_URL is used. See the README for all settings.
+"""
+
+
+def _sandbox_problem():
+    """A reason this sandbox choice is unsafe or unusable, or None."""
+    home = Path.home().resolve()
+    if SANDBOX == Path(SANDBOX.anchor) or SANDBOX == home or SANDBOX in home.parents:
+        return (f"{SANDBOX} is too broad to use as a sandbox (the model could read everything in it, "
+                f"for example your keys and config files). Point SANDBOX_DIR at a dedicated folder.")
+    return None
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if not argv or argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    if argv[0] == "--version":
+        print(f"sandbox-tool {__version__}")
+        return 0
+    problem = _sandbox_problem()
+    if problem:
+        print("STOP:", problem, file=sys.stderr)
+        return 2
+    if not SANDBOX.is_dir():
+        if "SANDBOX_DIR" in os.environ:
+            print(f"STOP: SANDBOX_DIR={os.environ['SANDBOX_DIR']} is not an existing folder. Create it first.", file=sys.stderr)
+            return 2
+        SANDBOX.mkdir(parents=True)          # the default ./sandbox
+        print(f"[info] created sandbox folder {SANDBOX}", file=sys.stderr)
+    if len(argv) >= 2 and argv[0] == "--agent":
         _warn_if_guard_writable()
-        result = agent(" ".join(sys.argv[2:]))
+        result = agent(" ".join(argv[1:]), int(os.environ.get("AGENT_MAX_STEPS") or 10))
         if result.startswith("(stopped:"):  # a DONE answer was already printed as model>
             print("final>", result)
-    elif len(sys.argv) == 2 and sys.argv[1] == "--ping":
+    elif argv == ["--ping"]:
         print(ping())
-    elif len(sys.argv) >= 2:
-        print(run(" ".join(sys.argv[1:])))
     else:
-        print(__doc__)
+        print(run(" ".join(argv)))
+    return 0
 
+
+if __name__ == "__main__":
+    sys.exit(main())
