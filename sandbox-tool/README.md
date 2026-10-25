@@ -1,4 +1,16 @@
-# sandb## Genesis & design philosophy
+# sandbox-tool
+
+Let a small local model (or Gemini) work in **one folder** on your machine: read and edit files,
+write Python, run it and fix what breaks, without giving it a shell.
+
+It was built to make a 3B-parameter model (Qwen2.5-Coder-3B on a phone) usable as a coding agent, so
+many of its rules exist because a small model did something silly without them. It is a single Python file with
+no dependencies beyond the standard library.
+
+> **Read "What it does not protect against" before pointing this at anything you care about.**
+> It is a guard against a model's mistakes and tricks, not a container.
+
+## Genesis & design philosophy
 
 I've been studying Python and software architecture for about a year, and I've worked on this
 project for about two months. I can't write the boilerplate myself, so this tool was built in
@@ -22,16 +34,6 @@ instead of a container. It reduces risk and makes the model's behaviour observab
 Windows are unverified or unsupported, and it should not be used for untrusted models or
 sensitive data without a container or VM around it. Read [SECURITY.md](SECURITY.md) and
 "What it does not protect against" below before you run it.
-
-Let a small local model (or Gemini) work in **one folder** on your machine: read and edit files,
-write Python, run it and fix what breaks, without giving it a shell.
-
-It was built to make a 3B-parameter model (Qwen2.5-Coder-3B on a phone) usable as a coding agent, so
-every rule exists because a small model hit a wall or tried a shortcut without them. without it. It is a single Python file with
-no dependencies beyond the standard library.
-
-> **Read "What it does not protect against" before pointing this at anything you care about.**
-> It is a guard against a model's mistakes and tricks, not a container.
 
 ## What the agent can do
 
@@ -60,7 +62,7 @@ Things the tool does so a small model keeps on track:
 Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/Dagrinder742/sandbox-tool && cd sandbox-tool
+git clone https://github.com/<you>/sandbox-tool && cd sandbox-tool
 pip install .                 # or just run:  python src/sandbox_tool.py ...
 pip install ".[gemini]"       # only if you want BACKEND=gemini
 ```

@@ -120,6 +120,29 @@ kind, text, _b, _n = T.parse_reply("DONE: Intro:\n\n1. one\n2. two")
 check(kind == "done" and text == "Intro:\n\n1. one\n2. two", "parse", "multi-line DONE kept whole")
 check(T.parse_reply("CMD: read_file a.py 1 75") == ("cmd", "read_file a.py 1 75", "", []), "parse", "CMD")
 check(T.parse_reply("I think we should look") == (None, "", "", []), "parse", "no marker")
+
+# ---- runaway NOTE (wordcount retest: "NOTE: wc.py: 1, 2, 3 ... 195" cost 640 s per reply) ----
+_loop = "NOTE: wc.py: " + ", ".join(str(i) for i in range(1, 196))
+check(len(_loop) > 2 * T.NOTE_MAX_CHARS and T._runaway_note("CMD: x\n" + _loop), "note", "a runaway NOTE line is detected")
+check(not T._runaway_note("NOTE: short and fine"), "note", "a normal NOTE is not flagged")
+check(not T._runaway_note("CMD: write_file a.py\n```python\n" + _loop), "note", "a long NOTE: line INSIDE a code fence is file content, not flagged")
+_n = T.parse_reply("CMD: write_file wc.py\n```python\nx = 1\n```\n\n" + _loop)
+check(_n[0] == "cmd" and _n[1] == "write_file wc.py" and "x = 1" in _n[2], "note", "a reply with a runaway NOTE still parses its command and block")
+check(all(len(x) <= T.NOTE_MAX_CHARS + 4 for x in T.parse_reply("NOTE: " + "9, " * 400 + "\nCMD: ls")[3]), "note", "notes are cut to NOTE_MAX_CHARS")
+check(T.parse_reply("NOTE: found it in line 3\nCMD: ls")[3] == ["found it in line 3"], "note", "a normal note is unchanged")
+_hl = T._clean_reply("CMD: write_file a.py\n```python\nNOTE: " + "7, " * 200 + "\n```\n" + _loop, "cmd", "write_file a.py", [])
+check(len(_hl.splitlines()[2]) > T.NOTE_MAX_CHARS and len(_hl.splitlines()[-1]) <= T.NOTE_MAX_CHARS + 4,
+      "note", "history keeps file content intact but cuts the NOTE line after the block")
+_consumed = [0]
+def _fake_sse():
+    yield 'data: {"choices":[{"delta":{"content":"NOTE: wc.py: "}}]}'
+    for i in range(5000):
+        _consumed[0] += 1
+        yield 'data: {"choices":[{"delta":{"content":"%d, "}}]}' % i
+_txt, _np, *_ = T._read_sse(_fake_sse(), show_progress=False)
+check(_consumed[0] < 600 and _txt.startswith("NOTE:"), "note", "the stream is stopped early on a runaway NOTE", f"read {_consumed[0]} of 5000 pieces")
+_ok = ['data: {"choices":[{"delta":{"content":"CMD: ls"}}]}', "data: [DONE]"]
+check(T._read_sse(_ok, show_progress=False)[0] == "CMD: ls", "note", "a normal streamed reply is unchanged")
 check(T.parse_reply("NOTE: imports at 1-9\nCMD: read_file a.py 76 75")
       == ("cmd", "read_file a.py 76 75", "", ["imports at 1-9"]), "parse", "NOTE before CMD")
 check(T.parse_reply("CMD: ls\nNOTE: late note")[3] == ["late note"], "parse", "NOTE after plain CMD")

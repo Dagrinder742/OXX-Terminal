@@ -1298,6 +1298,31 @@ LAST_STATS = ""   # one line about the last local model call (speed), shown afte
 LLAMA_STREAM = os.environ.get("LLAMA_STREAM", "1") != "0"   # 0 = plain request, like curl
 
 
+NOTE_MAX_CHARS = 300   # a NOTE: is one short line; longer ones are cut (runaway "1, 2, 3 ..." loops)
+
+
+def _runaway_note(text: str) -> bool:
+    """True if the reply so far ends inside a NOTE: line that is already far too long.
+    Small models sometimes count 1, 2, 3 ... forever; stopping the stream saves minutes on a phone.
+    Lines inside a ``` block (file content) are never treated as notes."""
+    if text.count("```") % 2:
+        return False
+    last = text.rsplit("\n", 1)[-1].strip()
+    return last.startswith("NOTE:") and len(last) > 2 * NOTE_MAX_CHARS
+
+
+def _cap_notes(reply: str) -> str:
+    """Cut NOTE: lines longer than NOTE_MAX_CHARS (outside ``` blocks)."""
+    out, in_fence = [], False
+    for line in reply.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.strip().startswith("NOTE:") and len(line.strip()) > NOTE_MAX_CHARS:
+            line = line.strip()[:NOTE_MAX_CHARS].rstrip() + " ..."
+        out.append(line)
+    return "\n".join(out)
+
+
 class _BadReply(Exception):
     """The server answered, but not in a form we can read."""
 
@@ -1333,6 +1358,8 @@ def _read_sse(lines, show_progress=True):
                     t_first = time.time()
                 parts.append(piece)
                 n += 1
+                if n % 20 == 0 and _runaway_note("".join(parts)):
+                    return "".join(parts), n, t_first, timings, skipped
                 if show_progress and n % 5 == 0 and sys.stderr.isatty():
                     rate = n / max(time.time() - t_first, 1e-6)
                     sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
@@ -1440,7 +1467,7 @@ def parse_reply(reply: str):
     notes the NOTE: lines. They are read before the marker; after a CMD line only
           for ordinary commands, so a 'NOTE:' inside file content is never a note.
     """
-    lines = reply.splitlines()
+    lines = _cap_notes(reply).splitlines()
     notes = []
     for idx, raw in enumerate(lines):
         s = raw.strip()
@@ -1493,7 +1520,7 @@ def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
     if kind == "cmd" and text.split(" ", 1)[0] not in BLOCK_CMDS:
         return (f"NOTE: {notes[0]}\n" if notes else "") + f"CMD: {text}"
-    return reply
+    return _cap_notes(reply)
 
 
 def _norm(path_str: str) -> str:

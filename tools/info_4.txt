@@ -1159,6 +1159,36 @@ SPDX license field; verified only with an equivalent older-style pyproject on Py
 unrelated folder, cannot see its own file), the full suite on Termux for this packaged build.
 
 
+UPDATE 8 (2026-10-24) FROM CLAUDE: FIRST BENCH REPORTS (n=3) AND TWO FIXES
+Casey's 6 reports (Qwen2.5-Coder-3B on Termux): stack, csv_total, skill_v4, skill_v42 3/3 each; wordcount 0/3; bugfix 0/3.
+ - bugfix: the model sent SEVERAL patch blocks per reply with SEARCH == REPLACE and the new code AFTER the ">>>>>>> REPLACE" line.
+   CHANGES in sandbox_tool.py: (a) _search_replace() refuses a reply holding 2+ blocks ("Send ONE patch_file per reply"), nothing is
+   applied (before, only the first block ran and the model believed all had); (b) if SEARCH == REPLACE and code follows the closing
+   line, the refusal says to put the new lines between ======= and >>>>>>> REPLACE. New helper _text_after_block(). 4 new checks (297 total).
+ - wordcount: the model used string.punctuation / translate, which turns "it's" into "its" (verifier check 'keeps inner apostrophes') and
+   then said DONE (a false-DONE the tool cannot see). bench/tasks/wordcount/prompt.txt was EXTENDED (middle punctuation stays, one example,
+   "do not use string.punctuation or str.translate"). RESULTS BEFORE AND AFTER THIS EDIT ARE NOT DIRECTLY COMPARABLE: the prompt hash in the
+   report header differs. New selftest file bad_strips_apostrophe.py (must FAIL).
+ - UNVERIFIED: whether either change raises the real pass rate. Needs n>=10 per task on the phone; compare bugfix and wordcount only.
+ - NOT CHANGED: Casey's looser PATH test edit (passes; stricter version in update 7 notes / fix_path_test.py), duplicate note text in reports.
+
+UPDATE 9 (2026-10-25) FROM CLAUDE: WORDCOUNT RETEST (4 of 10 runs, aborted by Casey) AND TWO FIXES
+Result: 0/4, all four a false-DONE, every run 12/13. The check that fails CHANGED: before my update-8 prompt, "keeps inner apostrophes"
+failed; after it, runs 2-4 failed "strips punctuation at word ends" because my wording ("use strip() with the characters listed") made the
+model strip the WHOLE text once instead of each word. Run 1 used re.sub (ignored the instruction). So update 8 did NOT raise the pass rate;
+it moved the failure. n=4, so only the direction is meaningful.
+ - bench/tasks/wordcount/prompt.txt rewritten: "split on whitespace first, then remove those characters from the ends of EACH word separately;
+   do not clean the whole text at once; do not use string.punctuation, str.translate or re.sub". New selftest bad_strips_whole_text.py
+   (the run 2-4 mistake, must FAIL). Prompt hash changes again: compare only to runs with the same hash.
+ - Run 1 showed a runaway "NOTE: wc.py: 1, 2, 3 ... 195" that used the whole 1024-token budget (~640 s per reply on the phone) and was stored in
+   history. CHANGES in sandbox_tool.py: NOTE_MAX_CHARS = 300; _runaway_note() stops the stream when a NOTE: line (outside a ``` fence) passes 2x that
+   (checked every 20 tokens in _read_sse); _cap_notes() cuts long NOTE lines in parse_reply and in the history copy (file content inside fences is untouched).
+   9 new checks (306 total). This limits the cost of the loop; it does not make the model stop doing it (it did not recur in runs 2-4, n=3, not proof).
+ - Not done on purpose: a dedicated "strip" tool. It would be built for one task and would teach nothing general; the false-DONE is the real problem
+   (the model's own demo input passes while edge cases fail). A general fix would be to make the model test its own edge cases before DONE: untried.
+ - UNVERIFIED: a test_bench.py run reported "4 CHECK(S) FAILED" once and then passed 11 times in a row (also under parallel load). Cause unknown,
+   failing output was not captured. If it happens again, save the FAIL lines.
+
 
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
@@ -1381,7 +1411,22 @@ def _search_replace(body):
         end = next((i for i in range(mid + 1, len(lines)) if lines[i].strip().startswith(">>>>>>>")), None)
     if mid is None or end is None:
         raise Refused("malformed SEARCH/REPLACE block; expected <<<<<<< SEARCH, =======, >>>>>>> REPLACE")
+    if any(l.strip().startswith("<<<<<<<") for l in lines[end + 1:]):
+        raise Refused("two or more SEARCH/REPLACE blocks in one reply. Nothing was changed. "
+                      "Send ONE patch_file per reply (one CMD line and one block), wait for the "
+                      "result, then send the next edit")
     return "\n".join(lines[top + 1:mid]), "\n".join(lines[mid + 1:end])
+
+
+def _text_after_block(body):
+    """Lines that follow the closing >>>>>>> line, ignoring blanks, a closing fence and
+    NOTE:/CMD:/DONE: lines. Small models put the new code there instead of inside REPLACE."""
+    lines = (body or "").splitlines()
+    end = next((i for i, l in enumerate(lines) if l.strip().startswith(">>>>>>>")), None)
+    if end is None:
+        return []
+    return [l for l in lines[end + 1:]
+            if l.strip() and l.strip() != "```" and not l.strip().startswith(("NOTE:", "CMD:", "DONE:"))]
 
 
 MAX_CHECK_BYTES = 200_000
@@ -2262,6 +2307,11 @@ def _run(command: str, body: str = "") -> str:
                 return "REFUSED: patch_file requires <path>"
             sr = _search_replace(body)
             if sr is not None:
+                if sr[0] == sr[1] and _text_after_block(body):
+                    return ("REFUSED: SEARCH and REPLACE are identical, and code was found AFTER the "
+                            ">>>>>>> REPLACE line, where it is ignored. The new lines go INSIDE the "
+                            "block, between ======= and >>>>>>> REPLACE:\n"
+                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE")
                 return _with_check(cmd_patch_file(parts[1], sr[0], sr[1]), parts[1])
             if len(parts) >= 4 and "\\n" not in parts[2] + parts[3]:
                 return _with_check(cmd_patch_file(parts[1], parts[2], parts[3]), parts[1])
@@ -2454,6 +2504,31 @@ LAST_STATS = ""   # one line about the last local model call (speed), shown afte
 LLAMA_STREAM = os.environ.get("LLAMA_STREAM", "1") != "0"   # 0 = plain request, like curl
 
 
+NOTE_MAX_CHARS = 300   # a NOTE: is one short line; longer ones are cut (runaway "1, 2, 3 ..." loops)
+
+
+def _runaway_note(text: str) -> bool:
+    """True if the reply so far ends inside a NOTE: line that is already far too long.
+    Small models sometimes count 1, 2, 3 ... forever; stopping the stream saves minutes on a phone.
+    Lines inside a ``` block (file content) are never treated as notes."""
+    if text.count("```") % 2:
+        return False
+    last = text.rsplit("\n", 1)[-1].strip()
+    return last.startswith("NOTE:") and len(last) > 2 * NOTE_MAX_CHARS
+
+
+def _cap_notes(reply: str) -> str:
+    """Cut NOTE: lines longer than NOTE_MAX_CHARS (outside ``` blocks)."""
+    out, in_fence = [], False
+    for line in reply.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.strip().startswith("NOTE:") and len(line.strip()) > NOTE_MAX_CHARS:
+            line = line.strip()[:NOTE_MAX_CHARS].rstrip() + " ..."
+        out.append(line)
+    return "\n".join(out)
+
+
 class _BadReply(Exception):
     """The server answered, but not in a form we can read."""
 
@@ -2489,6 +2564,8 @@ def _read_sse(lines, show_progress=True):
                     t_first = time.time()
                 parts.append(piece)
                 n += 1
+                if n % 20 == 0 and _runaway_note("".join(parts)):
+                    return "".join(parts), n, t_first, timings, skipped
                 if show_progress and n % 5 == 0 and sys.stderr.isatty():
                     rate = n / max(time.time() - t_first, 1e-6)
                     sys.stderr.write(f"\r[llm] generating: {n} tokens ({rate:.2f} tok/s)  ")
@@ -2596,7 +2673,7 @@ def parse_reply(reply: str):
     notes the NOTE: lines. They are read before the marker; after a CMD line only
           for ordinary commands, so a 'NOTE:' inside file content is never a note.
     """
-    lines = reply.splitlines()
+    lines = _cap_notes(reply).splitlines()
     notes = []
     for idx, raw in enumerate(lines):
         s = raw.strip()
@@ -2649,7 +2726,7 @@ def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
     if kind == "cmd" and text.split(" ", 1)[0] not in BLOCK_CMDS:
         return (f"NOTE: {notes[0]}\n" if notes else "") + f"CMD: {text}"
-    return reply
+    return _cap_notes(reply)
 
 
 def _norm(path_str: str) -> str:
