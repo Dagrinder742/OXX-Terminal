@@ -205,7 +205,22 @@ def _search_replace(body):
         end = next((i for i in range(mid + 1, len(lines)) if lines[i].strip().startswith(">>>>>>>")), None)
     if mid is None or end is None:
         raise Refused("malformed SEARCH/REPLACE block; expected <<<<<<< SEARCH, =======, >>>>>>> REPLACE")
+    if any(l.strip().startswith("<<<<<<<") for l in lines[end + 1:]):
+        raise Refused("two or more SEARCH/REPLACE blocks in one reply. Nothing was changed. "
+                      "Send ONE patch_file per reply (one CMD line and one block), wait for the "
+                      "result, then send the next edit")
     return "\n".join(lines[top + 1:mid]), "\n".join(lines[mid + 1:end])
+
+
+def _text_after_block(body):
+    """Lines that follow the closing >>>>>>> line, ignoring blanks, a closing fence and
+    NOTE:/CMD:/DONE: lines. Small models put the new code there instead of inside REPLACE."""
+    lines = (body or "").splitlines()
+    end = next((i for i, l in enumerate(lines) if l.strip().startswith(">>>>>>>")), None)
+    if end is None:
+        return []
+    return [l for l in lines[end + 1:]
+            if l.strip() and l.strip() != "```" and not l.strip().startswith(("NOTE:", "CMD:", "DONE:"))]
 
 
 MAX_CHECK_BYTES = 200_000
@@ -1086,6 +1101,11 @@ def _run(command: str, body: str = "") -> str:
                 return "REFUSED: patch_file requires <path>"
             sr = _search_replace(body)
             if sr is not None:
+                if sr[0] == sr[1] and _text_after_block(body):
+                    return ("REFUSED: SEARCH and REPLACE are identical, and code was found AFTER the "
+                            ">>>>>>> REPLACE line, where it is ignored. The new lines go INSIDE the "
+                            "block, between ======= and >>>>>>> REPLACE:\n"
+                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE")
                 return _with_check(cmd_patch_file(parts[1], sr[0], sr[1]), parts[1])
             if len(parts) >= 4 and "\\n" not in parts[2] + parts[3]:
                 return _with_check(cmd_patch_file(parts[1], parts[2], parts[3]), parts[1])

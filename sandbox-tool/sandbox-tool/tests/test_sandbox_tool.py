@@ -218,6 +218,24 @@ check(T.run("patch_file p.py", "<<<<<<< SEARCH\nx\n=======\ny").startswith("REFU
       "block", "malformed block refused")
 check(T.run("patch_file guarded.py", "<<<<<<< SEARCH\npolicy\n=======\nx\n>>>>>>> REPLACE").startswith("REFUSED"),
       "block", "patch to protected file refused")
+# run bugfix/1-3 shapes: identical SEARCH/REPLACE with the new code AFTER the >>>>>>> line,
+# and several blocks in one reply
+(SB / "bf.py").write_text("def average(numbers):\n    return 1\n\n\ndef median(numbers):\n    return 2\n")
+_bf_before = (SB / "bf.py").read_text()
+_r = T.run("patch_file bf.py", "<<<<<<< SEARCH\ndef average(numbers):\n=======\ndef average(numbers):\n>>>>>>> REPLACE\n    if not numbers:\n        return 0.0\n")
+check(_r.startswith("REFUSED") and "INSIDE the block" in _r and (SB / "bf.py").read_text() == _bf_before,
+      "block", "new code after >>>>>>> REPLACE: refused with a hint, file unchanged", _r[:90])
+_r = T.run("patch_file bf.py", "<<<<<<< SEARCH\ndef average(numbers):\n=======\ndef average(numbers):\n>>>>>>> REPLACE\n")
+check(_r.startswith("REFUSED") and "INSIDE the block" not in _r, "block",
+      "identical SEARCH/REPLACE with nothing after it keeps the plain message", _r[:90])
+_two = ("<<<<<<< SEARCH\n    return 1\n=======\n    return 10\n>>>>>>> REPLACE\n\n"
+        "CMD: patch_file bf.py\n<<<<<<< SEARCH\n    return 2\n=======\n    return 20\n>>>>>>> REPLACE\n")
+_r = T.run("patch_file bf.py", _two)
+check(_r.startswith("REFUSED") and "ONE patch_file per reply" in _r and (SB / "bf.py").read_text() == _bf_before,
+      "block", "two blocks in one reply: refused, nothing applied", _r[:90])
+_r = T.run("patch_file bf.py", "<<<<<<< SEARCH\n    return 1\n=======\n    return 10\n>>>>>>> REPLACE\n\nNOTE: next I patch median\nDONE: ok\n")
+check(_r.startswith("[exit 0]") and "return 10" in (SB / "bf.py").read_text(), "block",
+      "one good block followed only by NOTE:/DONE: lines still applies", _r[:90])
 
 # ---- agent loop with a scripted fake model ----------------------------------
 import io
@@ -838,7 +856,9 @@ r = subprocess.run([sys.executable, "-c", _probe], capture_output=True, text=Tru
                    env={**_clean, "PYTHONPATH": str(SRC.parent), "SANDBOX_DIR": str(_home / "proj")})
 _a, _p, _sbx = __import__("json").loads(r.stdout)
 check(_a == str(_home / "proj.refused.log"), "package", "audit log defaults to <sandbox>.refused.log next to the sandbox", _a)
-check(("com.termux" not in _p or "com.termux" in sys.executable) and all(os.path.isdir(x) for x in _p.split(os.pathsep)), "package", "child PATH has only real folders and nothing machine-specific", _p)
+_allowed = {"/usr/local/bin", "/usr/bin", "/bin", os.path.dirname(os.path.realpath(sys.executable))}
+check(set(_p.split(os.pathsep)) <= _allowed and all(os.path.isdir(x) for x in _p.split(os.pathsep)),
+      "package", "child PATH is only real system folders plus the running Python's folder", _p)
 (_home / "fakeprefix" / "bin").mkdir(parents=True)
 r = subprocess.run([sys.executable, "-c", _probe], capture_output=True, text=True, cwd=_cwd,
                    env={**_clean, "PYTHONPATH": str(SRC.parent), "SANDBOX_DIR": str(_home / "proj"), "PREFIX": str(_home / "fakeprefix")})
