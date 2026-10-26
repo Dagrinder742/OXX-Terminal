@@ -93,6 +93,7 @@ PROTECTED = {Path(__file__).resolve(), AUDIT_LOG.resolve()}
 RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # needs POSIX limits
 RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "10"))
 REQUIRE_VERIFY = os.environ.get("REQUIRE_VERIFY", "1") != "0"                 # block DONE until code was run
+REQUIRE_READ_BEFORE_PATCH = os.environ.get("REQUIRE_READ_BEFORE_PATCH", "1") == "1"  # patching a file you never looked at is a guess
 REQUIRE_RUN_BEFORE_PATCH = os.environ.get("REQUIRE_RUN_BEFORE_PATCH", "0") == "1"  # strict mode for small models
 RUN_MEM_MB = int(os.environ.get("RUN_MEM_MB", "1024"))  # watched from outside; 0 = no limit
 RUN_MAX_FILE_MB = 20
@@ -1575,6 +1576,7 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
     last_key = None
     done_ok = set()      # write/patch commands that already succeeded
     # Verification state (the DONE gate). A claim of success needs evidence from run_python.
+    seen_files = set()   # files the model has actually looked at, written or patched this run
     unverified = set()   # .py files changed since they were last run
     last_exit = {}       # .py file -> exit code of its most recent run
     refused_edit = {}    # file -> command that was REFUSED and not yet redone successfully
@@ -1639,7 +1641,12 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         is_block = name in BLOCK_CMDS
         is_py = target.endswith(".py")
 
-        if (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
+        if (REQUIRE_READ_BEFORE_PATCH and name == "patch_file" and target and target not in seen_files
+                and (SANDBOX / target).is_file()):
+            result = (f"REFUSED: you have not looked at {target} yet, so this patch would be a guess "
+                      f"about what is in it. First reply with exactly:\nCMD: read_file {target}\n"
+                      f"then patch the lines you actually see.")
+        elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
                 and target in unverified and target not in problems):
             result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
                       f"(A patch has to answer a real error or check problem.)")
@@ -1653,6 +1660,11 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         print(f"tool>  {_preview(result)}")
 
         ok = result.startswith("[exit 0]")
+        if not result.startswith(("REFUSED:", "ERROR:")):  # the model has now really seen (or made) these files
+            if is_block and ok and target:
+                seen_files.add(target)
+            elif name in ("read_file", "cat", "head", "tail", "sed", "grep", "wc", "check_file", "run_python"):
+                seen_files.update(_norm(w) for w in words[1:] if not w.startswith("-"))
         if is_block and target:
             if ok:
                 refused_edit.pop(target, None)

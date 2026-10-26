@@ -1206,6 +1206,21 @@ UNVERIFIED: whether (a) and (b) change the real pass rate. (a) adds ~35 tokens t
 against 9/10 (same prompt hash, new tool_sha). NOT DONE: the history copy of a write_file reply still keeps the model's invented tail (the ordinary-command
 copy is already trimmed); a DONE-claim check (refuse DONE when it quotes output the last run did not print) was considered and not built: false refusals on prose DONEs.
 
+UPDATE 11 (2026-10-25 NIGHT) FROM CLAUDE: wordcount 10/10 (tool_sha b461f168a8, prompt fa9032d4ba; with the 9/10 run: 19/20). BUGFIX n=5 = 0/5, AND A READ-BEFORE-PATCH GATE
+Bugfix report (tool_sha b461f168a8, prompt b057fded44): 0/5, 12 refusals, every run ended "aborted due to consecutive failures", every run left average.py UNCHANGED (3/7 =
+the score of the untouched file). The new refusals fired as designed (multi-block: 11 times; "code after >>>>>>> REPLACE" hint: 2 times, run 5) and the model sent the
+SAME reply again each time (temperature 0.2 and a cached prompt). The model never issued a real read_file (it writes "NOTE: read_file ..."); it patched from invented
+lines (def run():, print("2.5")). Casey's note suggested adding to the system prompt: one patch per reply, code between ======= and >>>>>>>, a correct example. ALL THREE ARE
+ALREADY IN SYSTEM ("ONE command", "Never ... patch, on a guess", the example patch_file) and in the refusals: the model ignores them, so more prose is unlikely to help.
+CHANGE in sandbox_tool.py: REQUIRE_READ_BEFORE_PATCH (default on; env REQUIRE_READ_BEFORE_PATCH=0 turns it off). patch_file of an EXISTING file the model has not looked at this
+run (read_file/cat/head/tail/sed/grep/wc/check_file/run_python, or wrote/patched it itself) is refused with the exact command to send: "CMD: read_file <path>". New state
+seen_files in _agent_loop. Bug found by my own test before delivery: a successful read_file result starts with "[file:", not "[exit 0]", so the first version never counted a
+real read (a real model would have been refused after reading). Fixed; 7 new checks (322 total; test_bench also passes).
+SYSTEM was NOT changed (system_sha stays ad32e2bcf8) so wordcount etc. remain comparable.
+UNVERIFIED: whether reading first lets the model write correct blocks (it may still send 3-5 blocks per reply). A 3B model may simply be too weak for 3 bugs in one task:
+if so, split bugfix into one-bug tasks (a difficulty ladder). The gate affects every task that patches a pre-existing file: recheck stack/csv_total/skill_v4/skill_v42/wordcount
+(none of them patch a file they did not write, so no change is expected: untested on the phone).
+
 
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
@@ -1316,6 +1331,7 @@ PROTECTED = {Path(__file__).resolve(), AUDIT_LOG.resolve()}
 RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # needs POSIX limits
 RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "10"))
 REQUIRE_VERIFY = os.environ.get("REQUIRE_VERIFY", "1") != "0"                 # block DONE until code was run
+REQUIRE_READ_BEFORE_PATCH = os.environ.get("REQUIRE_READ_BEFORE_PATCH", "1") == "1"  # patching a file you never looked at is a guess
 REQUIRE_RUN_BEFORE_PATCH = os.environ.get("REQUIRE_RUN_BEFORE_PATCH", "0") == "1"  # strict mode for small models
 RUN_MEM_MB = int(os.environ.get("RUN_MEM_MB", "1024"))  # watched from outside; 0 = no limit
 RUN_MAX_FILE_MB = 20
@@ -2798,6 +2814,7 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
     last_key = None
     done_ok = set()      # write/patch commands that already succeeded
     # Verification state (the DONE gate). A claim of success needs evidence from run_python.
+    seen_files = set()   # files the model has actually looked at, written or patched this run
     unverified = set()   # .py files changed since they were last run
     last_exit = {}       # .py file -> exit code of its most recent run
     refused_edit = {}    # file -> command that was REFUSED and not yet redone successfully
@@ -2862,7 +2879,12 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         is_block = name in BLOCK_CMDS
         is_py = target.endswith(".py")
 
-        if (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
+        if (REQUIRE_READ_BEFORE_PATCH and name == "patch_file" and target and target not in seen_files
+                and (SANDBOX / target).is_file()):
+            result = (f"REFUSED: you have not looked at {target} yet, so this patch would be a guess "
+                      f"about what is in it. First reply with exactly:\nCMD: read_file {target}\n"
+                      f"then patch the lines you actually see.")
+        elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
                 and target in unverified and target not in problems):
             result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
                       f"(A patch has to answer a real error or check problem.)")
@@ -2876,6 +2898,11 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         print(f"tool>  {_preview(result)}")
 
         ok = result.startswith("[exit 0]")
+        if not result.startswith(("REFUSED:", "ERROR:")):  # the model has now really seen (or made) these files
+            if is_block and ok and target:
+                seen_files.add(target)
+            elif name in ("read_file", "cat", "head", "tail", "sed", "grep", "wc", "check_file", "run_python"):
+                seen_files.update(_norm(w) for w in words[1:] if not w.startswith("-"))
         if is_block and target:
             if ok:
                 refused_edit.pop(target, None)

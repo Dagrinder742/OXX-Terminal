@@ -666,6 +666,34 @@ check("PRINTED NOTHING" in _u[2] and "It ran OK" not in _u[2], "tail", "a run wi
 ans, out, seen = play([W("t3.py", "print('x')"), "CMD: run_python t3.py", "DONE: printed x"])
 _u = [[c for r, c in m if r == "user"][-1] for m in seen]
 check("It ran OK" in _u[2] and "PRINTED NOTHING" not in _u[2], "tail", "a run with output still says 'It ran OK'")
+
+# ---- bugfix retest (0/5): the model patched a file it never read, from invented lines ----
+_fix = "def average(numbers):\n    return sum(numbers) / len(numbers)\n"
+def _patch(a_, b_): return P("rb.py", a_, b_)
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play([_patch("def average(numbers):", "def average(numbers):\n    if not numbers:\n        return 0.0"),
+                       "CMD: read_file rb.py"])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check("have not looked at rb.py" in _u[1] and "CMD: read_file rb.py" in _u[1] and (SB / "rb.py").read_text() == _fix,
+      "readgate", "patching a file never read is refused, with the exact read_file command, file unchanged", _u[1][:90])
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play(["CMD: read_file rb.py", _patch("    return sum(numbers) / len(numbers)", "    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)")])
+check("if not numbers" in (SB / "rb.py").read_text() and "have not looked" not in out, "readgate", "after a real read_file the patch applies")
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play(["CMD: cat rb.py", _patch("def average(numbers):", "def mean(numbers):")])
+check("def mean" in (SB / "rb.py").read_text(), "readgate", "cat counts as looking at the file")
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play(["CMD: run_python rb.py", _patch("def average(numbers):", "def mean(numbers):")])
+check("def mean" in (SB / "rb.py").read_text(), "readgate", "run_python counts as looking at the file")
+ans, out, seen = play([W("rw.py", "def f():\n    return 1"), P("rw.py", "return 1", "return 2")])
+check("return 2" in (SB / "rw.py").read_text() and "have not looked" not in out, "readgate", "a file the model wrote itself needs no read first")
+ans, out, seen = play([P("nofile.py", "a", "b")])
+check("have not looked" not in out and "does not exist" in out, "readgate", "a missing file gets the normal message, not the gate")
+T.REQUIRE_READ_BEFORE_PATCH = False
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play([_patch("def average(numbers):", "def mean(numbers):")])
+check("def mean" in (SB / "rb.py").read_text(), "readgate", "the gate can be switched off (REQUIRE_READ_BEFORE_PATCH=0)")
+T.REQUIRE_READ_BEFORE_PATCH = True
 (SB / "g5.py").write_text("print('a')\n")
 ans, out, _ = play(["CMD: patch_file g5.py\n<<<<<<< SEARCH\nprint('zzz')\n=======\nprint('b')\n>>>>>>> REPLACE", "DONE: patched"])
 check("never applied" in out and "patch_file g5.py" in out, "gate", "a REFUSED patch that was never redone blocks DONE")
