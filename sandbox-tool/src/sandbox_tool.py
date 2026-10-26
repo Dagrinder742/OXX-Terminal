@@ -1515,6 +1515,24 @@ def _local_imports(path_str: str, seen=None) -> set:
     return seen
 
 
+def _ignored_tail(body: str) -> bool:
+    """True if the model wrote another CMD: or a DONE: after its command (outside a ``` block or a
+    SEARCH/REPLACE block). Only the first command is run, so the rest is thrown away; the model
+    should be told, or it believes that its invented follow-up steps happened."""
+    in_fence = in_patch = False
+    for line in (body or "").splitlines():
+        t = line.strip()
+        if t.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and t.startswith("<<<<<<<"):
+            in_patch = True
+        elif not in_fence and t.startswith(">>>>>>>"):
+            in_patch = False
+        elif not in_fence and not in_patch and t.startswith(("CMD:", "DONE:")):
+            return True
+    return False
+
+
 def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     """What goes into history. For an ordinary command keep only NOTE + CMD, so text the
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
@@ -1671,10 +1689,16 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         elif is_block and result.startswith("REFUSED:"):
             nudge += "\n(Nothing was changed. Fix the problem named above and send the command again.)"
         elif name == "run_python":
-            if ok:
+            if ok and result.rstrip().endswith("(no output)"):
+                nudge += ("\n(It ran but PRINTED NOTHING. If the task expects printed output, the file is "
+                          "missing code: read_file it and fix it. Do not reply DONE yet.)")
+            elif ok:
                 nudge += "\n(It ran OK. If the output matches the task, reply DONE and say what you saw.)"
             elif result.startswith("[exit"):
                 nudge += "\n(It failed. Read the error, fix the file with patch_file, then run_python again.)"
+        if _ignored_tail(body):
+            nudge += ("\n(Only your FIRST command was run. Everything after it in your reply was ignored, "
+                      "including any DONE. Send ONE command per reply and wait for the real output.)")
         msgs.append(("user", f"Here is the output from running '{cmd}':\n{result}{nudge}"))
 
     return "(stopped: step limit reached)"

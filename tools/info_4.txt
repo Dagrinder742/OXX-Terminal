@@ -1189,6 +1189,23 @@ it moved the failure. n=4, so only the direction is meaningful.
  - UNVERIFIED: a test_bench.py run reported "4 CHECK(S) FAILED" once and then passed 11 times in a row (also under parallel load). Cause unknown,
    failing output was not captured. If it happens again, save the FAIL lines.
 
+UPDATE 10 (2026-10-25 EVENING) FROM CLAUDE: WORDCOUNT n=10 AFTER THE PROMPT FIX = 9/10, AND TWO NUDGES
+Report 20261025-1920-wc-retest: tool_sha 58abd03ccb (update-9 build), prompt hash fa9032d4ba, 9/10 pass, 1 false-DONE (run 8). Earlier: 0/3, 0/4.
+CAUTION: the new prompt nearly spells out the algorithm (split first, strip EACH word), so 9/10 measures instruction-following with a leading prompt,
+not problem solving. Do not compare it with other prompt hashes. Runs 3, 10 and others contain invented tails ("DONE: [('the',3),('cat',1)]") that the
+tool ignored; the final DONE then matched the real output.
+RUN 8 (what actually happened; Casey's note says the notes were written into the file, they were not): one reply held a whole invented session
+(NOTE/CMD/NOTE/CMD...). Only the first CMD ran: write_file with the first fenced block (functions only, no __main__ block). The file was clean. The model's
+second write_file (main block only, which would have OVERWRITTEN the functions) never ran. Next, run_python printed "(no output)" and my nudge said "It ran OK. If
+the output matches the task, reply DONE": the model said DONE with an invented result. Two tool flaws, both mine.
+CHANGES in sandbox_tool.py: (a) _ignored_tail(body): if a reply has a second CMD: or a DONE: after its command (outside ``` and SEARCH/REPLACE blocks), the
+tool result adds "Only your FIRST command was run. Everything after it was ignored, including any DONE. Send ONE command per reply"; (b) run_python with exit 0
+and no output now says "It ran but PRINTED NOTHING. If the task expects printed output, the file is missing code ... Do not reply DONE yet" instead of "It ran OK".
+9 new checks (315 total).
+UNVERIFIED: whether (a) and (b) change the real pass rate. (a) adds ~35 tokens to many steps and may change a working baseline: rerun wordcount n=10 and compare
+against 9/10 (same prompt hash, new tool_sha). NOT DONE: the history copy of a write_file reply still keeps the model's invented tail (the ordinary-command
+copy is already trimmed); a DONE-claim check (refuse DONE when it quotes output the last run did not print) was considered and not built: false refusals on prose DONEs.
+
 
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
@@ -2721,6 +2738,24 @@ def _local_imports(path_str: str, seen=None) -> set:
     return seen
 
 
+def _ignored_tail(body: str) -> bool:
+    """True if the model wrote another CMD: or a DONE: after its command (outside a ``` block or a
+    SEARCH/REPLACE block). Only the first command is run, so the rest is thrown away; the model
+    should be told, or it believes that its invented follow-up steps happened."""
+    in_fence = in_patch = False
+    for line in (body or "").splitlines():
+        t = line.strip()
+        if t.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and t.startswith("<<<<<<<"):
+            in_patch = True
+        elif not in_fence and t.startswith(">>>>>>>"):
+            in_patch = False
+        elif not in_fence and not in_patch and t.startswith(("CMD:", "DONE:")):
+            return True
+    return False
+
+
 def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     """What goes into history. For an ordinary command keep only NOTE + CMD, so text the
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
@@ -2877,10 +2912,16 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         elif is_block and result.startswith("REFUSED:"):
             nudge += "\n(Nothing was changed. Fix the problem named above and send the command again.)"
         elif name == "run_python":
-            if ok:
+            if ok and result.rstrip().endswith("(no output)"):
+                nudge += ("\n(It ran but PRINTED NOTHING. If the task expects printed output, the file is "
+                          "missing code: read_file it and fix it. Do not reply DONE yet.)")
+            elif ok:
                 nudge += "\n(It ran OK. If the output matches the task, reply DONE and say what you saw.)"
             elif result.startswith("[exit"):
                 nudge += "\n(It failed. Read the error, fix the file with patch_file, then run_python again.)"
+        if _ignored_tail(body):
+            nudge += ("\n(Only your FIRST command was run. Everything after it in your reply was ignored, "
+                      "including any DONE. Send ONE command per reply and wait for the real output.)")
         msgs.append(("user", f"Here is the output from running '{cmd}':\n{result}{nudge}"))
 
     return "(stopped: step limit reached)"

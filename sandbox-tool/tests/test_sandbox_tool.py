@@ -648,6 +648,24 @@ check("have not run it since" in out and "g3.py" in out, "gate", "DONE right aft
 ans, out, _ = play([W("g4.py", "print(1/0)"), "CMD: run_python g4.py", P("g4.py", "print(1/0)", "print(1)"),
                     "CMD: run_python g4.py", "DONE: fixed, prints 1"])
 check(ans == "fixed, prints 1", "gate", "write, run, patch, run, DONE is accepted", ans[:60])
+
+# ---- run 8 of the wordcount retest: invented follow-up steps, and a run that printed nothing ----
+check(T._ignored_tail("```python\nx=1\n```\nDONE: ok"), "tail", "DONE after a command block is detected")
+check(T._ignored_tail("\nNOTE: a\nCMD: check_file x.py\n"), "tail", "a second CMD is detected")
+check(not T._ignored_tail("```python\nCMD: not a command, file content\nDONE: nor this\n```\n"), "tail", "CMD:/DONE: inside a code block is file content")
+check(not T._ignored_tail("<<<<<<< SEARCH\nCMD: x\n=======\nDONE: y\n>>>>>>> REPLACE\n"), "tail", "CMD:/DONE: inside a patch block is file content")
+check(not T._ignored_tail("NOTE: just a note\n"), "tail", "a NOTE after the command is not an ignored command")
+ans, out, seen = play([W("t1.py", "print('hi')") + "\n\nNOTE: next\nCMD: run_python t1.py\n```\nhi\n```\nDONE: it works",
+                       "CMD: run_python t1.py", "DONE: printed hi"])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check("Only your FIRST command was run" in _u[1], "tail", "the model is told that the rest of its reply was ignored", _u[1][-120:])
+check("Only your FIRST command was run" not in _u[2] and ans == "printed hi", "tail", "a clean reply gets no such warning")
+ans, out, seen = play([W("t2.py", "x = 1"), "CMD: run_python t2.py", "CMD: run_python t2.py", "DONE: ok"])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check("PRINTED NOTHING" in _u[2] and "It ran OK" not in _u[2], "tail", "a run with no output does not say 'It ran OK'", _u[2][-130:])
+ans, out, seen = play([W("t3.py", "print('x')"), "CMD: run_python t3.py", "DONE: printed x"])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check("It ran OK" in _u[2] and "PRINTED NOTHING" not in _u[2], "tail", "a run with output still says 'It ran OK'")
 (SB / "g5.py").write_text("print('a')\n")
 ans, out, _ = play(["CMD: patch_file g5.py\n<<<<<<< SEARCH\nprint('zzz')\n=======\nprint('b')\n>>>>>>> REPLACE", "DONE: patched"])
 check("never applied" in out and "patch_file g5.py" in out, "gate", "a REFUSED patch that was never redone blocks DONE")
