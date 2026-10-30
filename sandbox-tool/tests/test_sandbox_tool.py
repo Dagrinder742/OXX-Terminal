@@ -762,6 +762,43 @@ check("have not looked at average.py" in out, "replace_def", "the read-before-ed
 check(_run.stdout == "2.5\n2.5\n0.0\n" and "total += n" not in (SB / "average.py").read_text() and "s.sort()" not in (SB / "average.py").read_text(),
       "replace_def", "bugfix fixture: two replace_def commands fix all three bugs and the file prints 2.5 / 2.5 / 0.0", repr(_run.stdout[:40]))
 check("have not run it since" in out and ans == "prints 2.5, 2.5, 0.0", "replace_def", "DONE right after replace_def is blocked until run_python")
+# ---- small bugfix screen (replace_def): the invented tail of a refused edit stayed in history; 75 short NOTE lines in one reply ----
+_ed = ("NOTE: fix median\nCMD: replace_def average.py median\n```python\ndef median(numbers):\n    return 1\n```\n"
+       "NOTE: The median function is now correctly handling even numbers of items.\nCMD: run_python average.py\n2.5\nDONE: fixed")
+_h = T._clean_reply(_ed, "cmd", "replace_def average.py median", ["fix median"])
+check(_h.endswith("```") and "now correctly handling" not in _h and "DONE" not in _h and "def median" in _h and "NOTE: fix median" in _h,
+      "tailcut", "history keeps a replace_def reply only up to the end of its block (invented NOTE/CMD/DONE dropped)", _h[-60:])
+_hw = T._clean_reply("CMD: write_file a.py\n```python\nx = 1\n```\nDONE: wrote it", "cmd", "write_file a.py", [])
+check(_hw == "CMD: write_file a.py\n```python\nx = 1\n```", "tailcut", "same for write_file")
+_hp = T._clean_reply("CMD: patch_file a.py\n<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\nmore code\nDONE: ok", "cmd", "patch_file a.py", [])
+check(_hp.endswith(">>>>>>> REPLACE") and "more code" not in _hp, "tailcut", "same for patch_file")
+_hm = T._clean_reply("CMD: write_file a.md\n```md\nhere:\n```python\nx\n```\nend\n```\nDONE: ok", "cmd", "write_file a.md", [])
+check("end\n```" in _hm and "DONE" not in _hm, "tailcut", "inner fences in file content are kept, only the tail after the real closing fence goes")
+_hu = "CMD: write_file a.py\n```python\nx = 1"
+check(T._clean_reply(_hu, "cmd", "write_file a.py", []) == _hu, "tailcut", "an unclosed block is left as it was (nothing to cut)")
+# end to end: after a refused first edit the model's next prompt must not contain its invented claims
+ans, out, seen = play([_ed.replace("average.py", "nofile_x.py"), "CMD: ls", "DONE: listed"])
+_hist = " ".join(c for r, c in seen[1] if r == "assistant")
+check("now correctly handling" not in _hist and "DONE: fixed" not in _hist, "tailcut", "the model never sees its own invented claim again in the next prompt")
+_flood = "NOTE: a\nCMD: run_python x.py\n" + "\n".join(f"NOTE: read_file average.py {i} 10" for i in range(1, 80))
+check(T._runaway_note(_flood), "noteflood", "many short NOTE lines in one reply are detected as a runaway")
+check(not T._runaway_note("NOTE: a\nNOTE: b\nCMD: ls"), "noteflood", "two or three NOTE lines are normal")
+check(not T._runaway_note("CMD: write_file a.py\n```python\n" + "\n".join(f"NOTE: line {i}" for i in range(40)) + "\n"), "noteflood",
+      "NOTE-looking lines inside a code block are file content")
+check(not T._runaway_note("CMD: write_file a.py\n```python\n" + "\n".join(f"NOTE: line {i}" for i in range(40)) + "\n```\nNOTE: done"), "noteflood",
+      "40 NOTE-looking lines inside a CLOSED code block are not counted")
+_pc = T.parse_reply(_flood)
+check(_pc[0] == "cmd" and _pc[1] == "run_python x.py" and len(_pc[3]) <= T.NOTE_MAX_LINES, "noteflood", "a flooded reply still parses, with at most NOTE_MAX_LINES notes", str(len(_pc[3])))
+_k = T._cap_notes("CMD: write_file a.py\n```python\n" + "\n".join(f"NOTE: n{i}" for i in range(10)) + "\n```")
+check(_k.count("NOTE: n") == 10, "noteflood", "NOTE lines inside a code block are never dropped")
+_cnt = [0]
+def _sse2():
+    yield 'data: {"choices":[{"delta":{"content":"NOTE: a\\nCMD: run_python x.py\\n"}}]}'
+    for i in range(4000):
+        _cnt[0] += 1
+        yield 'data: {"choices":[{"delta":{"content":"NOTE: read_file average.py %d 10\\n"}}]}' % i
+_tx = T._read_sse(_sse2(), show_progress=False)[0]
+check(_cnt[0] < 200 and _tx.startswith("NOTE: a"), "noteflood", "the stream is stopped early on a NOTE flood", f"read {_cnt[0]} of 4000 pieces")
 # ---- run 8 of the wordcount retest: invented follow-up steps, and a run that printed nothing ----
 check(T._ignored_tail("```python\nx=1\n```\nDONE: ok"), "tail", "DONE after a command block is detected")
 check(T._ignored_tail("\nNOTE: a\nCMD: check_file x.py\n"), "tail", "a second CMD is detected")

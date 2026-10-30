@@ -181,6 +181,16 @@ def _fenced_block(body):
     An unclosed block means the reply was probably cut off by the token limit; refuse
     rather than write a truncated file."""
     lines = (body or "").splitlines()
+    bounds = _fence_bounds(lines)
+    if bounds is None:
+        return None
+    start, end = bounds
+    return "\n".join(lines[start + 1:end]) + "\n"
+
+
+def _fence_bounds(lines):
+    """(index of the opening fence, index of the closing fence) of the first ``` block in
+    `lines`, or None if there is none. Raises Refused for an unclosed block. See _fenced_block."""
     start = next((i for i, l in enumerate(lines) if l.strip().startswith("```")), None)
     if start is None:
         return None
@@ -192,8 +202,7 @@ def _fenced_block(body):
     def _ends_reply(i):
         nxt = next((l.strip() for l in lines[i + 1:] if l.strip()), "")
         return not nxt or nxt.startswith(("NOTE:", "CMD:", "DONE:"))
-    end = next((i for i in closers if _ends_reply(i)), closers[-1])
-    return "\n".join(lines[start + 1:end]) + "\n"
+    return start, next((i for i in closers if _ends_reply(i)), closers[-1])
 
 
 def _search_replace(body):
@@ -1400,6 +1409,18 @@ LLAMA_STREAM = os.environ.get("LLAMA_STREAM", "1") != "0"   # 0 = plain request,
 
 
 NOTE_MAX_CHARS = 300   # a NOTE: is one short line; longer ones are cut (runaway "1, 2, 3 ..." loops)
+NOTE_MAX_LINES = 3     # a reply keeps at most this many NOTE: lines (bugfix run 3: 75 of them in one reply)
+
+
+def _note_lines_outside_fences(text: str) -> int:
+    n, in_fence = 0, False
+    for line in text.splitlines():
+        t = line.strip()
+        if t.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and t.startswith("NOTE:"):
+            n += 1
+    return n
 
 
 def _runaway_note(text: str) -> bool:
@@ -1408,18 +1429,26 @@ def _runaway_note(text: str) -> bool:
     Lines inside a ``` block (file content) are never treated as notes."""
     if text.count("```") % 2:
         return False
+    if _note_lines_outside_fences(text) > 2 * NOTE_MAX_LINES:   # many short NOTE lines, one per line
+        return True
     last = text.rsplit("\n", 1)[-1].strip()
     return last.startswith("NOTE:") and len(last) > 2 * NOTE_MAX_CHARS
 
 
 def _cap_notes(reply: str) -> str:
-    """Cut NOTE: lines longer than NOTE_MAX_CHARS (outside ``` blocks)."""
-    out, in_fence = [], False
+    """Cut NOTE: lines longer than NOTE_MAX_CHARS and keep only the first NOTE_MAX_LINES of them
+    (outside ``` blocks; file content is never touched)."""
+    out, in_fence, kept = [], False, 0
     for line in reply.splitlines():
-        if line.strip().startswith("```"):
+        t = line.strip()
+        if t.startswith("```"):
             in_fence = not in_fence
-        elif not in_fence and line.strip().startswith("NOTE:") and len(line.strip()) > NOTE_MAX_CHARS:
-            line = line.strip()[:NOTE_MAX_CHARS].rstrip() + " ..."
+        elif not in_fence and t.startswith("NOTE:"):
+            kept += 1
+            if kept > NOTE_MAX_LINES:
+                continue
+            if len(t) > NOTE_MAX_CHARS:
+                line = t[:NOTE_MAX_CHARS].rstrip() + " ..."
         out.append(line)
     return "\n".join(out)
 
@@ -1642,7 +1671,29 @@ def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
     if kind == "cmd" and text.split(" ", 1)[0] not in BLOCK_CMDS:
         return (f"NOTE: {notes[0]}\n" if notes else "") + f"CMD: {text}"
-    return _cap_notes(reply)
+    return _cap_notes(_cut_after_block(reply, text))
+
+
+def _cut_after_block(reply: str, text: str) -> str:
+    """For write_file / patch_file / replace_def keep the reply only up to the end of the command's
+    block. Whatever the model wrote after it (an invented 'NOTE: it is fixed', fake tool output, a second
+    command, a fake DONE) never happened; remembering it made a model believe its own invention (bugfix
+    runs 2 and 3: 'median is now correctly handled' was never true)."""
+    lines = reply.splitlines()
+    ci = next((i for i, l in enumerate(lines) if l.strip().startswith("CMD:")), None)
+    if ci is None:
+        return reply
+    rest = lines[ci + 1:]
+    if text.split(" ", 1)[0] == "patch_file":
+        e = next((i for i, l in enumerate(rest) if l.strip().startswith(">>>>>>>")), None)
+        end = None if e is None else ci + 1 + e
+    else:
+        try:
+            b = _fence_bounds(rest)
+        except Refused:
+            return reply
+        end = None if b is None else ci + 1 + b[1]
+    return reply if end is None else "\n".join(lines[:end + 1])
 
 
 def _norm(path_str: str) -> str:

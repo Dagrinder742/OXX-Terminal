@@ -1268,6 +1268,24 @@ UNVERIFIED: whether the 3B model uses replace_def correctly (it must send ONE co
 TAB-indented file (refused, by design for now). The model may still send several edits in one reply: the "ONE patch_file per reply" refusal does not apply to replace_def yet, only the first command runs and
 the "Only your FIRST command was run" nudge tells the model.
 
+UPDATE 15 (2026-10-30) FROM CLAUDE: FIRST REAL RUNS OF replace_def (bugfix n=3, tool_sha e2bea973a8, system_sha 000c5f86b8, prompt f45e49f8ff) = 0/3, AND TWO FIXES
+Scores 3/7, 4/7, 4/7 (the untouched file scores 3/7). replace_def itself WORKED MECHANICALLY every time it ran: 3 applications ("Successfully replaced average ... old lines 1-5 are now 4/5 lines"), old body gone,
+static check clean, "average of an empty list" PASSES in runs 2 and 3 (the first run where any bugfix check was fixed by an edit command). But the MEDIAN was never replaced in any run, and 2 runs claimed DONE
+while the real output was "2.5 / 3 / 0.0" (the model quoted "2.5 / 2.5 / 0.0" in its DONE).
+Mechanisms seen in the log:
+ (1) First reply of every run = "NOTE: read_file ... CMD: replace_def ..." (the model writes the read as a NOTE, never issues it) -> refused by the read gate (correct, costs ~5 min). In runs 2 and 3 that first reply
+     also contained an INVENTED tail (NOTE "the median function is now correctly handling even numbers", CMD: run_python, fake output, DONE). BUG (mine): _clean_reply kept the whole reply in history for
+     write_file/patch_file/replace_def, so the model's next prompt contained its own false claim that the median was fixed, and it never sent the median edit again.
+ (2) The model sends two edits in one reply (average + median). Only the first runs (by design); the second is dropped. Whether the "Only your FIRST command was run" nudge was shown cannot be seen: the report prints
+     the tool result, not the nudge text.
+ (3) Run 3: one reply held 75 lines "NOTE: read_file average.py N 10": 1024 tokens, 402 s. My runaway-NOTE guard only caught ONE long NOTE line, not many short ones; and the flood stayed in history.
+CHANGES in sandbox_tool.py: (a) _cut_after_block(): the history copy of a write_file/patch_file/replace_def reply ends at the end of its block (closing fence or >>>>>>> line); everything the model wrote after it is
+dropped (shared _fence_bounds() with _fenced_block, same rule). (b) NOTE_MAX_LINES = 3: _cap_notes keeps at most 3 NOTE lines per reply (outside ``` blocks); _runaway_note() also stops the stream when a reply has
+more than 6 NOTE lines outside fences (new _note_lines_outside_fences()). 13 new checks (376 total; test_bench and the verifier self-test pass). Mutation check: I broke each new rule on a scratch copy; the suite
+caught all five (one test first MISSED a fence-blind variant, so I added a closed-fence test).
+UNVERIFIED: that (a) makes the model send the median edit afterwards (plausible, not shown); n=3 is a screen, not a rate. NOT BUILT, needs Casey's decision: run several consecutive replace_def blocks from ONE reply
+(each validated and reported separately) instead of dropping all but the first; in run 3 both blocks were correct. It reverses the one-command-per-reply rule for this one command.
+
 
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
@@ -1466,6 +1484,16 @@ def _fenced_block(body):
     An unclosed block means the reply was probably cut off by the token limit; refuse
     rather than write a truncated file."""
     lines = (body or "").splitlines()
+    bounds = _fence_bounds(lines)
+    if bounds is None:
+        return None
+    start, end = bounds
+    return "\n".join(lines[start + 1:end]) + "\n"
+
+
+def _fence_bounds(lines):
+    """(index of the opening fence, index of the closing fence) of the first ``` block in
+    `lines`, or None if there is none. Raises Refused for an unclosed block. See _fenced_block."""
     start = next((i for i, l in enumerate(lines) if l.strip().startswith("```")), None)
     if start is None:
         return None
@@ -1477,8 +1505,7 @@ def _fenced_block(body):
     def _ends_reply(i):
         nxt = next((l.strip() for l in lines[i + 1:] if l.strip()), "")
         return not nxt or nxt.startswith(("NOTE:", "CMD:", "DONE:"))
-    end = next((i for i in closers if _ends_reply(i)), closers[-1])
-    return "\n".join(lines[start + 1:end]) + "\n"
+    return start, next((i for i in closers if _ends_reply(i)), closers[-1])
 
 
 def _search_replace(body):
@@ -2685,6 +2712,18 @@ LLAMA_STREAM = os.environ.get("LLAMA_STREAM", "1") != "0"   # 0 = plain request,
 
 
 NOTE_MAX_CHARS = 300   # a NOTE: is one short line; longer ones are cut (runaway "1, 2, 3 ..." loops)
+NOTE_MAX_LINES = 3     # a reply keeps at most this many NOTE: lines (bugfix run 3: 75 of them in one reply)
+
+
+def _note_lines_outside_fences(text: str) -> int:
+    n, in_fence = 0, False
+    for line in text.splitlines():
+        t = line.strip()
+        if t.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and t.startswith("NOTE:"):
+            n += 1
+    return n
 
 
 def _runaway_note(text: str) -> bool:
@@ -2693,18 +2732,26 @@ def _runaway_note(text: str) -> bool:
     Lines inside a ``` block (file content) are never treated as notes."""
     if text.count("```") % 2:
         return False
+    if _note_lines_outside_fences(text) > 2 * NOTE_MAX_LINES:   # many short NOTE lines, one per line
+        return True
     last = text.rsplit("\n", 1)[-1].strip()
     return last.startswith("NOTE:") and len(last) > 2 * NOTE_MAX_CHARS
 
 
 def _cap_notes(reply: str) -> str:
-    """Cut NOTE: lines longer than NOTE_MAX_CHARS (outside ``` blocks)."""
-    out, in_fence = [], False
+    """Cut NOTE: lines longer than NOTE_MAX_CHARS and keep only the first NOTE_MAX_LINES of them
+    (outside ``` blocks; file content is never touched)."""
+    out, in_fence, kept = [], False, 0
     for line in reply.splitlines():
-        if line.strip().startswith("```"):
+        t = line.strip()
+        if t.startswith("```"):
             in_fence = not in_fence
-        elif not in_fence and line.strip().startswith("NOTE:") and len(line.strip()) > NOTE_MAX_CHARS:
-            line = line.strip()[:NOTE_MAX_CHARS].rstrip() + " ..."
+        elif not in_fence and t.startswith("NOTE:"):
+            kept += 1
+            if kept > NOTE_MAX_LINES:
+                continue
+            if len(t) > NOTE_MAX_CHARS:
+                line = t[:NOTE_MAX_CHARS].rstrip() + " ..."
         out.append(line)
     return "\n".join(out)
 
@@ -2927,7 +2974,29 @@ def _clean_reply(reply: str, kind: str, text: str, notes: list) -> str:
     model invented after the command (fake tool output, a fake DONE) is not remembered."""
     if kind == "cmd" and text.split(" ", 1)[0] not in BLOCK_CMDS:
         return (f"NOTE: {notes[0]}\n" if notes else "") + f"CMD: {text}"
-    return _cap_notes(reply)
+    return _cap_notes(_cut_after_block(reply, text))
+
+
+def _cut_after_block(reply: str, text: str) -> str:
+    """For write_file / patch_file / replace_def keep the reply only up to the end of the command's
+    block. Whatever the model wrote after it (an invented 'NOTE: it is fixed', fake tool output, a second
+    command, a fake DONE) never happened; remembering it made a model believe its own invention (bugfix
+    runs 2 and 3: 'median is now correctly handled' was never true)."""
+    lines = reply.splitlines()
+    ci = next((i for i, l in enumerate(lines) if l.strip().startswith("CMD:")), None)
+    if ci is None:
+        return reply
+    rest = lines[ci + 1:]
+    if text.split(" ", 1)[0] == "patch_file":
+        e = next((i for i, l in enumerate(rest) if l.strip().startswith(">>>>>>>")), None)
+        end = None if e is None else ci + 1 + e
+    else:
+        try:
+            b = _fence_bounds(rest)
+        except Refused:
+            return reply
+        end = None if b is None else ci + 1 + b[1]
+    return reply if end is None else "\n".join(lines[:end + 1])
 
 
 def _norm(path_str: str) -> str:
