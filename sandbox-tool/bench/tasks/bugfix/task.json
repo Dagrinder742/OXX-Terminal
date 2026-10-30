@@ -1,1 +1,1 @@
-{"title": "fix three bugs with patch_file", "output": "average.py", "difficulty": 3, "max_steps": 12}
+{"title": "fix three bugs (replace_def or patch_file)", "output": "average.py", "difficulty": 3, "max_steps": 12}

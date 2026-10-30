@@ -1,0 +1,14 @@
+CHANGED BLINDNESS: THE BRAIN IGNORES A CHANGE DIRRECTLY WHEN IT LOOKS AWAY
+
+the theory that the brain ignores a change after it looks away
+
+for example in tv one character walks into the room of two making it three ... 
+the camera focuses in on a single person then refocuses out to the other two in the room 
+except the character that walked into the room has been swapped with an entirely different character 
+you brain i blind to this change until pointed out... much like if you were to look away for a second 
+you may believe a change didnt occur when you refocus your attention back... another example the "kansas city shuffle"
+make them look one way they lose sight of you as you cross behind their back and disappear the way they already looked 
+
+this is interesting theory actually and a tv show just executed it on my flawlessly to show how it works 
+now im interested in exploring this technique in source code .... this would be cool to pull off but what 
+purpose would it serve in code? thats the discovery of the build...  

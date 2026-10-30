@@ -45,6 +45,7 @@ Every reply from the model is an optional one-line `NOTE:` (its memory) plus exa
 | `read_file <path> [start] [count]` | Numbered lines, with a hint to continue reading. |
 | `write_file <path>` | Whole file in a fenced block after the command line. Written exactly as sent (no `\n` mangling). |
 | `patch_file <path>` | `SEARCH` / `REPLACE` block. Refuses if SEARCH is missing, not unique, equals REPLACE, or would leave a `.py` file with a syntax error. Repairs indentation. |
+| `replace_def <path.py> <name>` | Replaces ONE whole function, class or `Class.method` with the complete new definition from a fenced block. The old version is found with `ast`, so the model copies no old text and counts no lines. Refuses an unknown or duplicated name, a block that is not exactly one def/class with the same name, and any result with a syntax error. Space-indented code cannot be spliced into a tab-indented file (it is refused). |
 | `check_file <path.py>` | Static check (syntax, stub bodies, shadowed methods, wrong argument counts, stdlib module used but never imported). Never runs the code. Runs automatically after every write/patch of a `.py` file. |
 | `run_python <path.py>` | Runs a script under a runtime guard (below). POSIX only. |
 
@@ -144,6 +145,8 @@ Report escapes privately (see `SECURITY.md`).
 | `RUN_TIMEOUT_S`, `RUN_MEM_MB` | `10`, `1024` | `run_python` limits (`RUN_MEM_MB=0` = no memory limit). |
 | `REQUIRE_VERIFY` | `1` | `0` turns the DONE gate off. |
 | `REQUIRE_RUN_BEFORE_PATCH` | `0` | `1`: a `.py` file must be run before it may be patched (strict mode for small models). |
+| `REQUIRE_READ_BEFORE_PATCH` | `1` | `0` allows `patch_file` / `replace_def` on a file the model has not looked at this run. |
+| `REQUIRE_WORK_BEFORE_DONE` | `1` | `0` allows `DONE` as the very first reply (before any command ran). |
 | `PREVIEW_LINES` | `15` | Lines of tool output echoed to your terminal (`0` = all). The model always gets the full output. |
 | `AUDIT_LOG` | `<sandbox>.refused.log` | Where refused commands are logged. |
 | `AGENT_MAX_STEPS` | `10` | Steps per run. |

@@ -51,6 +51,7 @@ import site
 import subprocess
 import sysconfig
 import tempfile
+import textwrap
 import time
 import urllib.request
 from pathlib import Path
@@ -94,6 +95,7 @@ RUN_PYTHON = os.environ.get("RUN_PYTHON", "1") != "0" and os.name != "nt"  # nee
 RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "10"))
 REQUIRE_VERIFY = os.environ.get("REQUIRE_VERIFY", "1") != "0"                 # block DONE until code was run
 REQUIRE_READ_BEFORE_PATCH = os.environ.get("REQUIRE_READ_BEFORE_PATCH", "1") == "1"  # patching a file you never looked at is a guess
+REQUIRE_WORK_BEFORE_DONE = os.environ.get("REQUIRE_WORK_BEFORE_DONE", "1") == "1"  # DONE as the very first reply does nothing
 REQUIRE_RUN_BEFORE_PATCH = os.environ.get("REQUIRE_RUN_BEFORE_PATCH", "0") == "1"  # strict mode for small models
 RUN_MEM_MB = int(os.environ.get("RUN_MEM_MB", "1024"))  # watched from outside; 0 = no limit
 RUN_MAX_FILE_MB = 20
@@ -920,6 +922,85 @@ def cmd_patch_file(path_str: str, search_text: str, replace_text: str) -> str:
         return f"ERROR: {e}"
 
 
+def _find_def(tree, dotted: str):
+    """The AST node for 'func', 'Class' or 'Class.method' (nesting allowed), else Refused."""
+    scope, node, parts = tree, None, dotted.split(".")
+    for depth, name in enumerate(parts):
+        kids = [n for n in ast.iter_child_nodes(scope)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+        hits = [n for n in kids if n.name == name]
+        where = ".".join(parts[:depth + 1])
+        if not hits:
+            have = ", ".join(n.name for n in kids) or "nothing"
+            raise Refused(f"no def or class named {where} in that file. At that level it defines: {have}. "
+                          f"Use read_file to see the names (for a method write Class.method)")
+        if len(hits) > 1:
+            lines = ", ".join(str(n.lineno) for n in hits)
+            raise Refused(f"{where} is defined {len(hits)} times (lines {lines}), so replace_def cannot tell which "
+                          f"one you mean. Use patch_file with enough surrounding lines instead")
+        scope = node = hits[0]
+    return node
+
+
+def cmd_replace_def(path_str: str, name: str, new_code: str) -> str:
+    """Replace ONE whole function / method / class in a .py file with new_code (the complete new
+    definition). The old version is found with ast, so the model copies no old text and counts no
+    lines. Small models treat SEARCH/REPLACE as 'insert after this line' and leave the old body behind."""
+    try:
+        _check_writable(path_str)
+        if not path_str.endswith(".py"):
+            return "REFUSED: replace_def only works on .py files; use patch_file for other files"
+        target = SANDBOX / path_str
+        if not target.is_file():
+            return f"REFUSED: file does not exist: {path_str}"
+        content = target.read_text()
+        try:
+            tree = ast.parse(content)
+        except SyntaxError as e:
+            return (f"REFUSED: {path_str} already has a syntax error (line {e.lineno}: {e.msg}), so its functions "
+                    f"cannot be located. Repair that line with patch_file first")
+        node = _find_def(tree, name)
+        short = name.split(".")[-1]
+
+        code = textwrap.dedent(new_code).strip("\n")
+        try:
+            new_tree = ast.parse(code)
+        except SyntaxError as e:
+            return (f"REFUSED: your new code is not valid Python (line {e.lineno}: {e.msg}), so nothing was changed. "
+                    f"The ``` block must hold the complete new {short} and nothing else")
+        top = new_tree.body
+        if (len(top) != 1 or not isinstance(top[0], (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))):
+            return (f"REFUSED: the ``` block must contain exactly ONE complete def or class (the new {short}) and "
+                    f"nothing else: no imports, no other functions, no test code. Nothing was changed. "
+                    f"Use patch_file to change other lines")
+        if top[0].name != short:
+            return (f"REFUSED: the block defines '{top[0].name}' but you asked to replace '{short}'. "
+                    f"Keep the same name, or nothing was changed")
+        if isinstance(top[0], ast.ClassDef) != isinstance(node, ast.ClassDef):
+            return f"REFUSED: {name} is a {'class' if isinstance(node, ast.ClassDef) else 'function'} but the block defines the other kind"
+
+        start = min([node.lineno] + [d.lineno for d in node.decorator_list])
+        end = node.end_lineno
+        new_text = textwrap.indent(code, " " * node.col_offset) + "\n"
+        lines = content.splitlines(keepends=True)
+        new_content = "".join(lines[:start - 1]) + new_text + "".join(lines[end:])
+        if new_content == content:
+            return "REFUSED: that is the same code the file already has, so nothing would change"
+        try:
+            ast.parse(new_content)
+        except SyntaxError as e:
+            return (f"REFUSED: this would leave {path_str} with a syntax error (line {e.lineno}: {e.msg}), so it was "
+                    f"NOT applied and the file is unchanged")
+        target.write_text(new_content)
+        log_to_index(path_str, "patched")
+        return (f"[exit 0]\nSuccessfully replaced {name} in {path_str} "
+                f"(old lines {start}-{end} are now {len(new_text.splitlines())} lines)")
+    except Refused as e:
+        return f"REFUSED: {e}"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
 def _expand_paths(a: str) -> list[str]:
     if any(c in a for c in "*?["):
         matches = sorted(glob.glob(a, root_dir=SANDBOX))[:MAX_GLOB]
@@ -945,7 +1026,7 @@ def validate(argv: list[str]) -> list[str]:
         raise Refused("empty command")
     cmd, args = argv[0], argv[1:]
     if cmd not in POLICY:
-        raise Refused(f"command not allowed: {cmd} (allowed: {', '.join(POLICY)}, read_file, write_file, patch_file, check_file, run_python)")
+        raise Refused(f"command not allowed: {cmd} (allowed: {', '.join(POLICY)}, read_file, write_file, patch_file, replace_def, check_file, run_python)")
     pol = POLICY[cmd]
     for a in args:
         if a in SHELL_TOKENS:
@@ -1097,6 +1178,15 @@ def _run(command: str, body: str = "") -> str:
                 return _with_check(cmd_write_file(parts[1], inline), parts[1])
             return ("REFUSED: no file contents received. The ``` block must come on the lines "
                     "AFTER the CMD line, not before it (no escaping needed)")
+        elif cmd == "replace_def":
+            if len(parts) != 3:
+                return ("REFUSED: usage: replace_def <path.py> <name>   (name = a function, a class, or Class.method), "
+                        "then the complete new definition in a ``` block on the lines after the CMD line")
+            block = _fenced_block(body)
+            if block is None:
+                return ("REFUSED: no code received. The ``` block holding the whole new function must come on the "
+                        "lines AFTER the CMD line")
+            return _with_check(cmd_replace_def(parts[1], parts[2], block), parts[1])
         elif cmd == "patch_file":
             if len(parts) < 2:
                 return "REFUSED: patch_file requires <path>"
@@ -1150,27 +1240,30 @@ Commands (paths are relative to the sandbox root, no pipes or redirects):
 - cat, grep, sed, ls, head, tail, wc      standard tools
 - write_file <path>   creates/overwrites a file. Put the whole file in a ``` block on
   the lines after the CMD line. Write code normally, no escaping.
-- patch_file <path>   edits a file. Put a SEARCH/REPLACE block after the CMD line.
+- patch_file <path>   edits a few lines. Put a SEARCH/REPLACE block after the CMD line.
+- replace_def <path.py> <name>   replaces ONE whole function (or class, or Class.method) with the
+  new version you write. Put the COMPLETE new definition in a ``` block after the CMD line. The
+  old version is removed for you: no SEARCH text and no line numbers. Use it to fix a function.
 - check_file <path.py>   static check (syntax, stub bodies, shadowed methods, wrong
   argument counts). It never runs the code. It also runs automatically after every
-  write_file/patch_file of a .py file: if it lists problems, fix them with patch_file
+  write_file/patch_file/replace_def of a .py file: if it lists problems, fix them
   before you reply DONE.
 - run_python <path.py>   runs a .py file in the sandbox and returns its output or its
   traceback. Limits: 10 seconds, no keyboard input, no network, cannot delete files, cannot
   start other programs (no subprocess, os.system, multiprocessing), cannot use paths
   containing '..', reads and writes only inside the sandbox.
 
-WORKFLOW for code: write_file, then run_python, then fix any traceback with patch_file and
-run_python again. Only say the code works if run_python showed [exit 0] and the output
+WORKFLOW for code: write_file, then run_python, then fix any traceback with replace_def (a whole
+function) or patch_file (a few lines) and run_python again. Only say the code works if run_python showed [exit 0] and the output
 matches the task. If it still fails, say so and quote the error.
 
 FILES: never create or edit files with cat, echo, printf, heredocs, redirects, python -c,
-base64 or any other trick. Those are refused. Only write_file and patch_file write files, and
+base64 or any other trick. Those are refused. Only write_file, patch_file and replace_def write files, and
 only run_python runs code.
 
 RULE OF OBSERVATION: you cannot know your code works until run_python has run it and you
 have read the output. Never declare success, and never patch, on a guess. After any
-write_file or patch_file of a .py file, run_python it before you reply DONE.
+write_file, patch_file or replace_def of a .py file, run_python it before you reply DONE.
 
 When you see a NameError for a standard library module, always place the import statement
 at the very top of the file (module scope), not inline.
@@ -1233,6 +1326,13 @@ print("hi\\n")
 =======
 print("hello\\n")
 >>>>>>> REPLACE
+
+Example replace_def (the new text replaces the whole old function, and its name stays the same):
+CMD: replace_def hello.py greet
+```python
+def greet(name):
+    return "hello " + name
+```
 
 If a file is longer than what you read, say which lines you reviewed and make no
 claims about lines you have not seen (use the 'To continue' hint to read more).
@@ -1456,7 +1556,8 @@ def ping() -> str:
             "and the -t (threads) / -np (slots) server flags.")
 
 
-BLOCK_CMDS = ("write_file", "patch_file")
+BLOCK_CMDS = ("write_file", "patch_file", "replace_def")
+EDIT_CMDS = ("patch_file", "replace_def")   # change part of an existing file
 
 
 def parse_reply(reply: str):
@@ -1480,6 +1581,8 @@ def parse_reply(reply: str):
             text = s[4:].strip()
             if text.startswith("DONE:"):  # small models write "CMD: DONE: ..."
                 return "done", "\n".join([text[5:].strip()] + lines[idx + 1:]).strip(), "", notes
+            if re.fullmatch(r"DONE[.!]?", text, re.I):  # ... or just "CMD: DONE" (100-run csv_total: 2 correct runs lost)
+                return "done", "\n".join([notes[-1] if notes else "(finished)"] + lines[idx + 1:]).strip(), "", notes
             body = "\n".join(lines[idx + 1:])
             if text.split(" ", 1)[0] not in BLOCK_CMDS:
                 notes += [l.strip()[5:].strip() for l in lines[idx + 1:]
@@ -1576,6 +1679,7 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
     last_key = None
     done_ok = set()      # write/patch commands that already succeeded
     # Verification state (the DONE gate). A claim of success needs evidence from run_python.
+    ran_any = False      # has any command actually run yet (a refused one does not count)
     seen_files = set()   # files the model has actually looked at, written or patched this run
     unverified = set()   # .py files changed since they were last run
     last_exit = {}       # .py file -> exit code of its most recent run
@@ -1603,8 +1707,11 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
                                " and have not run it since: use run_python on it first")
                 bad = sorted(f for f, c in last_exit.items() if c != 0 and f not in unverified)
                 if bad:
-                    why.append("the last run of " + ", ".join(bad) + " failed; fix it with patch_file "
-                               "and run_python again")
+                    why.append("the last run of " + ", ".join(bad) + " failed; fix it with replace_def "
+                               "or patch_file and run_python again")
+            if REQUIRE_WORK_BEFORE_DONE and not ran_any:
+                why.append("you have not run any command yet, so nothing has been done. Start with "
+                           "read_file or write_file")
             if refused_edit:
                 why.append("these were REFUSED and never applied: " +
                            "; ".join(f"{c}" for c in refused_edit.values()) +
@@ -1641,12 +1748,12 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         is_block = name in BLOCK_CMDS
         is_py = target.endswith(".py")
 
-        if (REQUIRE_READ_BEFORE_PATCH and name == "patch_file" and target and target not in seen_files
+        if (REQUIRE_READ_BEFORE_PATCH and name in EDIT_CMDS and target and target not in seen_files
                 and (SANDBOX / target).is_file()):
             result = (f"REFUSED: you have not looked at {target} yet, so this patch would be a guess "
                       f"about what is in it. First reply with exactly:\nCMD: read_file {target}\n"
                       f"then patch the lines you actually see.")
-        elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name == "patch_file" and is_py
+        elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name in EDIT_CMDS and is_py
                 and target in unverified and target not in problems):
             result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
                       f"(A patch has to answer a real error or check problem.)")
@@ -1658,6 +1765,8 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
             if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:
                 done_ok.add(key)
         print(f"tool>  {_preview(result)}")
+        if not result.startswith(("REFUSED:", "ERROR:")):
+            ran_any = True
 
         ok = result.startswith("[exit 0]")
         if not result.startswith(("REFUSED:", "ERROR:")):  # the model has now really seen (or made) these files
@@ -1693,7 +1802,7 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
         nudge = "" if notes else "\n(Reminder: start your next reply with a one-line 'NOTE: <finding>'.)"
         if is_block and ok:
             if "problem(s) found" in result:
-                nudge += "\n(Saved, but the check found problems. Fix them with patch_file, then run_python it.)"
+                nudge += "\n(Saved, but the check found problems. Fix them with replace_def or patch_file, then run_python it.)"
             elif RUN_PYTHON and is_py:
                 nudge += f"\n(Saved. Verify it now: run_python {words[1]}. Do not repeat this command.)"
             else:
@@ -1707,7 +1816,7 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
             elif ok:
                 nudge += "\n(It ran OK. If the output matches the task, reply DONE and say what you saw.)"
             elif result.startswith("[exit"):
-                nudge += "\n(It failed. Read the error, fix the file with patch_file, then run_python again.)"
+                nudge += "\n(It failed. Read the error, fix the file with replace_def or patch_file, then run_python again.)"
         if _ignored_tail(body):
             nudge += ("\n(Only your FIRST command was run. Everything after it in your reply was ignored, "
                       "including any DONE. Send ONE command per reply and wait for the real output.)")

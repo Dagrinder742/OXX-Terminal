@@ -120,6 +120,9 @@ kind, text, _b, _n = T.parse_reply("DONE: Intro:\n\n1. one\n2. two")
 check(kind == "done" and text == "Intro:\n\n1. one\n2. two", "parse", "multi-line DONE kept whole")
 check(T.parse_reply("CMD: read_file a.py 1 75") == ("cmd", "read_file a.py 1 75", "", []), "parse", "CMD")
 check(T.parse_reply("I think we should look") == (None, "", "", []), "parse", "no marker")
+check(T.parse_reply("NOTE: it prints 6.50\nCMD: DONE")[:2] == ("done", "it prints 6.50"), "parse", "bare 'CMD: DONE' is a DONE; the answer is the last NOTE")
+check(T.parse_reply("CMD: done.")[:2] == ("done", "(finished)"), "parse", "'CMD: done.' without a note is accepted too")
+check(T.parse_reply("CMD: DONEFOO")[0] == "cmd" and T.parse_reply("CMD: DONE now")[0] == "cmd", "parse", "'CMD: DONE...' followed by other text is NOT treated as DONE")
 
 # ---- runaway NOTE (wordcount retest: "NOTE: wc.py: 1, 2, 3 ... 195" cost 640 s per reply) ----
 _loop = "NOTE: wc.py: " + ", ".join(str(i) for i in range(1, 196))
@@ -621,7 +624,7 @@ for k, v in _saved_mods.items():
 
 # a reply with a code fence but no CMD gets told how to save it
 _msgs = []
-_sc = iter(["Here is code:\n```python\nprint(1)\n```", "DONE: ok"])
+_sc = iter(["Here is code:\n```python\nprint(1)\n```", "CMD: ls", "DONE: ok"])
 T.ask_model = lambda m: (_msgs.append(list(m)), next(_sc))[1]
 with redirect_stdout(io.StringIO()):
     T.agent("t")
@@ -649,6 +652,116 @@ ans, out, _ = play([W("g4.py", "print(1/0)"), "CMD: run_python g4.py", P("g4.py"
                     "CMD: run_python g4.py", "DONE: fixed, prints 1"])
 check(ans == "fixed, prints 1", "gate", "write, run, patch, run, DONE is accepted", ans[:60])
 
+# ---- 100-run csv_total: "CMD: DONE" was refused as a command and a correct run was aborted ----
+ans, out, seen = play([W("bd.py", "print(6.5)"), "CMD: run_python bd.py", "NOTE: it prints 6.5\nCMD: DONE"])
+check(ans == "it prints 6.5" and "command not allowed" not in out, "bareDONE", "bare CMD: DONE after a clean run ends the run with the NOTE as the answer", ans[:50])
+ans, out, seen = play([W("bd2.py", "print(1)"), "NOTE: wrote it\nCMD: DONE"])
+check(ans.startswith("(stopped: DONE was blocked") and "run_python" in out, "bareDONE", "bare CMD: DONE still goes through the DONE gate (never ran it)", ans[:60])
+# ---- 100-run skill_v42: 4 runs answered "NOTE: stock.py has been written / DONE" as their ONLY reply ----
+ans, out, seen = play(["NOTE: stock.py has been written.\nCMD: DONE: The code works."])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check(ans.startswith("(stopped: DONE was blocked 3 times") and "have not run any command" in out, "workgate",
+      "DONE as the very first reply is refused (nothing was done)", ans[:60])
+ans, out, seen = play(["DONE: nothing to do", "CMD: ls", "DONE: listed the folder"])
+check(ans == "listed the folder" and "have not run any command" in out, "workgate",
+      "after one real command the same model can finish")
+ans, out, seen = play(["CMD: rm -rf x", "DONE: tried"])
+check("have not run any command" in out, "workgate", "a REFUSED command does not count as work")
+T.REQUIRE_WORK_BEFORE_DONE = False
+ans, out, seen = play(["DONE: just an answer"])
+check(ans == "just an answer", "workgate", "the gate can be switched off (REQUIRE_WORK_BEFORE_DONE=0)")
+T.REQUIRE_WORK_BEFORE_DONE = True
+# ---- replace_def: replace one whole function/method/class by NAME (bugfix 0/100: the model inserted new code and left the old body behind) ----
+def RD(name, code, path="rd.py"):
+    return T.run(f"replace_def {path} {name}", "```python\n" + code + "\n```")
+_src = ("import os\n\n\n"
+        "def first(x):\n    return x\n\n\n"
+        "def average(numbers):\n    total = 0\n    for n in numbers:\n        total += n\n    return total / len(numbers)\n\n\n"
+        "class Stack:\n    def __init__(self):\n        self.items = []\n\n"
+        "    def pop(self):\n        return self.items.pop()\n\n"
+        "    @property\n    def size(self):\n        return len(self.items)\n\n\n"
+        "def last(x):\n    return x[-1]\n")
+(SB / "rd.py").write_text(_src)
+_r = RD("average", "def average(numbers):\n    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)")
+_new = (SB / "rd.py").read_text()
+check(_r.startswith("[exit 0]") and "Successfully replaced average" in _r and "total += n" not in _new and "if not numbers" in _new,
+      "replace_def", "a top-level function is replaced and its OLD body is gone", _r[:70])
+check("def first(x):\n    return x\n\n\ndef average" in _new and "def last(x):" in _new and _new.startswith("import os\n\n\ndef first"),
+      "replace_def", "the code around it (and the blank lines) is untouched")
+_r = RD("Stack.pop", "def pop(self):\n    if not self.items:\n        raise IndexError('empty')\n    return self.items.pop()")
+_new = (SB / "rd.py").read_text()
+check(_r.startswith("[exit 0]") and "    def pop(self):\n        if not self.items:\n            raise IndexError('empty')\n        return self.items.pop()" in _new
+      and "def __init__(self):\n        self.items = []" in _new, "replace_def", "a method is replaced, written at column 0, and indented to fit the class", _r[:70])
+_r = RD("Stack.pop", "    def pop(self):\n        if not self.items:\n            raise IndexError('x')\n        return self.items.pop()")
+check(_r.startswith("[exit 0]") and "IndexError('x')" in (SB / "rd.py").read_text() and "IndexError('empty')" not in (SB / "rd.py").read_text(),
+      "replace_def", "a block that is already indented works too")
+_r = RD("Stack.size", "def size(self):\n    return len(self.items) + 0")
+_new = (SB / "rd.py").read_text()
+check(_r.startswith("[exit 0]") and "@property" not in _new and "len(self.items) + 0" in _new, "replace_def",
+      "the old decorator is part of the old definition and goes with it; the block says what stays")
+_r = RD("Stack.size", "@property\ndef size(self):\n    return len(self.items)")
+check(_r.startswith("[exit 0]") and "    @property\n    def size(self):\n        return len(self.items)\n" in (SB / "rd.py").read_text(), "replace_def",
+      "a decorator in the block is kept")
+_r = RD("Stack", "class Stack:\n    def __init__(self):\n        self.items = [0]")
+_new = (SB / "rd.py").read_text()
+check(_r.startswith("[exit 0]") and "self.items = [0]" in _new and "def pop" not in _new and "def last(x):" in _new, "replace_def", "a whole class can be replaced")
+_before = (SB / "rd.py").read_text()
+for label, name, code, frag in [
+        ("unknown name", "nothing", "def nothing():\n    pass", "no def or class named nothing"),
+        ("unknown method", "Stack.nope", "def nope(self):\n    pass", "no def or class named Stack.nope"),
+        ("different name", "last", "def other(x):\n    return 1", "defines 'other' but you asked to replace 'last'"),
+        ("two functions in the block", "last", "def last(x):\n    return 1\n\ndef extra():\n    pass", "exactly ONE complete def"),
+        ("import in the block", "last", "import os\ndef last(x):\n    return 1", "exactly ONE complete def"),
+        ("test code in the block", "last", "def last(x):\n    return 1\nprint(last([1]))", "exactly ONE complete def"),
+        ("invalid python", "last", "def last(x):\nreturn 1", "not valid Python"),
+        ("class vs function", "last", "class last:\n    pass", "the other kind"),
+        ("same code", "last", "def last(x):\n    return x[-1]", "nothing would change")]:
+    _r = RD(name, code)
+    check(_r.startswith("REFUSED") and frag in _r and (SB / "rd.py").read_text() == _before, "replace_def",
+          f"{label}: refused with a clear reason, file unchanged", _r[:90])
+(SB / "rd_dup.py").write_text("def f():\n    return 1\n\n\ndef f():\n    return 2\n")
+_r = RD("f", "def f():\n    return 3", "rd_dup.py")
+check(_r.startswith("REFUSED") and "defined 2 times" in _r and "lines 1, 5" in _r, "replace_def", "a name defined twice is refused with both line numbers", _r[:90])
+(SB / "rd_bad.py").write_text("def f(:\n    return 1\n")
+check("syntax error" in RD("f", "def f():\n    return 1", "rd_bad.py"), "replace_def", "a file that already has a syntax error is not touched")
+(SB / "rd_tab.py").write_text("class A:\n\tdef f(self):\n\t\treturn 1\n\n\tdef g(self):\n\t\treturn 2\n")
+_tabsrc = (SB / "rd_tab.py").read_text()
+_r = RD("A.f", "def f(self):\n    return 10", "rd_tab.py")
+check(_r.startswith("REFUSED") and "syntax error" in _r and (SB / "rd_tab.py").read_text() == _tabsrc, "replace_def",
+      "space-indented code spliced into a TAB-indented file is refused by the final syntax check, file unchanged", _r[:100])
+(SB / "rd_async.py").write_text("import asyncio\n\nasync def run():\n    return 1\n")
+check(RD("run", "async def run():\n    return 2", "rd_async.py").startswith("[exit 0]") and "return 2" in (SB / "rd_async.py").read_text(), "replace_def", "async def works")
+(SB / "rd.txt").write_text("hello")
+check(RD("x", "def x():\n    pass", "rd.txt").startswith("REFUSED") and "only works on .py" in RD("x", "def x():\n    pass", "rd.txt"), "replace_def", "only .py files")
+check(RD("x", "def x():\n    pass", "nofile.py").startswith("REFUSED") and "does not exist" in RD("x", "def x():\n    pass", "nofile.py"), "replace_def", "a missing file is refused")
+check(RD("x", "def x():\n    pass", ".." + "/outside.py").startswith("REFUSED"), "replace_def", "a path outside the sandbox is refused")
+_g = T.PROTECTED.copy()
+(SB / "guarded2.py").write_text("def x():\n    return 1\n"); T.PROTECTED.add((SB / "guarded2.py").resolve())
+check(RD("x", "def x():\n    return 2", "guarded2.py").startswith("REFUSED") and "return 1" in (SB / "guarded2.py").read_text(), "replace_def", "a protected file cannot be changed")
+T.PROTECTED.clear(); T.PROTECTED.update(_g)
+check(T.run("replace_def rd.py last").startswith("REFUSED") and "no code received" in T.run("replace_def rd.py last"), "replace_def", "no ``` block: refused with where to put it")
+check("usage: replace_def" in T.run("replace_def rd.py", "```python\ndef x():\n    pass\n```"), "replace_def", "missing name: usage shown")
+check("usage: replace_def" in T.run("replace_def"), "replace_def", "no arguments: usage shown")
+check(T.parse_reply("CMD: replace_def a.py f\n```python\ndef f():\n    pass\n```\nDONE: x")[0] == "cmd" and "replace_def" in T.BLOCK_CMDS, "replace_def", "replace_def is a block command for the reply parser")
+check("replace_def" in T.SYSTEM and "Example replace_def" in T.SYSTEM and "replace_def" in T.run("zzz"), "replace_def", "the SYSTEM prompt and the allowed-commands message mention it")
+
+# the real bugfix fixture, fixed with replace_def by a scripted model (read first, one edit per reply, run, DONE)
+_fx = (ROOT.parent / "bench" / "tasks" / "bugfix" / "files" / "average.py") if (ROOT.parent / "bench").exists() else None
+if _fx is None or not _fx.exists():
+    _fx = Path(__file__).resolve().parent.parent / "bench" / "tasks" / "bugfix" / "files" / "average.py"
+(SB / "average.py").write_text(_fx.read_text())
+def RDc(name, code): return f"CMD: replace_def average.py {name}\n```python\n{code}\n```"
+ans, out, seen = play(["CMD: replace_def average.py average\n```python\ndef average(numbers):\n    return 0.0\n```",
+                       "CMD: read_file average.py",
+                       RDc("average", "def average(numbers):\n    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)"),
+                       RDc("median", "def median(numbers):\n    s = sorted(numbers)\n    mid = len(s) // 2\n    if len(s) % 2 == 0:\n        return (s[mid - 1] + s[mid]) / 2\n    return s[mid]"),
+                       "DONE: fixed",
+                       "CMD: run_python average.py", "DONE: prints 2.5, 2.5, 0.0"])
+_run = subprocess.run([sys.executable, "-I", str(SB / "average.py")], capture_output=True, text=True, timeout=20)
+check("have not looked at average.py" in out, "replace_def", "the read-before-edit gate applies to replace_def as well")
+check(_run.stdout == "2.5\n2.5\n0.0\n" and "total += n" not in (SB / "average.py").read_text() and "s.sort()" not in (SB / "average.py").read_text(),
+      "replace_def", "bugfix fixture: two replace_def commands fix all three bugs and the file prints 2.5 / 2.5 / 0.0", repr(_run.stdout[:40]))
+check("have not run it since" in out and ans == "prints 2.5, 2.5, 0.0", "replace_def", "DONE right after replace_def is blocked until run_python")
 # ---- run 8 of the wordcount retest: invented follow-up steps, and a run that printed nothing ----
 check(T._ignored_tail("```python\nx=1\n```\nDONE: ok"), "tail", "DONE after a command block is detected")
 check(T._ignored_tail("\nNOTE: a\nCMD: check_file x.py\n"), "tail", "a second CMD is detected")
@@ -869,7 +982,9 @@ _tp = ROOT / "transcript_test.json"
 _old_ask = T.ask_model
 T.ask_model = lambda msgs: "NOTE: done\nDONE: all good"
 os.environ["AGENT_TRANSCRIPT"] = str(_tp)
+T.REQUIRE_WORK_BEFORE_DONE = False   # this test is about the transcript file, not the DONE gate
 _res = T.agent("do a thing")
+T.REQUIRE_WORK_BEFORE_DONE = True
 del os.environ["AGENT_TRANSCRIPT"]
 _tr = _json.loads(_tp.read_text()) if _tp.exists() else {}
 check(_res == "all good" and _tr.get("stopped") is False and _tr.get("result") == "all good"

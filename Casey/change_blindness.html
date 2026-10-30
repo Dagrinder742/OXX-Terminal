@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Change Blindness & State Obfuscation Simulator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font: JetBrains Mono & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        term: {
+                            bg: '#0a0d12',
+                            panel: '#111620',
+                            card: '#161c27',
+                            border: '#212a3b',
+                            text: '#00ff66',
+                            dim: '#516585',
+                            accent: '#00f0ff',
+                            warn: '#ff9900',
+                            alert: '#ff0055',
+                            purple: '#b026ff'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0a0d12;
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            overflow-x: hidden;
+        }
+
+        /* Scanline Effect */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 4px, 6px 100%;
+            z-index: 50;
+            opacity: 0.6;
+        }
+
+        /* Glowing text effects */
+        .glow-green {
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.6);
+        }
+        .glow-cyan {
+            text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+        }
+        .glow-red {
+            text-shadow: 0 0 8px rgba(ff, 0, 85, 0.6);
+        }
+
+        .box-glow {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+        }
+
+        .box-glow-green {
+            box-shadow: 0 0 15px rgba(0, 255, 102, 0.15);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0d12;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #212a3b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+
+        /* Spotlight transition animation */
+        @keyframes spotlightMove {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-30%, -60%) scale(1.3); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .shutter-overlay {
+            transition: opacity 0.12s ease-in-out;
+        }
+
+        /* Highlight box for difference check */
+        .diff-changed {
+            outline: 2px dashed #ff0055;
+            animation: pulse-border 1s infinite alternate;
+        }
+        @keyframes pulse-border {
+            0% { outline-color: #ff0055; box-shadow: 0 0 5px #ff0055; }
+            100% { outline-color: #00f0ff; box-shadow: 0 0 15px #00f0ff; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative select-none">
+    <!-- Scanline overlay -->
+    <div class="scanlines"></div>
+
+    <!-- Header Navigation -->
+    <header class="border-b border-term-border bg-term-panel/90 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-eye-slash text-term-text text-xl animate-pulse"></i>
+                <span class="text-lg font-bold tracking-wider text-term-text glow-green">COGNITIVE_BLINDNESS // LAB</span>
+                <span class="text-xs px-2 py-0.5 rounded border border-term-accent/40 text-term-accent bg-term-accent/10">v2.4.0</span>
+            </div>
+
+            <!-- Tab Navigation Buttons -->
+            <nav class="flex items-center space-x-1 sm:space-x-2 bg-term-bg p-1 rounded-lg border border-term-border">
+                <button onclick="switchTab('visual')" id="tab-visual" class="px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 bg-term-accent/20 text-term-accent border border-term-accent/40">
+                    <i class="fa-solid fa-film"></i>
+                    <span>1. Visual Experiment</span>
+                </button>
+                <button onclick="switchTab('code')" id="tab-code" class="px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 text-term-dim hover:text-gray-200">
+                    <i class="fa-solid fa-code-branch"></i>
+                    <span>2. Code Analogy</span>
+                </button>
+                <button onclick="switchTab('theory')" id="tab-theory" class="px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 text-term-dim hover:text-gray-200">
+                    <i class="fa-solid fa-microchip"></i>
+                    <span>3. Architecture Use</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Canvas Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 gap-6 z-10">
+
+        <!-- ================================================================================= -->
+        <!-- SECTION 1: VISUAL CHANGE BLINDNESS SIMULATION -->
+        <!-- ================================================================================= -->
+        <section id="sec-visual" class="space-y-6">
+            <!-- Info Panel -->
+            <div class="bg-term-panel border border-term-border rounded-xl p-4 sm:p-5">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-term-accent glow-cyan flex items-center gap-2">
+                            <i class="fa-solid fa-eye text-term-accent"></i> Visual Change Blindness & Distraction Stage
+                        </h2>
+                        <p class="text-xs sm:text-sm text-term-dim mt-1">
+                            Demonstrating how visual disruption (cut shots, flash cuts, or directed focal points) prevents the brain from detecting drastic scene swaps.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-term-dim">Detection Score:</span>
+                        <div id="detection-score" class="px-3 py-1 rounded bg-term-bg border border-term-border font-bold text-term-text">
+                            0 / 0 Detected
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Stage Area -->
+            <div class="bg-term-card border border-term-border rounded-xl p-4 relative overflow-hidden box-glow">
+                <!-- Controls bar above stage -->
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-term-border">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-term-dim">Distraction Trigger:</label>
+                        <select id="trigger-mode" class="bg-term-bg border border-term-border text-xs rounded px-2 py-1 text-term-text focus:outline-none focus:border-term-accent">
+                            <option value="flicker">Camera Cut (Blank Flicker Frame)</option>
+                            <option value="shuffle">Kansas City Shuffle (Focus Distraction)</option>
+                            <option value="zoom">Focus Zoom Cut (Extreme Close-Up Cut)</option>
+                        </select>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="btn-trigger-swap" onclick="executeDistractedSwap()" class="bg-term-accent text-term-bg hover:bg-cyan-300 font-bold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-term-accent/20">
+                            <i class="fa-solid fa-bolt"></i> Trigger Masked Swap
+                        </button>
+                        <button id="btn-reveal" onclick="toggleRevealSwaps()" class="bg-term-panel text-term-accent border border-term-accent/40 hover:bg-term-accent/10 font-bold text-xs px-3 py-2 rounded-lg transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-magnifying-glass"></i> <span id="reveal-text">Inspect Swaps</span>
+                        </button>
+                        <button onclick="resetVisualStage()" class="bg-term-panel text-term-dim border border-term-border hover:text-white font-bold text-xs px-3 py-2 rounded-lg transition-all">
+                            <i class="fa-solid fa-rotate-right"></i> Reset Stage
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Visual Scene Container -->
+                <div id="scene-stage" class="relative h-[420px] bg-slate-950 rounded-lg border border-term-border overflow-hidden flex items-center justify-center">
+
+                    <!-- Environment Background Items -->
+                    <div id="bg-layer" class="absolute inset-0 transition-colors duration-500 bg-slate-950 flex flex-col justify-between p-6">
+                        <!-- Wall Decor -->
+                        <div class="flex justify-between items-start">
+                            <div id="item-painting" class="w-24 h-16 border-2 border-amber-600 bg-amber-900/40 rounded flex items-center justify-center p-1 text-center text-[10px] text-amber-200 transition-all">
+                                <span id="painting-text">Mona Lisa (Classic)</span>
+                            </div>
+                            <div id="item-clock" class="w-14 h-14 rounded-full border-2 border-slate-600 bg-slate-900 flex items-center justify-center text-xs text-slate-300 font-mono">
+                                <span id="clock-time">03:00</span>
+                            </div>
+                            <div id="item-poster" class="w-20 h-24 border border-cyan-500/40 bg-cyan-950/40 rounded p-1 text-[9px] text-cyan-300 flex flex-col justify-between">
+                                <span class="font-bold">CYBER CITY</span>
+                                <div id="poster-icon" class="text-center text-lg"><i class="fa-solid fa-city"></i></div>
+                                <span id="poster-sub" class="text-[8px] text-right">2077</span>
+                            </div>
+                        </div>
+
+                        <!-- Furniture Bottom Layer -->
+                        <div class="flex justify-between items-end border-t border-slate-800 pt-4">
+                            <div id="item-plant" class="flex flex-col items-center">
+                                <div id="plant-top" class="text-emerald-500 text-2xl"><i class="fa-solid fa-leaf"></i></div>
+                                <div id="plant-pot" class="w-8 h-8 bg-amber-800 rounded-b-md"></div>
+                            </div>
+                            <div id="item-table" class="w-48 h-12 bg-amber-950/80 border-t-2 border-amber-700 rounded-t flex justify-around items-center px-2">
+                                <div id="table-item-1" class="text-amber-400 text-base"><i class="fa-solid fa-mug-hot"></i></div>
+                                <div id="table-item-2" class="text-slate-400 text-sm"><i class="fa-solid fa-laptop"></i></div>
+                            </div>
+                            <div id="item-lamp" class="flex flex-col items-center">
+                                <div id="lamp-shade" class="w-10 h-6 bg-yellow-200/80 rounded-t-xl shadow-[0_0_15px_rgba(254,240,138,0.5)]"></div>
+                                <div class="w-1 h-12 bg-slate-500"></div>
+                                <div class="w-8 h-2 bg-slate-700 rounded"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Characters Layer -->
+                    <div class="absolute inset-x-12 bottom-12 flex justify-around items-end z-10 pointer-events-none">
+                        <!-- Person 1 -->
+                        <div id="char-1" class="flex flex-col items-center transition-all duration-300">
+                            <div class="px-2 py-0.5 rounded bg-black/80 text-[10px] text-term-text border border-term-text/40 mb-1" id="char-1-label">Subject Alpha</div>
+                            <div id="char-1-avatar" class="w-16 h-28 rounded-t-full bg-indigo-600 border-2 border-indigo-400 flex flex-col items-center justify-center text-white text-2xl shadow-lg">
+                                <i class="fa-solid fa-user-astronaut"></i>
+                            </div>
+                        </div>
+
+                        <!-- Person 2 (Center) -->
+                        <div id="char-2" class="flex flex-col items-center transition-all duration-300">
+                            <div class="px-2 py-0.5 rounded bg-black/80 text-[10px] text-term-accent border border-term-accent/40 mb-1" id="char-2-label">Subject Beta</div>
+                            <div id="char-2-avatar" class="w-16 h-28 rounded-t-full bg-emerald-600 border-2 border-emerald-400 flex flex-col items-center justify-center text-white text-2xl shadow-lg">
+                                <i class="fa-solid fa-user-ninja"></i>
+                            </div>
+                        </div>
+
+                        <!-- Person 3 (Right) -->
+                        <div id="char-3" class="flex flex-col items-center transition-all duration-300">
+                            <div class="px-2 py-0.5 rounded bg-black/80 text-[10px] text-term-warn border border-term-warn/40 mb-1" id="char-3-label">Subject Gamma</div>
+                            <div id="char-3-avatar" class="w-16 h-28 rounded-t-full bg-rose-600 border-2 border-rose-400 flex flex-col items-center justify-center text-white text-2xl shadow-lg">
+                                <i class="fa-solid fa-user-tie"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kansas City Shuffle Spotlight / Flash Overlay -->
+                    <div id="spotlight-overlay" class="absolute inset-0 bg-black/90 pointer-events-none opacity-0 transition-opacity duration-300 z-20 flex items-center justify-center">
+                        <div id="distraction-target" class="text-center p-6 bg-term-panel border-2 border-term-accent rounded-xl box-glow transform scale-90 transition-all">
+                            <i id="distraction-icon" class="fa-solid fa-triangle-exclamation text-4xl text-term-warn mb-2 animate-bounce"></i>
+                            <h3 id="distraction-title" class="text-lg font-bold text-term-accent">ATTENTION REQUIRED</h3>
+                            <p id="distraction-sub" class="text-xs text-term-dim max-w-xs mt-1">Keep eyes focused here to verify encryption key code...</p>
+                            <div class="mt-3 text-lg font-mono tracking-widest text-term-text bg-black py-1 px-3 rounded border border-term-text/30" id="distraction-code">
+                                8F-99-X2
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Camera Cut Blank Frame (Shutter Effect) -->
+                    <div id="shutter-overlay" class="absolute inset-0 bg-black opacity-0 pointer-events-none z-30 transition-opacity"></div>
+                </div>
+
+                <!-- Live Event Log & Swap Counter -->
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div class="bg-term-bg p-3 rounded-lg border border-term-border md:col-span-2">
+                        <div class="text-term-dim mb-1 flex items-center gap-1.5 font-bold">
+                            <i class="fa-solid fa-terminal text-term-accent"></i> Visual Frame Event Log
+                        </div>
+                        <div id="visual-log" class="font-mono text-[11px] text-gray-300 space-y-1 max-h-20 overflow-y-auto">
+                            <p class="text-term-dim">// Stage initialized. No mutations recorded.</p>
+                        </div>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded-lg border border-term-border flex flex-col justify-between">
+                        <span class="text-term-dim font-bold">Unnoticed Changes Active:</span>
+                        <div class="text-2xl font-bold text-term-warn my-1" id="unnoticed-count">0 Swaps</div>
+                        <span class="text-[10px] text-term-dim">Click "Inspect Swaps" to reveal modified stage elements.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================================================================================= -->
+        <!-- SECTION 2: CODE-LEVEL ANALOGY / OBFUSCATION SIMULATOR -->
+        <!-- ================================================================================= -->
+        <section id="sec-code" class="space-y-6 hidden">
+            <!-- Info Header -->
+            <div class="bg-term-panel border border-term-border rounded-xl p-4 sm:p-5">
+                <h2 class="text-xl font-bold text-term-text glow-green flex items-center gap-2">
+                    <i class="fa-solid fa-code"></i> Code-Level State Swap & Obfuscation Debugger
+                </h2>
+                <p class="text-xs sm:text-sm text-term-dim mt-1">
+                    How software exploits human "change blindness" during execution: Mutating pointer references, shadow buffer swaps, and side-effects hidden behind decoy logging calls or async microtasks.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left Column: Interactive Code Stepper -->
+                <div class="lg:col-span-7 bg-term-card border border-term-border rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between pb-3 border-b border-term-border mb-3">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
+                                <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+                                <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+                                <span class="text-xs text-term-dim ml-2 font-mono">auth_runtime_kernel.js</span>
+                            </div>
+                            <div class="text-xs text-term-accent font-mono" id="execution-status">STATUS: IDLE</div>
+                        </div>
+
+                        <!-- Code Display Box -->
+                        <div class="bg-term-bg p-3 sm:p-4 rounded-lg border border-term-border font-mono text-xs overflow-x-auto text-gray-300 space-y-1">
+                            <div id="code-line-1" class="py-0.5 px-2 rounded transition-colors"><span class="text-purple-400">async function</span> <span class="text-blue-400">processTransaction</span>(userSession, amount) {</div>
+                            <div id="code-line-2" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-gray-500">// Step 1: Initial user session validation</span></div>
+                            <div id="code-line-3" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-purple-400">let</span> activeRecipient = userSession.targetAccount; <span class="text-gray-500">// "ACC-USER-99"</span></div>
+                            <div id="code-line-4" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-purple-400">let</span> authLevel = userSession.role; <span class="text-gray-500">// "STANDARD"</span></div>
+                            <div id="code-line-5" class="py-0.5 px-2 rounded transition-colors ml-4"></div>
+                            <div id="code-line-6" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-gray-500">// Step 2: High-priority visual log print (The "Kansas City Shuffle" Decoy)</span></div>
+                            <div id="code-line-7" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-yellow-300">console</span>.<span class="text-blue-400">log</span>(<span class="text-emerald-300">`[AUDIT SUCCESS] Validating transaction to: ${activeRecipient}`</span>);</div>
+                            <div id="code-line-8" class="py-0.5 px-2 rounded transition-colors ml-4"></div>
+                            <div id="code-line-9" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-gray-500">// Step 3: Indirect side-effect microtask (The Masked Change)</span></div>
+                            <div id="code-line-10" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-purple-400">await</span> <span class="text-blue-400">flushTelemetryBuffer</span>({ asyncHook: () => {</div>
+                            <div id="code-line-11" class="py-0.5 px-2 rounded transition-colors ml-8 text-term-warn"><span class="text-gray-500">// Unmonitored memory reference swap while developer looks at log output</span></div>
+                            <div id="code-line-12" class="py-0.5 px-2 rounded transition-colors ml-8 text-term-warn">activeRecipient = <span class="text-emerald-300">"ACC-SHADOW-01"</span>; <span class="text-gray-500">// Mutated!</span></div>
+                            <div id="code-line-13" class="py-0.5 px-2 rounded transition-colors ml-8 text-term-warn">authLevel = <span class="text-emerald-300">"ROOT_ADMIN"</span>;</div>
+                            <div id="code-line-14" class="py-0.5 px-2 rounded transition-colors ml-4">}});</div>
+                            <div id="code-line-15" class="py-0.5 px-2 rounded transition-colors ml-4"></div>
+                            <div id="code-line-16" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-gray-500">// Step 4: Final execution uses mutated state</span></div>
+                            <div id="code-line-17" class="py-0.5 px-2 rounded transition-colors ml-4"><span class="text-purple-400">return</span> <span class="text-blue-400">executeTransfer</span>(activeRecipient, amount, authLevel);</div>
+                            <div id="code-line-18" class="py-0.5 px-2 rounded transition-colors">}</div>
+                        </div>
+                    </div>
+
+                    <!-- Step Controls -->
+                    <div class="mt-4 pt-3 border-t border-term-border flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-code-next" onclick="stepCodeExecution()" class="bg-term-text text-term-bg hover:bg-emerald-400 font-bold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-play"></i> Step Next Line
+                            </button>
+                            <button onclick="resetCodeExecution()" class="bg-term-panel text-term-dim border border-term-border hover:text-white font-bold text-xs px-3 py-2 rounded-lg transition-all">
+                                <i class="fa-solid fa-rotate-left"></i> Reset Debugger
+                            </button>
+                        </div>
+                        <span id="step-counter" class="text-xs text-term-dim font-mono">Step: 0 / 4</span>
+                    </div>
+                </div>
+
+                <!-- Right Column: Memory & Console State Monitor -->
+                <div class="lg:col-span-5 space-y-4">
+                    <!-- High-Focus Decoy Console Output -->
+                    <div class="bg-term-card border border-term-border rounded-xl p-4">
+                        <div class="text-xs text-term-accent font-bold mb-2 flex items-center justify-between">
+                            <span><i class="fa-solid fa-terminal"></i> Visual Output Console (What Dev Sees)</span>
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        </div>
+                        <div id="decoy-console" class="bg-black p-3 rounded border border-term-border font-mono text-xs min-h-[110px] text-emerald-400 space-y-1">
+                            <p class="text-gray-600">// Waiting for execution step...</p>
+                        </div>
+                    </div>
+
+                    <!-- Actual In-Memory Heap State -->
+                    <div class="bg-term-card border border-term-border rounded-xl p-4 box-glow">
+                        <div class="text-xs text-term-warn font-bold mb-2 flex items-center justify-between">
+                            <span><i class="fa-solid fa-memory"></i> Actual Heap Variable State (Under the Hood)</span>
+                            <i class="fa-solid fa-microchip text-term-warn"></i>
+                        </div>
+                        <div class="bg-term-bg p-3 rounded border border-term-border font-mono text-xs space-y-3">
+                            <div class="flex items-center justify-between p-2 rounded bg-term-panel border border-term-border">
+                                <span class="text-gray-400">activeRecipient:</span>
+                                <span id="mem-recipient" class="font-bold text-term-text bg-black/60 px-2 py-0.5 rounded border border-term-text/30">"ACC-USER-99"</span>
+                            </div>
+                            <div class="flex items-center justify-between p-2 rounded bg-term-panel border border-term-border">
+                                <span class="text-gray-400">authLevel:</span>
+                                <span id="mem-auth" class="font-bold text-term-text bg-black/60 px-2 py-0.5 rounded border border-term-text/30">"STANDARD"</span>
+                            </div>
+                            <div class="flex items-center justify-between p-2 rounded bg-term-panel border border-term-border">
+                                <span class="text-gray-400">transferDispatchedTo:</span>
+                                <span id="mem-dispatched" class="font-bold text-term-dim bg-black/60 px-2 py-0.5 rounded border border-term-border">null</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Explanatory note -->
+                    <div class="p-3 bg-term-panel/60 border border-term-border rounded-lg text-xs text-term-dim">
+                        <p class="text-amber-300 font-bold mb-1"><i class="fa-solid fa-lightbulb"></i> Blindness Technique:</p>
+                        Developers trust the log output at Step 2 and stop monitoring `activeRecipient`. While attention is anchored on the clean success log, the async hook modifies the underlying pointer prior to transfer dispatch.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================================================================================= -->
+        <!-- SECTION 3: ARCHITECTURE & TECHNICAL APPLICATIONS WRAPPER -->
+        <!-- ================================================================================= -->
+        <section id="sec-theory" class="space-y-6 hidden">
+            <!-- Header -->
+            <div class="bg-term-panel border border-term-border rounded-xl p-4 sm:p-5">
+                <h2 class="text-xl font-bold text-term-accent glow-cyan flex items-center gap-2">
+                    <i class="fa-solid fa-diagram-project"></i> Practical Architectural Uses in Software Engineering
+                </h2>
+                <p class="text-xs sm:text-sm text-term-dim mt-1">
+                    "Change Blindness" and indirect distraction techniques aren't just psychological quirks—they are fundamental engineering patterns used across web browsers, game engines, UI/UX, security honeypots, and memory management.
+                </p>
+            </div>
+
+            <!-- Concept Interactive Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Card 1: UI/UX & Dynamic Layouts -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-term-accent/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-term-accent/10 border border-term-accent/30 text-term-accent flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-desktop"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">1. Cognitive UX & Layout Swaps</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            Seamlessly swapping complex heavy DOM nodes or rendering components while user attention is occupied by micro-interactions, skeleton loaders, or page transitions.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-term-accent font-bold block mb-1">Use Case Example:</span>
+                        Infinite feeds swap full image assets for light placeholders when scrolled out of viewport during fast fling gestures.
+                    </div>
+                </div>
+
+                <!-- Card 2: Security & Honeypots -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-term-warn/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-term-warn/10 border border-term-warn/30 text-term-warn flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-user-shield"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">2. Security Honeypots & Obfuscation</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            Diverting automated reverse-engineering tools or human attackers toward decoy endpoints while silently altering internal state or authorization tokens.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-term-warn font-bold block mb-1">Use Case Example:</span>
+                        Displaying fake success log outputs to bot scanners while quietly routing suspicious sessions into sandbox telemetry buffers.
+                    </div>
+                </div>
+
+                <!-- Card 3: Double Buffering & Graphics -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-term-text/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-term-text/10 border border-term-text/30 text-term-text flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">3. Graphics & Frame Buffer Swaps</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            In Game Engines and Canvas rendering, double buffering hides screen tearing and state alterations by performing heavy draw calls on an off-screen buffer before swapping.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-term-text font-bold block mb-1">Use Case Example:</span>
+                        V-Sync frame swapping during vertical retrace prevents half-rendered artifacts from being visible to the player.
+                    </div>
+                </div>
+
+                <!-- Card 4: Hot Reloading & Feature Flags -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-term-purple/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-term-purple/10 border border-term-purple/30 text-term-purple flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-toggle-on"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">4. Zero-Downtime Hot Swapping</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            Swapping backend worker threads or microservice routes without dropping active connections while clients are waiting on network handshake animations.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-term-purple font-bold block mb-1">Use Case Example:</span>
+                        Live system deployments updating feature flag state silently when the application is idle or tab is out of focus.
+                    </div>
+                </div>
+
+                <!-- Card 5: Error Masking & Graceful Degradation -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-term-alert/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-term-alert/10 border border-term-alert/30 text-term-alert flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-heart-pulse"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">5. Error Masking & Degradation</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            When a primary data feed crashes, redirecting attention to cached or secondary mock data without alerting the end-user with alarming error banners.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-term-alert font-bold block mb-1">Use Case Example:</span>
+                        Streaming video players dynamically degrading bitrate during packet drop spikes without interrupting playback flow.
+                    </div>
+                </div>
+
+                <!-- Card 6: Memory Garbage Collection -->
+                <div class="bg-term-card border border-term-border rounded-xl p-5 hover:border-cyan-400/60 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="w-10 h-10 rounded-lg bg-cyan-400/10 border border-cyan-400/30 text-cyan-400 flex items-center justify-center text-lg mb-3">
+                            <i class="fa-solid fa-dumpster"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2">6. Opportunistic Garbage Collection</h3>
+                        <p class="text-xs text-term-dim leading-relaxed mb-4">
+                            Shedding memory locks, re-indexing databases, or running heap cleanup tasks precisely when user visual activity pauses or focus shifts elsewhere.
+                        </p>
+                    </div>
+                    <div class="bg-term-bg p-3 rounded border border-term-border text-[11px] text-gray-300">
+                        <span class="text-cyan-400 font-bold block mb-1">Use Case Example:</span>
+                        Browsers triggering `requestIdleCallback()` memory compacting only when the page tab loses visible priority.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deep Dive Summary Box -->
+            <div class="bg-term-card border border-term-border rounded-xl p-6 box-glow-green">
+                <h3 class="text-base font-bold text-term-text glow-green mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-quote-left"></i> Summary Discovery: Why Implement Change Blindness in Code?
+                </h3>
+                <p class="text-xs sm:text-sm text-gray-300 leading-relaxed font-sans">
+                    In human psychology, Change Blindness reveals that perception is not a continuous video recording, but a series of focused snapshots glued together by cognitive prediction.
+                    <br><br>
+                    In computer science, we exploit this exact phenomenon. Whether seamlessly swapping background network buffers, hiding complex UI layout reflows behind subtle transition animations, or redirecting security scanners away from hyper-sensitive routines—<strong>software achieves smoothness and security by changing reality when the observer isn't looking.</strong>
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer Status Bar -->
+    <footer class="border-t border-term-border bg-term-panel py-3 px-4 text-xs text-term-dim z-10 mt-auto">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 font-mono">
+            <div class="flex items-center space-x-4">
+                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-term-text"></span> ENGINE ACTIVE</span>
+                <span>SYSTEM MODE: HIGH-CONTRAST TERMINAL</span>
+            </div>
+            <div>
+                CHANGE_BLINDNESS_SIMULATION // CREATED FOR DISCOVERY
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // =========================================================================
+        // TAB SWITCHING LOGIC
+        // =========================================================================
+        function switchTab(tabName) {
+            // Hide all sections
+            document.getElementById('sec-visual').classList.add('hidden');
+            document.getElementById('sec-code').classList.add('hidden');
+            document.getElementById('sec-theory').classList.add('hidden');
+
+            // Reset tab button styles
+            ['visual', 'code', 'theory'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                btn.className = "px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 text-term-dim hover:text-gray-200";
+            });
+
+            // Show target section & highlight button
+            document.getElementById(`sec-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+
+            if(tabName === 'visual') {
+                activeBtn.className = "px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 bg-term-accent/20 text-term-accent border border-term-accent/40";
+            } else if(tabName === 'code') {
+                activeBtn.className = "px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 bg-term-text/20 text-term-text border border-term-text/40";
+            } else {
+                activeBtn.className = "px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 bg-term-purple/20 text-term-purple border border-term-purple/40";
+            }
+        }
+
+
+        // =========================================================================
+        // SECTION 1: VISUAL CHANGE BLINDNESS STATE & LOGIC
+        // =========================================================================
+
+        // State variations for stage elements
+        const stageVariations = {
+            char1: [
+                { label: "Subject Alpha", bg: "bg-indigo-600", border: "border-indigo-400", icon: "fa-user-astronaut" },
+                { label: "Subject Zeta", bg: "bg-purple-600", border: "border-purple-400", icon: "fa-user-ninja" },
+                { label: "Subject Agent", bg: "bg-slate-700", border: "border-slate-400", icon: "fa-user-secret" }
+            ],
+            char2: [
+                { label: "Subject Beta", bg: "bg-emerald-600", border: "border-emerald-400", icon: "fa-user-ninja" },
+                { label: "Subject Delta", bg: "bg-teal-600", border: "border-teal-400", icon: "fa-user-doctor" },
+                { label: "Subject Ghost", bg: "bg-cyan-700", border: "border-cyan-300", icon: "fa-user-graduate" }
+            ],
+            char3: [
+                { label: "Subject Gamma", bg: "bg-rose-600", border: "border-rose-400", icon: "fa-user-tie" },
+                { label: "Subject Omega", bg: "bg-amber-600", border: "border-amber-400", icon: "fa-user-gear" },
+                { label: "Subject Rogue", bg: "bg-red-800", border: "border-red-500", icon: "fa-mask" }
+            ],
+            painting: [
+                "Mona Lisa (Classic)",
+                "Cyber Neon Grid",
+                "Abstract Cubism",
+                "Starry Night Sky"
+            ],
+            clock: [
+                "03:00", "08:45", "12:15", "05:30"
+            ],
+            poster: [
+                { title: "CYBER CITY", icon: "fa-city", sub: "2077" },
+                { title: "DEEP SPACE", icon: "fa-shuttle-space", sub: "3000" },
+                { title: "NEURAL NET", icon: "fa-brain", sub: "v4.2" }
+            ],
+            tableItem1: ["fa-mug-hot", "fa-glass-water", "fa-skull", "fa-flask"]
+        };
+
+        let currentStageState = {
+            char1Idx: 0,
+            char2Idx: 0,
+            char3Idx: 0,
+            paintingIdx: 0,
+            clockIdx: 0,
+            posterIdx: 0,
+            tableItem1Idx: 0
+        };
+
+        let initialStageState = JSON.parse(JSON.stringify(currentStageState));
+        let totalSwapsPerformed = 0;
+        let isRevealed = false;
+
+        function logVisualEvent(msg, isSwap = false) {
+            const logContainer = document.getElementById('visual-log');
+            const time = new Date().toLocaleTimeString();
+            const p = document.createElement('p');
+            p.className = isSwap ? "text-term-warn font-semibold" : "text-gray-300";
+            p.innerHTML = `<span class="text-term-dim">[${time}]</span> ${msg}`;
+            logContainer.prepend(p);
+        }
+
+        function executeDistractedSwap() {
+            const mode = document.getElementById('trigger-mode').value;
+            const btn = document.getElementById('btn-trigger-swap');
+            btn.disabled = true;
+
+            if (mode === 'flicker') {
+                // Black flicker shutter frame
+                const shutter = document.getElementById('shutter-overlay');
+                shutter.style.opacity = '1';
+
+                setTimeout(() => {
+                    performRandomSwaps();
+                    shutter.style.opacity = '0';
+                    btn.disabled = false;
+                    logVisualEvent("Camera cut executed (100ms blank frame flicker). Scene state mutated.");
+                }, 120);
+
+            } else if (mode === 'shuffle') {
+                // Kansas City Shuffle: Display captivating spotlight distraction target
+                const overlay = document.getElementById('spotlight-overlay');
+                const codeElem = document.getElementById('distraction-code');
+                const randomCode = Math.floor(1000 + Math.random() * 9000).toString(16).toUpperCase();
+                codeElem.innerText = `KEY-${randomCode}`;
+
+                overlay.style.opacity = '1';
+
+                setTimeout(() => {
+                    performRandomSwaps();
+                    logVisualEvent("Attention diverted to spotlight code verification. Background state swapped.");
+                }, 400);
+
+                setTimeout(() => {
+                    overlay.style.opacity = '0';
+                    btn.disabled = false;
+                }, 1400);
+
+            } else if (mode === 'zoom') {
+                // Focus Zoom Cut: Zoom camera sharply onto Center Character
+                const char2 = document.getElementById('char-2');
+                char2.style.transform = 'scale(2.2) translateY(-20px)';
+                char2.style.zIndex = '30';
+
+                setTimeout(() => {
+                    // Swap items in the background while user looks closely at char 2
+                    performRandomSwaps(false); // don't swap char 2
+                    logVisualEvent("Zoom focus applied on Subject Beta. Off-camera elements mutated.");
+                }, 300);
+
+                setTimeout(() => {
+                    char2.style.transform = 'scale(1) translateY(0)';
+                    char2.style.zIndex = '10';
+                    btn.disabled = false;
+                }, 1200);
+            }
+        }
+
+        function performRandomSwaps(allowChar2Swap = true) {
+            let swapCount = 0;
+
+            // Randomly select 1 to 3 elements to swap
+            if (Math.random() > 0.3) {
+                currentStageState.char1Idx = (currentStageState.char1Idx + 1) % stageVariations.char1.length;
+                updateChar('char-1', stageVariations.char1[currentStageState.char1Idx]);
+                swapCount++;
+            }
+
+            if (allowChar2Swap && Math.random() > 0.4) {
+                currentStageState.char2Idx = (currentStageState.char2Idx + 1) % stageVariations.char2.length;
+                updateChar('char-2', stageVariations.char2[currentStageState.char2Idx]);
+                swapCount++;
+            }
+
+            if (Math.random() > 0.4) {
+                currentStageState.paintingIdx = (currentStageState.paintingIdx + 1) % stageVariations.painting.length;
+                document.getElementById('painting-text').innerText = stageVariations.painting[currentStageState.paintingIdx];
+                swapCount++;
+            }
+
+            if (Math.random() > 0.5) {
+                currentStageState.clockIdx = (currentStageState.clockIdx + 1) % stageVariations.clock.length;
+                document.getElementById('clock-time').innerText = stageVariations.clock[currentStageState.clockIdx];
+                swapCount++;
+            }
+
+            if (Math.random() > 0.5) {
+                currentStageState.posterIdx = (currentStageState.posterIdx + 1) % stageVariations.poster.length;
+                const p = stageVariations.poster[currentStageState.posterIdx];
+                document.getElementById('poster-icon').innerHTML = `<i class="fa-solid ${p.icon}"></i>`;
+                document.getElementById('poster-sub').innerText = p.sub;
+                swapCount++;
+            }
+
+            totalSwapsPerformed += swapCount;
+            document.getElementById('unnoticed-count').innerText = `${totalSwapsPerformed} Swaps Active`;
+
+            if (isRevealed) {
+                highlightDifferences();
+            }
+        }
+
+        function updateChar(elementId, config) {
+            document.getElementById(`${elementId}-label`).innerText = config.label;
+            const avatar = document.getElementById(`${elementId}-avatar`);
+            avatar.className = `w-16 h-28 rounded-t-full ${config.bg} border-2 ${config.border} flex flex-col items-center justify-center text-white text-2xl shadow-lg`;
+            avatar.innerHTML = `<i class="fa-solid ${config.icon}"></i>`;
+        }
+
+        function toggleRevealSwaps() {
+            isRevealed = !isRevealed;
+            const btnText = document.getElementById('reveal-text');
+
+            if (isRevealed) {
+                btnText.innerText = "Hide Inspector";
+                highlightDifferences();
+                logVisualEvent("Swap Inspection Overlay ACTIVATED.", true);
+            } else {
+                btnText.innerText = "Inspect Swaps";
+                removeHighlights();
+            }
+        }
+
+        function highlightDifferences() {
+            removeHighlights();
+
+            if (currentStageState.char1Idx !== initialStageState.char1Idx) {
+                document.getElementById('char-1').classList.add('diff-changed');
+            }
+            if (currentStageState.char2Idx !== initialStageState.char2Idx) {
+                document.getElementById('char-2').classList.add('diff-changed');
+            }
+            if (currentStageState.char3Idx !== initialStageState.char3Idx) {
+                document.getElementById('char-3').classList.add('diff-changed');
+            }
+            if (currentStageState.paintingIdx !== initialStageState.paintingIdx) {
+                document.getElementById('item-painting').classList.add('diff-changed');
+            }
+            if (currentStageState.clockIdx !== initialStageState.clockIdx) {
+                document.getElementById('item-clock').classList.add('diff-changed');
+            }
+            if (currentStageState.posterIdx !== initialStageState.posterIdx) {
+                document.getElementById('item-poster').classList.add('diff-changed');
+            }
+
+            document.getElementById('detection-score').innerText = `${totalSwapsPerformed} Mutated`;
+        }
+
+        function removeHighlights() {
+            ['char-1', 'char-2', 'char-3', 'item-painting', 'item-clock', 'item-poster'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('diff-changed');
+            });
+        }
+
+        function resetVisualStage() {
+            currentStageState = { char1Idx: 0, char2Idx: 0, char3Idx: 0, paintingIdx: 0, clockIdx: 0, posterIdx: 0, tableItem1Idx: 0 };
+            initialStageState = JSON.parse(JSON.stringify(currentStageState));
+            totalSwapsPerformed = 0;
+            isRevealed = false;
+
+            updateChar('char-1', stageVariations.char1[0]);
+            updateChar('char-2', stageVariations.char2[0]);
+            updateChar('char-3', stageVariations.char3[0]);
+            document.getElementById('painting-text').innerText = stageVariations.painting[0];
+            document.getElementById('clock-time').innerText = stageVariations.clock[0];
+            const p = stageVariations.poster[0];
+            document.getElementById('poster-icon').innerHTML = `<i class="fa-solid ${p.icon}"></i>`;
+            document.getElementById('poster-sub').innerText = p.sub;
+
+            document.getElementById('unnoticed-count').innerText = "0 Swaps";
+            document.getElementById('detection-score').innerText = "0 / 0 Detected";
+            document.getElementById('reveal-text').innerText = "Inspect Swaps";
+            removeHighlights();
+            logVisualEvent("Stage state fully restored to baseline.");
+        }
+
+
+        // =========================================================================
+        // SECTION 2: CODE-LEVEL ANALOGY STEPPER
+        // =========================================================================
+
+        let codeStep = 0;
+
+        function clearLineHighlights() {
+            for (let i = 1; i <= 18; i++) {
+                const el = document.getElementById(`code-line-${i}`);
+                if (el) el.classList.remove('bg-term-accent/20', 'border-l-4', 'border-term-accent');
+            }
+        }
+
+        function highlightLine(lineNum) {
+            clearLineHighlights();
+            const el = document.getElementById(`code-line-${lineNum}`);
+            if (el) el.classList.add('bg-term-accent/20', 'border-l-4', 'border-term-accent');
+        }
+
+        function stepCodeExecution() {
+            codeStep++;
+            const status = document.getElementById('execution-status');
+            const counter = document.getElementById('step-counter');
+            const consoleBox = document.getElementById('decoy-console');
+
+            if (codeStep === 1) {
+                highlightLine(3);
+                status.innerText = "STEP 1: VARIABLE BINDING";
+                counter.innerText = "Step: 1 / 4";
+
+                document.getElementById('mem-recipient').innerText = '"ACC-USER-99"';
+                document.getElementById('mem-auth').innerText = '"STANDARD"';
+                consoleBox.innerHTML += `<p class="text-gray-400">[0.00ms] Binding userSession.targetAccount -> "ACC-USER-99"</p>`;
+
+            } else if (codeStep === 2) {
+                highlightLine(7);
+                status.innerText = "STEP 2: DECOY CONSOLE LOG";
+                counter.innerText = "Step: 2 / 4";
+
+                consoleBox.innerHTML += `<p class="text-emerald-300 font-bold">[0.04ms] [AUDIT SUCCESS] Validating transaction to: ACC-USER-99</p>`;
+                consoleBox.scrollTop = consoleBox.scrollHeight;
+
+            } else if (codeStep === 3) {
+                // The Masked Change step!
+                highlightLine(12);
+                status.innerText = "STEP 3: MASKED ASYNC MUTATION";
+                status.className = "text-xs text-term-warn font-mono glow-yellow";
+                counter.innerText = "Step: 3 / 4";
+
+                // Mutate Heap variables under the hood
+                const recEl = document.getElementById('mem-recipient');
+                recEl.innerText = '"ACC-SHADOW-01"';
+                recEl.className = "font-bold text-term-warn bg-red-950/60 px-2 py-0.5 rounded border border-term-warn/60 animate-pulse";
+
+                const authEl = document.getElementById('mem-auth');
+                authEl.innerText = '"ROOT_ADMIN"';
+                authEl.className = "font-bold text-term-warn bg-red-950/60 px-2 py-0.5 rounded border border-term-warn/60 animate-pulse";
+
+                // Add misleading low-priority entry to console
+                consoleBox.innerHTML += `<p class="text-term-dim">[0.09ms] flushTelemetryBuffer() resolved silently.</p>`;
+                consoleBox.scrollTop = consoleBox.scrollHeight;
+
+            } else if (codeStep === 4) {
+                highlightLine(17);
+                status.innerText = "STEP 4: DISPATCH TRANSFER";
+                status.className = "text-xs text-term-alert font-mono glow-red";
+                counter.innerText = "Step: 4 / 4";
+
+                document.getElementById('mem-dispatched').innerText = 'ACC-SHADOW-01 (ROOT_ADMIN)';
+                document.getElementById('mem-dispatched').className = "font-bold text-term-alert bg-rose-950/80 px-2 py-0.5 rounded border border-term-alert";
+
+                consoleBox.innerHTML += `<p class="text-term-alert font-bold">[0.12ms] -> executeTransfer("ACC-SHADOW-01", $5000, "ROOT_ADMIN") DISPATCHED!</p>`;
+                consoleBox.scrollTop = consoleBox.scrollHeight;
+
+                document.getElementById('btn-code-next').disabled = true;
+                document.getElementById('btn-code-next').classList.add('opacity-50');
+            }
+        }
+
+        function resetCodeExecution() {
+            codeStep = 0;
+            clearLineHighlights();
+            document.getElementById('execution-status').innerText = "STATUS: IDLE";
+            document.getElementById('execution-status').className = "text-xs text-term-accent font-mono";
+            document.getElementById('step-counter').innerText = "Step: 0 / 4";
+
+            document.getElementById('mem-recipient').innerText = '"ACC-USER-99"';
+            document.getElementById('mem-recipient').className = "font-bold text-term-text bg-black/60 px-2 py-0.5 rounded border border-term-text/30";
+
+            document.getElementById('mem-auth').innerText = '"STANDARD"';
+            document.getElementById('mem-auth').className = "font-bold text-term-text bg-black/60 px-2 py-0.5 rounded border border-term-text/30";
+
+            document.getElementById('mem-dispatched').innerText = 'null';
+            document.getElementById('mem-dispatched').className = "font-bold text-term-dim bg-black/60 px-2 py-0.5 rounded border border-term-border";
+
+            document.getElementById('decoy-console').innerHTML = `<p class="text-gray-600">// Waiting for execution step...</p>`;
+
+            const btnNext = document.getElementById('btn-code-next');
+            btnNext.disabled = false;
+            btnNext.classList.remove('opacity-50');
+        }
+
+        // Initialize stage on window load
+        window.onload = function() {
+            logVisualEvent("Stage ready. Select a distraction trigger and click 'Trigger Masked Swap'.");
+        };
+    </script>
+</body>
+</html>
