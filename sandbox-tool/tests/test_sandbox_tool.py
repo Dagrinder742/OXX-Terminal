@@ -799,6 +799,32 @@ def _sse2():
         yield 'data: {"choices":[{"delta":{"content":"NOTE: read_file average.py %d 10\\n"}}]}' % i
 _tx = T._read_sse(_sse2(), show_progress=False)[0]
 check(_cnt[0] < 200 and _tx.startswith("NOTE: a"), "noteflood", "the stream is stopped early on a NOTE flood", f"read {_cnt[0]} of 4000 pieces")
+# ---- 10-run bugfix report (zip 15): patch_file with SEARCH == REPLACE == a def line and the new function elsewhere; a repeated edit ----
+(SB / "hd.py").write_text("class Box:\n    def size(self):\n        return 1\n\n\ndef median(numbers):\n    s = numbers\n    return s\n\n\ndef dup():\n    pass\n\n\ndef dup():\n    pass\n")
+_ident = "<<<<<<< SEARCH\ndef median(numbers):\n=======\ndef median(numbers):\n>>>>>>> REPLACE\n"
+_body = "```python\ndef median(numbers):\n    return 1\n```\n"
+_hd0 = (SB / "hd.py").read_text()
+_r = T.run("patch_file hd.py", _ident + _body)
+check(_r.startswith("REFUSED") and "INSIDE the block" in _r and "CMD: replace_def hd.py median" in _r and (SB / "hd.py").read_text() == _hd0,
+      "rdhint", "identical def line + code after it: refusal names the exact replace_def command", _r[-130:])
+_r = T.run("patch_file hd.py", _ident)
+check(_r.startswith("REFUSED") and "nothing would change" in _r and "CMD: replace_def hd.py median" in _r and "INSIDE the block" not in _r,
+      "rdhint", "identical def line alone: plain refusal plus the replace_def command")
+_r = T.run("patch_file hd.py", _ident.replace("median(numbers)", "size(self)"))
+check("CMD: replace_def hd.py Box.size" in _r, "rdhint", "a method gets its Class.method name in the hint", _r[-90:])
+_r = T.run("patch_file hd.py", _ident.replace("median(numbers)", "dup()"))
+check(_r.startswith("REFUSED") and "replace_def" not in _r, "rdhint", "a name defined twice gets no hint (it would be ambiguous)")
+_r = T.run("patch_file hd.py", "<<<<<<< SEARCH\n    s = numbers\n=======\n    s = numbers\n>>>>>>> REPLACE\n")
+check(_r.startswith("REFUSED") and "replace_def" not in _r, "rdhint", "an identical NON-def line gets no hint")
+_r = T.run("patch_file hd.py", _ident.replace("median(numbers)", "nothere(x)"))
+check(_r.startswith("REFUSED") and "replace_def" not in _r, "rdhint", "an unknown function name gets no hint")
+(SB / "rp.py").write_text("x = 1\n")
+_ed2 = P("rp.py", "x = 1", "x = 2")
+ans, out, seen = play(["CMD: read_file rp.py", _ed2, _ed2, "DONE: x is 2"])
+_u = [[c for r, c in m if r == "user"][-1] for m in seen]
+check("already applied earlier" in _u[3] and "DIFFERENT problem" in _u[3] and "If the task is finished" not in _u[3], "rdhint",
+      "repeating an edit that already worked: the refusal says it is already applied (not 'the task is finished')", _u[3][:110])
+
 # ---- run 8 of the wordcount retest: invented follow-up steps, and a run that printed nothing ----
 check(T._ignored_tail("```python\nx=1\n```\nDONE: ok"), "tail", "DONE after a command block is detected")
 check(T._ignored_tail("\nNOTE: a\nCMD: check_file x.py\n"), "tail", "a second CMD is detected")
@@ -824,8 +850,17 @@ def _patch(a_, b_): return P("rb.py", a_, b_)
 ans, out, seen = play([_patch("def average(numbers):", "def average(numbers):\n    if not numbers:\n        return 0.0"),
                        "CMD: read_file rb.py"])
 _u = [[c for r, c in m if r == "user"][-1] for m in seen]
-check("have not looked at rb.py" in _u[1] and "CMD: read_file rb.py" in _u[1] and (SB / "rb.py").read_text() == _fix,
-      "readgate", "patching a file never read is refused, with the exact read_file command, file unchanged", _u[1][:90])
+check("have not looked at rb.py" in _u[1] and "NOT applied" in _u[1] and "   2 |     return sum(numbers) / len(numbers)" in _u[1]
+      and (SB / "rb.py").read_text() == _fix,
+      "readgate", "patching a file never read is refused AND the refusal shows the file's real numbered lines; file unchanged", _u[1][:90])
+(SB / "rb.py").write_text(_fix)
+_e = _patch("    return sum(numbers) / len(numbers)", "    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)")
+ans, out, seen = play([_e, _e])
+check(out.count("have not looked at rb.py") == 1 and "if not numbers" in (SB / "rb.py").read_text(), "readgate",
+      "after the refusal showed the file, the SAME edit sent again goes through (no second read needed)")
+(SB / "rb.py").write_text(_fix)
+ans, out, seen = play(["CMD: replace_def rb.py average\n```python\ndef average(numbers):\n    return 0.0\n```"] * 3)
+check(out.count("have not looked at rb.py") == 1 and "return 0.0" in (SB / "rb.py").read_text(), "readgate", "same for replace_def")
 (SB / "rb.py").write_text(_fix)
 ans, out, seen = play(["CMD: read_file rb.py", _patch("    return sum(numbers) / len(numbers)", "    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)")])
 check("if not numbers" in (SB / "rb.py").read_text() and "have not looked" not in out, "readgate", "after a real read_file the patch applies")

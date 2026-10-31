@@ -1,0 +1,1 @@
+rm ~/OKX-Terminal/sandbox-tool-repo.zip && mv ~/storage/downloads/sandbox-tool-repo.zip ~/OKX-Terminal && rm ~/OKX-Terminal/tools/info_4.txt && mv ~/storage/downloads/info_4.txt ~/OKX-Terminal/tools && unzip -o ~/OKX-Terminal/sandbox-tool-repo.zip -d ~/OKX-Terminal

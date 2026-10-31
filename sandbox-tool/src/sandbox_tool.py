@@ -224,6 +224,38 @@ def _search_replace(body):
     return "\n".join(lines[top + 1:mid]), "\n".join(lines[mid + 1:end])
 
 
+_DEF_LINE_RE = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)")
+
+
+def _replace_def_hint(path_str: str, search_text: str) -> str:
+    """When a model writes patch_file with SEARCH == REPLACE == one 'def name(...):' line (and the new
+    function somewhere else), it wants replace_def. Return a ready command naming the function, or ''."""
+    lines = [l for l in search_text.splitlines() if l.strip()]
+    m = _DEF_LINE_RE.match(lines[0]) if len(lines) == 1 else None
+    if not m or not path_str.endswith(".py"):
+        return ""
+    try:
+        tree = ast.parse((SANDBOX / path_str).read_text())
+    except (OSError, SyntaxError, ValueError):
+        return ""
+    found = []
+
+    def walk(node, prefix):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if ch.name == m.group(1):
+                    found.append(prefix + ch.name)
+                walk(ch, prefix + ch.name + ".")
+            else:
+                walk(ch, prefix)
+    walk(tree, "")
+    if len(found) != 1:
+        return ""
+    return (f"\nTo replace a WHOLE function, use replace_def: the old one is removed for you and there is no "
+            f"SEARCH text to copy:\nCMD: replace_def {path_str} {found[0]}\n```python\n"
+            f"<the complete new {m.group(1)} goes here>\n```")
+
+
 def _text_after_block(body):
     """Lines that follow the closing >>>>>>> line, ignoring blanks, a closing fence and
     NOTE:/CMD:/DONE: lines. Small models put the new code there instead of inside REPLACE."""
@@ -1205,7 +1237,12 @@ def _run(command: str, body: str = "") -> str:
                     return ("REFUSED: SEARCH and REPLACE are identical, and code was found AFTER the "
                             ">>>>>>> REPLACE line, where it is ignored. The new lines go INSIDE the "
                             "block, between ======= and >>>>>>> REPLACE:\n"
-                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE")
+                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE"
+                            + _replace_def_hint(parts[1], sr[0]))
+                if sr[0] == sr[1]:
+                    _hint_rd = _replace_def_hint(parts[1], sr[0])
+                    if _hint_rd:
+                        return ("REFUSED: SEARCH and REPLACE are identical, so nothing would change." + _hint_rd)
                 return _with_check(cmd_patch_file(parts[1], sr[0], sr[1]), parts[1])
             if len(parts) >= 4 and "\\n" not in parts[2] + parts[3]:
                 return _with_check(cmd_patch_file(parts[1], parts[2], parts[3]), parts[1])
@@ -1801,16 +1838,19 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
 
         if (REQUIRE_READ_BEFORE_PATCH and name in EDIT_CMDS and target and target not in seen_files
                 and (SANDBOX / target).is_file()):
-            result = (f"REFUSED: you have not looked at {target} yet, so this patch would be a guess "
-                      f"about what is in it. First reply with exactly:\nCMD: read_file {target}\n"
-                      f"then patch the lines you actually see.")
+            shown = run(f"read_file {target}")
+            seen_files.add(target)   # the model is about to see it, so the next edit may go through
+            result = (f"REFUSED: you have not looked at {target} yet, so this edit was a guess about what is "
+                      f"in it and was NOT applied. The file's real content is below. Send ONE edit again, "
+                      f"based on these lines:\n{shown}")
         elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name in EDIT_CMDS and is_py
                 and target in unverified and target not in problems):
             result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
                       f"(A patch has to answer a real error or check problem.)")
         elif is_block and key in done_ok:  # don't redo a finished write/patch
-            result = ("REFUSED: you already ran this exact command successfully. "
-                      "If the task is finished, reply: DONE: <answer>")
+            result = ("REFUSED: this exact edit was already applied earlier in this run, so sending it again "
+                      "changes nothing. Do not repeat it. Run the file (run_python) or read_file it to see its "
+                      "current state, then fix a DIFFERENT problem. Reply DONE only if the output is right.")
         else:
             result = run(cmd, body)
             if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:

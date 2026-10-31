@@ -1286,6 +1286,25 @@ caught all five (one test first MISSED a fence-blind variant, so I added a close
 UNVERIFIED: that (a) makes the model send the median edit afterwards (plausible, not shown); n=3 is a screen, not a rate. NOT BUILT, needs Casey's decision: run several consecutive replace_def blocks from ONE reply
 (each validated and reported separately) instead of dropping all but the first; in run 3 both blocks were correct. It reverses the one-command-per-reply rule for this one command.
 
+UPDATE 16 (2026-10-30 NIGHT) FROM CLAUDE: bugfix n=10 ON THE UPDATE-15 BUILD = 2/10 (first passes ever), AND THREE FIXES FOR THE FAILURE PATTERNS IN THAT REPORT
+Report 20261030-1553-zip15-bugfix: tool_sha 5fc5e5f9b2, system_sha 000c5f86b8, prompt f45e49f8ff. PASS runs 4 and 7 (7/7); run 6 was 6/7 (false-DONE, only "median does not change its input" failed: the model fixed the
+median result but left `s = numbers; s.sort()`, so a run of the file shows nothing wrong; only the verifier sees it); 7 runs aborted ("consecutive failures"); 30 refusals. 2/10 has a 95% interval of about 6-51%;
+vs the old build's 0/100 (different prompt and SYSTEM) Fisher p = 0.0075: not chance, but 10 runs say nothing precise. The earlier "median edit is dropped" worry (multi-block replace_def) did NOT show up as the
+failure: the passes happened with one edit per reply; I did NOT build the multi-block change.
+What the log shows: every pass = after the first refusal the model issued a real read_file (or got the file) and then fixed ONE function at a time with replace_def, driven by the real traceback (run 7: median first,
+then the ZeroDivisionError led it to fix average). Failures: (1) the first command of ALL 10 runs was refused by the read gate (the model writes "NOTE: read_file" instead of issuing it); in run 3 it never did, and the
+gate refused 3 times -> abort. (2) 5 aborted runs switched to patch_file after the refusal with SEARCH == REPLACE == "def median(numbers):" and the new function AFTER the >>>>>>> line (a replace_def in disguise);
+others hit "search text not unique" (SEARCH `return s[mid]`, twice in the file). (3) Run 1: it re-sent a median edit that had already been applied; the refusal said "you already ran this exact command successfully. If the
+task is finished, reply DONE", which was misleading (the average bug was still open), 3 times -> abort. Run 6 also had one model reply of 1656 s at 1.66 tok/s (phone slowdown, not the tool).
+CHANGES in sandbox_tool.py: (A) the read gate now SHOWS the file: the refusal includes read_file's numbered lines and marks the file as seen, so the next edit goes through with no extra step; nothing is applied
+by the refused edit. (B) patch_file with SEARCH == REPLACE == one def/class line now gets the exact replace_def command for that function (Class.method for methods, nothing when the name is missing or defined twice),
+also appended to the "code AFTER >>>>>>> REPLACE" message; new _replace_def_hint(). (C) the repeat-of-an-applied-edit refusal now says the edit was already applied, not to repeat it, to run/read the file and fix a
+DIFFERENT problem; it no longer says "if the task is finished". The old test for the gate (it checked for "CMD: read_file ...") was rewritten for (A). 385 checks pass (+9); test_bench and the verifier
+self-test pass; I broke each of the three new behaviours 7 ways on a scratch copy and the suite caught every one. A scripted replay of the real failure shapes against the real fixture ended with the file printing 2.5/2.5/0.0.
+NOT DONE ON PURPOSE: auto-converting such a patch_file into replace_def (it would work, but it makes the tool guess; try the hint first); the model-only-sees-DONE problem (false DONE with quoted output the tool
+never printed): still open (run 6; runs 2 and 3 of the earlier screen).
+UNVERIFIED: that (A)-(C) raise the pass rate; the next n=10 bugfix tells. Compare against 2/10 on the same prompt hash (f45e49f8ff); change nothing else. system_sha is unchanged (SYSTEM was not edited).
+
 
 # =========================================================
 # SOURCE CODE BLOCK FOR FILE 'sandbox_tool.py'
@@ -1525,6 +1544,38 @@ def _search_replace(body):
                       "Send ONE patch_file per reply (one CMD line and one block), wait for the "
                       "result, then send the next edit")
     return "\n".join(lines[top + 1:mid]), "\n".join(lines[mid + 1:end])
+
+
+_DEF_LINE_RE = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)")
+
+
+def _replace_def_hint(path_str: str, search_text: str) -> str:
+    """When a model writes patch_file with SEARCH == REPLACE == one 'def name(...):' line (and the new
+    function somewhere else), it wants replace_def. Return a ready command naming the function, or ''."""
+    lines = [l for l in search_text.splitlines() if l.strip()]
+    m = _DEF_LINE_RE.match(lines[0]) if len(lines) == 1 else None
+    if not m or not path_str.endswith(".py"):
+        return ""
+    try:
+        tree = ast.parse((SANDBOX / path_str).read_text())
+    except (OSError, SyntaxError, ValueError):
+        return ""
+    found = []
+
+    def walk(node, prefix):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if ch.name == m.group(1):
+                    found.append(prefix + ch.name)
+                walk(ch, prefix + ch.name + ".")
+            else:
+                walk(ch, prefix)
+    walk(tree, "")
+    if len(found) != 1:
+        return ""
+    return (f"\nTo replace a WHOLE function, use replace_def: the old one is removed for you and there is no "
+            f"SEARCH text to copy:\nCMD: replace_def {path_str} {found[0]}\n```python\n"
+            f"<the complete new {m.group(1)} goes here>\n```")
 
 
 def _text_after_block(body):
@@ -2508,7 +2559,12 @@ def _run(command: str, body: str = "") -> str:
                     return ("REFUSED: SEARCH and REPLACE are identical, and code was found AFTER the "
                             ">>>>>>> REPLACE line, where it is ignored. The new lines go INSIDE the "
                             "block, between ======= and >>>>>>> REPLACE:\n"
-                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE")
+                            "<<<<<<< SEARCH\nold lines\n=======\nnew lines\n>>>>>>> REPLACE"
+                            + _replace_def_hint(parts[1], sr[0]))
+                if sr[0] == sr[1]:
+                    _hint_rd = _replace_def_hint(parts[1], sr[0])
+                    if _hint_rd:
+                        return ("REFUSED: SEARCH and REPLACE are identical, so nothing would change." + _hint_rd)
                 return _with_check(cmd_patch_file(parts[1], sr[0], sr[1]), parts[1])
             if len(parts) >= 4 and "\\n" not in parts[2] + parts[3]:
                 return _with_check(cmd_patch_file(parts[1], parts[2], parts[3]), parts[1])
@@ -3104,16 +3160,19 @@ def _agent_loop(task: str, max_steps: int, msgs: list) -> str:
 
         if (REQUIRE_READ_BEFORE_PATCH and name in EDIT_CMDS and target and target not in seen_files
                 and (SANDBOX / target).is_file()):
-            result = (f"REFUSED: you have not looked at {target} yet, so this patch would be a guess "
-                      f"about what is in it. First reply with exactly:\nCMD: read_file {target}\n"
-                      f"then patch the lines you actually see.")
+            shown = run(f"read_file {target}")
+            seen_files.add(target)   # the model is about to see it, so the next edit may go through
+            result = (f"REFUSED: you have not looked at {target} yet, so this edit was a guess about what is "
+                      f"in it and was NOT applied. The file's real content is below. Send ONE edit again, "
+                      f"based on these lines:\n{shown}")
         elif (REQUIRE_RUN_BEFORE_PATCH and RUN_PYTHON and name in EDIT_CMDS and is_py
                 and target in unverified and target not in problems):
             result = (f"REFUSED: run_python {target} first and read what it prints, then patch it. "
                       f"(A patch has to answer a real error or check problem.)")
         elif is_block and key in done_ok:  # don't redo a finished write/patch
-            result = ("REFUSED: you already ran this exact command successfully. "
-                      "If the task is finished, reply: DONE: <answer>")
+            result = ("REFUSED: this exact edit was already applied earlier in this run, so sending it again "
+                      "changes nothing. Do not repeat it. Run the file (run_python) or read_file it to see its "
+                      "current state, then fix a DIFFERENT problem. Reply DONE only if the output is right.")
         else:
             result = run(cmd, body)
             if is_block and result.startswith("[exit 0]") and "problem(s) found" not in result:
